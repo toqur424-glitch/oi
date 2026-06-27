@@ -1385,7 +1385,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- Modified Auto Blob & Persistent Sit Logic
+-- Enhanced Auto Blob & Persistent Sit Logic
 -- =============================================
 local AutoBlobEnabled = false
 local lastSpawnAttempt = 0
@@ -1396,17 +1396,17 @@ local function AutoBlobF()
             local myChar = LocalPlayer.Character
             if myChar then
                 local hum = myChar:FindFirstChildOfClass("Humanoid")
+                -- [수정] 폴더를 찾지 못할 경우를 대비해 조금 더 안전한 접근 방식 사용
                 local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
                 
                 local blobFound = false
                 
-                -- 1. 블롭맨 존재 확인 및 자동 탑승
+                -- 1. 내 블롭맨이 있는지 확인
                 if inv then
                     for _, item in ipairs(inv:GetChildren()) do
                         if item.Name == "CreatureBlobman" then
                             blobFound = true
                             local seat = item:FindFirstChild("VehicleSeat")
-                            -- 시트가 비어있으면 즉시 탑승
                             if seat and not seat.Occupant then
                                 pcall(function() seat:Sit(hum) end)
                             end
@@ -1414,22 +1414,31 @@ local function AutoBlobF()
                     end
                 end
                 
-                -- 2. 블롭맨이 없으면 자동 재소환
+                -- 2. 블롭이 없으면 소환 시도 (서버 통신 강화)
                 if not blobFound then
-                    if (tick() - lastSpawnAttempt) > 1.5 then
+                    if (tick() - lastSpawnAttempt) > 2.0 then -- 쿨타임을 2초로 늘려 서버 응답 대기
                         lastSpawnAttempt = tick()
-                        pcall(function()
-                            game:GetService("ReplicatedStorage").RemoteEvents.EquipItem:FireServer("CreatureBlobman")
-                        end)
+                        
+                        -- [추가] 리모트 호출 경로 재확인 및 실행
+                        local remote = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteEvents") 
+                                       and game:GetService("ReplicatedStorage").RemoteEvents:FindFirstChild("EquipItem")
+                        
+                        if remote then
+                            pcall(function()
+                                remote:FireServer("CreatureBlobman")
+                            end)
+                        else
+                            warn("EquipItem 리모트를 찾을 수 없습니다.")
+                        end
                     end
                 end
             end
-            task.wait(0.2)
+            task.wait(0.5) -- 루프 간격을 0.5초로 조정하여 부하 감소 및 정확도 향상
         end
     end)
 end
 
--- 토글 버튼 생성
+-- 토글 버튼
 AntiTab:CreateToggle({
     Name = "Auto Blob (Auto Spawn & Sit)",
     CurrentValue = false,
@@ -1440,6 +1449,7 @@ AntiTab:CreateToggle({
         end
     end
 })
+
 
 -- =============================================
 -- ANTI PAINT
