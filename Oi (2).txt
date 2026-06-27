@@ -1043,6 +1043,129 @@ AntiTab:CreateToggle({
     end
 })
 
+-- ======= [ 기본 서비스 및 변수 설정 ] =======
+local Players = game:GetService("Players")
+local rs = game:GetService("ReplicatedStorage")
+local workspace = game:GetService("Workspace")
+
+local plr = Players.LocalPlayer
+
+-- ======= [ 리모트 이벤트 및 통신 경로 설정 ] =======
+local GrabEvents = rs:WaitForChild("GrabEvents")
+local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
+local DestroyGrabLine = GrabEvents:WaitForChild("DestroyGrabLine")
+
+local MenuToys = rs:WaitForChild("MenuToys")
+local SpawnToyRemoteFunction = MenuToys:WaitForChild("SpawnToyRemoteFunction")
+local DestroyToy = MenuToys:WaitForChild("DestroyToy")
+
+local StickyPartEvent = rs:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent")
+
+-- 안티 킥 작동 여부 토글
+local AntiKickT = true 
+
+-- ======= [ 안티 킥 메인 함수 (AntiKickF) ] =======
+local function AntiKickF()
+    local char = plr.Character
+    if not char then return end
+
+    -- 루프 내에서 폴더를 찾도록 변경하여 무한 대기 현상 방지
+    task.spawn(function()
+        while AntiKickT and char and char.Parent do
+            task.wait(0.1) -- 서버 부하를 줄이기 위해 딜레이 살짝 조정
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+
+            local ragdollHitbox = hrp:FindFirstChild("RagdollTouchedHitbox")
+            if not ragdollHitbox then continue end
+
+            -- [수정됨] 무한 대기(WaitForChild)를 제거하고 실시간 확인으로 변경
+            local invName = plr.Name .. "SpawnedInToys"
+            local inv = workspace:FindFirstChild(invName)
+
+            local stickyPartName = "NinjaShuriken"
+            local targetValue = CFrame.new(0, 0, 0.6) * CFrame.Angles(math.rad(90), 0, 0)
+
+            local stickyPartFolder = inv and inv:FindFirstChild(stickyPartName)
+            local stickyPart = stickyPartFolder and stickyPartFolder:FindFirstChild("StickyPart")
+            local soundPart = stickyPartFolder and stickyPartFolder:FindFirstChild("SoundPart")
+
+            -- 1. 방어용 수리검 소환 로직 (InvokeServer 병목 현상 제거)
+            if not stickyPart then
+                task.spawn(function() -- 비동기 처리로 스크립트 멈춤 방지
+                    pcall(function()
+                        SpawnToyRemoteFunction:InvokeServer(stickyPartName, hrp.CFrame * CFrame.new(0, 10, 0), Vector3.new(0, 0, 0))
+                    end)
+                end)
+                task.wait(0.5) -- 소환 후 약간 대기
+                continue
+            end
+
+            -- 2. 물리 엔진 충돌 방지 (날아감 방지)
+            pcall(function()
+                stickyPart.CanCollide = false
+                stickyPart.Massless = true
+                if soundPart then
+                    soundPart.CanCollide = false
+                    soundPart.Massless = true
+                end
+            end)
+
+            -- 3. 네트워크 소유권 강제 탈환 및 잡기 라인 제거
+            pcall(function()
+                SetNetworkOwner:FireServer(stickyPart, stickyPart.CFrame)
+                DestroyGrabLine:FireServer(stickyPart)
+            end)
+
+            -- 4. 거리 체크 및 비정상 상태 파괴
+            local distance = (hrp.Position - stickyPart.Position).Magnitude
+            local partOwner = stickyPart:FindFirstChild("PartOwner")
+            
+            if distance > 8 or partOwner then
+                pcall(function()
+                    DestroyToy:FireServer(stickyPartFolder)
+                end)
+                continue
+            end
+
+            -- 5. 강제 용접(Weld) 적용
+            local stickyWeld = stickyPart:FindFirstChild("StickyWeld")
+            if not stickyWeld or stickyWeld.Part1 ~= ragdollHitbox then
+                pcall(function()
+                    StickyPartEvent:FireServer(stickyPart, ragdollHitbox, targetValue)
+                end)
+            end
+        end
+        
+        -- 안티 킥 종료 시 장난감 정리
+        if not AntiKickT and workspace:FindFirstChild(plr.Name .. "SpawnedInToys") then
+            local shurikenFolder = workspace[plr.Name .. "SpawnedInToys"]:FindFirstChild("NinjaShuriken")
+            if shurikenFolder then
+                pcall(function()
+                    DestroyToy:FireServer(shurikenFolder)
+                end)
+            end
+        end
+    end)
+end
+
+-- ======= [ 캐릭터 상태 감지 및 자동 실행 ] =======
+plr.CharacterAdded:Connect(function(newChar)
+    newChar:WaitForChild("Humanoid")
+    newChar:WaitForChild("HumanoidRootPart")
+    task.wait(0.5)
+    
+    if AntiKickT then
+        AntiKickF()
+    end
+end)
+
+-- 최초 실행 루틴
+if plr.Character then
+    AntiKickF()
+end
+
 -- =============================================
 -- 2. ANTI VOID
 -- =============================================
