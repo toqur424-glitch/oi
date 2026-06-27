@@ -1385,7 +1385,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- 개선된 빠른 Auto Blob (즉시 소환 & 즉시 탑승)
+-- 기존 코드에서 반응 속도만 극대화한 버전
 -- =============================================
 local AutoBlobEnabled = false
 
@@ -1393,39 +1393,31 @@ local function AutoBlobF()
     task.spawn(function()
         while AutoBlobEnabled do
             local myChar = LocalPlayer.Character
-            if not myChar then task.wait(1) continue end
-            local hum = myChar:FindFirstChildOfClass("Humanoid")
+            if not myChar then task.wait(0.2) continue end
             
+            -- 폴더 및 블롭 확인
             local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-            local blobFound = false
+            local blob = inv and inv:FindFirstChild("CreatureBlobman")
             
-            if inv then
-                for _, item in ipairs(inv:GetChildren()) do
-                    if item.Name == "CreatureBlobman" then
-                        blobFound = true
-                        local seat = item:FindFirstChild("VehicleSeat")
-                        -- 이미 타고 있는지 확인
-                        if seat and seat.Occupant ~= hum then
-                            -- 최대한 빠르게 앉기 시도
-                            seat:Sit(hum)
-                        end
-                    end
+            if blob then
+                -- 블롭이 있다면 시트 확인 후 즉시 앉기
+                local seat = blob:FindFirstChild("VehicleSeat")
+                if seat and seat.Occupant ~= myChar.Humanoid then
+                    seat:Sit(myChar.Humanoid)
                 end
-            end
-
-            if not blobFound then
-                local remote = ReplicatedStorage:FindFirstChild("MenuToys") 
-                               and ReplicatedStorage.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
+                task.wait(0.1) -- 블롭이 있으면 0.1초마다 체크 (매우 빠르게)
+            else
+                -- 블롭이 없으면 즉시 소환
+                local remote = ReplicatedStorage:FindFirstChild("MenuToys") and ReplicatedStorage.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
                 if remote then
                     local spawnPos = myChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, -5)
-                    remote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 0, 0))
-                    
-                    -- 소환 직후엔 0.1초만 기다려서 바로 앉기 시도
-                    task.wait(0.1) 
+                    pcall(function()
+                        remote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 0, 0))
+                    end)
+                    task.wait(0.1) -- 소환 직후엔 0.1초만 대기
+                else
+                    task.wait(0.5) -- 리모트 오류 시엔 대기
                 end
-            else
-                -- 블롭이 이미 있다면 0.2초 간격으로 확인 (기존 0.5초에서 단축)
-                task.wait(0.2)
             end
         end
     end)
