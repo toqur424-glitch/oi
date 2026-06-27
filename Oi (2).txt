@@ -1384,62 +1384,52 @@ AntiTab:CreateToggle({
     end
 })
 
--- =============================================
--- Modified Auto Blob & Persistent Sit Logic
--- =============================================
-local AutoBlobEnabled = false
-local lastSpawnAttempt = 0
+-----------------------------------------------------------------------------------------
+-- [통합 관리 시스템: 구찌(Gucci) & 자동 블롭(Blobman)]
+-----------------------------------------------------------------------------------------
 
-local function AutoBlobF()
+function StartAutomation()
     task.spawn(function()
-        while AutoBlobEnabled do
-            local myChar = LocalPlayer.Character
-            if myChar then
-                local hum = myChar:FindFirstChildOfClass("Humanoid")
-                local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-                
-                local blobFound = false
-                
-                -- 1. 내 블롭이 있는지 확인하고 있으면 탑승 (기존 타주기 로직)
-                if inv then
-                    for _, item in ipairs(inv:GetChildren()) do
-                        if item.Name == "CreatureBlobman" then
-                            blobFound = true
-                            local seat = item:FindFirstChild("VehicleSeat")
-                            -- 시트가 비어있으면 즉시 탑승
-                            if seat and not seat.Occupant then
-                                pcall(function() seat:Sit(hum) end)
-                            end
-                        end
-                    end
-                end
-                
-                -- 2. 블롭이 없으면 1.5초 간격으로 소환 (자동 설치)
-                if not blobFound then
-                    if (tick() - lastSpawnAttempt) > 1.5 then
-                        lastSpawnAttempt = tick()
-                        pcall(function()
-                            game:GetService("ReplicatedStorage").RemoteEvents.EquipItem:FireServer("CreatureBlobman")
-                        end)
-                    end
-                end
+        while task.wait(1) do -- 1초마다 실행되는 메인 루프
+            
+            -- [1] 필수 체크: 플레이어와 인벤토리가 존재하는지 확인
+            if not inv or not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then 
+                continue 
             end
-            task.wait(0.2) -- 반응 속도 최적화
+            
+            local hrp = plr.Character.HumanoidRootPart
+            local spawnRemote = rs:FindFirstChild("MenuToys") and rs.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
+
+            -----------------------------------------------------------------------------
+            -- [2] 블롭(Blobman) 자동 소환 기능
+            -----------------------------------------------------------------------------
+            local blob = inv:FindFirstChild("CreatureBlobman")
+            if not blob and spawnRemote then
+                pcall(function()
+                    spawnRemote:InvokeServer("CreatureBlobman", hrp.CFrame, Vector3.new(0, 0, 0))
+                    print("블롭이 삭제되어 다시 소환했습니다.") -- 작동 여부 확인용
+                end)
+            end
+
+            -----------------------------------------------------------------------------
+            -- [3] 구찌(Gucci) 기능 관리
+            -----------------------------------------------------------------------------
+            if typeof(AutoGucciF) == "function" then
+                pcall(function()
+                    AutoGucciF() -- 구찌 로직 실행
+                end)
+            end
+            
+            -- 필요 시 이곳에 다른 자동 기능들을 추가하세요
+            
         end
     end)
 end
 
--- 토글 버튼 생성 (이미 AntiTab에 생성되어 있다면 아래 내용을 수정하여 사용)
-AntiTab:CreateToggle({
-    Name = "Auto Blob (Auto Spawn & Sit)",
-    CurrentValue = false,
-    Callback = function(Value)
-        AutoBlobEnabled = Value
-        if Value then
-            AutoBlobF()
-        end
-    end
-})
+-----------------------------------------------------------------------------------------
+-- [시스템 시작]
+-----------------------------------------------------------------------------------------
+StartAutomation()
 
 -- =============================================
 -- ANTI PAINT
