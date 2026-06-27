@@ -1385,10 +1385,11 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- 개선된 Auto Blob (자동 소환 & 자동 앉기 & 딜레이 제거)
+-- 개선된 Auto Blob (서버 렉 무시 & 즉시 탑승)
 -- =============================================
 local AutoBlobEnabled = false
-local currentBlob = nil -- 현재 타고 있는 블롭을 추적
+local currentBlob = nil
+local lastSpawnTime = 0 -- 중복 소환 방지용 타이머
 
 local function AutoBlobF()
     task.spawn(function()
@@ -1400,7 +1401,7 @@ local function AutoBlobF()
             end
             local hum = myChar:FindFirstChildOfClass("Humanoid")
             
-            -- 1. 블롭이 이미 존재하는지 확인
+            -- 1. 블롭 확인
             local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
             local blobFound = false
             
@@ -1410,7 +1411,7 @@ local function AutoBlobF()
                         blobFound = true
                         currentBlob = item
                         
-                        -- 2. 블롭이 있다면, 내가 앉아있는지 확인하고 안 앉아있으면 앉기
+                        -- 2. 블롭이 확인되면 즉시 앉기
                         local seat = item:FindFirstChild("VehicleSeat")
                         if seat and seat.Occupant ~= hum then
                             seat:Sit(hum)
@@ -1419,22 +1420,27 @@ local function AutoBlobF()
                 end
             end
 
-            -- 3. 블롭이 없거나 삭제된 경우 (재소환)
+            -- 3. 블롭이 없으면 소환
             if not blobFound then
                 currentBlob = nil
                 local remote = ReplicatedStorage:FindFirstChild("MenuToys") 
                                and ReplicatedStorage.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
                 
-                if remote then
-                    -- 캐릭터에게 가깝게 소환
+                -- 스팸 방지: 소환 명령은 3초에 한 번만 전송
+                if remote and (tick() - lastSpawnTime > 3) then
+                    lastSpawnTime = tick()
                     local spawnPos = myChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, -1.5)
-                    pcall(function()
-                        remote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 0, 0))
+                    
+                    -- 핵심 변경점: task.spawn을 사용하여 서버 답장을 기다리지 않고 즉시 다음으로 넘어감
+                    task.spawn(function()
+                        pcall(function()
+                            remote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 0, 0))
+                        end)
                     end)
                 end
             end
             
-            -- 대기 시간을 맨 아래로 이동시키고 0.05초로 단축 (소환 즉시 다음 확인 진행)
+            -- 0.05초 간격으로 매우 빠르게 블롭이 나타났는지 감시
             task.wait(0.05)
         end
     end)
