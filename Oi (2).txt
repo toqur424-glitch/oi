@@ -1043,18 +1043,14 @@ AntiTab:CreateToggle({
     end
 })
 
--- ==============================================================================
--- [ 기본 서비스 및 변수 설정 ]
--- ==============================================================================
+-- ======= [ 기본 서비스 및 변수 설정 ] =======
 local Players = game:GetService("Players")
 local rs = game:GetService("ReplicatedStorage")
 local workspace = game:GetService("Workspace")
 
 local plr = Players.LocalPlayer
 
--- ==============================================================================
--- [ 리모트 이벤트 및 통신 경로 설정 ]
--- ==============================================================================
+-- ======= [ 리모트 이벤트 및 통신 경로 설정 ] =======
 local GrabEvents = rs:WaitForChild("GrabEvents")
 local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
 local DestroyGrabLine = GrabEvents:WaitForChild("DestroyGrabLine")
@@ -1068,9 +1064,7 @@ local StickyPartEvent = rs:WaitForChild("PlayerEvents"):WaitForChild("StickyPart
 -- 안티 킥 작동 여부 토글
 local AntiKickT = true 
 
--- ==============================================================================
--- [ 안티 킥 메인 함수 (AntiKickF) ]
--- ==============================================================================
+-- ======= [ 안티 킥 메인 함수 (AntiKickF) ] =======
 local function AntiKickF()
     local char = plr.Character
     if not char then return end
@@ -1156,9 +1150,7 @@ local function AntiKickF()
     end)
 end
 
--- ==============================================================================
--- [ 캐릭터 상태 감지 및 자동 실행 ]
--- ==============================================================================
+-- ======= [ 캐릭터 상태 감지 및 자동 실행 ] =======
 plr.CharacterAdded:Connect(function(newChar)
     newChar:WaitForChild("Humanoid")
     newChar:WaitForChild("HumanoidRootPart")
