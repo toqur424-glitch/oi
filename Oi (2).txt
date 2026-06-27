@@ -1384,52 +1384,62 @@ AntiTab:CreateToggle({
     end
 })
 
------------------------------------------------------------------------------------------
--- [통합 관리 시스템: 구찌(Gucci) & 자동 블롭(Blobman)]
------------------------------------------------------------------------------------------
+-- =============================================
+-- Modified Auto Blob & Persistent Sit Logic
+-- =============================================
+local AutoBlobEnabled = false
+local lastSpawnAttempt = 0
 
-function StartAutomation()
+local function AutoBlobF()
     task.spawn(function()
-        while task.wait(1) do -- 1초마다 실행되는 메인 루프
-            
-            -- [1] 필수 체크: 플레이어와 인벤토리가 존재하는지 확인
-            if not inv or not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then 
-                continue 
+        while AutoBlobEnabled do
+            local myChar = LocalPlayer.Character
+            if myChar then
+                local hum = myChar:FindFirstChildOfClass("Humanoid")
+                local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+                
+                local blobFound = false
+                
+                -- 1. 블롭맨 존재 확인 및 자동 탑승
+                if inv then
+                    for _, item in ipairs(inv:GetChildren()) do
+                        if item.Name == "CreatureBlobman" then
+                            blobFound = true
+                            local seat = item:FindFirstChild("VehicleSeat")
+                            -- 시트가 비어있으면 즉시 탑승
+                            if seat and not seat.Occupant then
+                                pcall(function() seat:Sit(hum) end)
+                            end
+                        end
+                    end
+                end
+                
+                -- 2. 블롭맨이 없으면 자동 재소환
+                if not blobFound then
+                    if (tick() - lastSpawnAttempt) > 1.5 then
+                        lastSpawnAttempt = tick()
+                        pcall(function()
+                            game:GetService("ReplicatedStorage").RemoteEvents.EquipItem:FireServer("CreatureBlobman")
+                        end)
+                    end
+                end
             end
-            
-            local hrp = plr.Character.HumanoidRootPart
-            local spawnRemote = rs:FindFirstChild("MenuToys") and rs.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
-
-            -----------------------------------------------------------------------------
-            -- [2] 블롭(Blobman) 자동 소환 기능
-            -----------------------------------------------------------------------------
-            local blob = inv:FindFirstChild("CreatureBlobman")
-            if not blob and spawnRemote then
-                pcall(function()
-                    spawnRemote:InvokeServer("CreatureBlobman", hrp.CFrame, Vector3.new(0, 0, 0))
-                    print("블롭이 삭제되어 다시 소환했습니다.") -- 작동 여부 확인용
-                end)
-            end
-
-            -----------------------------------------------------------------------------
-            -- [3] 구찌(Gucci) 기능 관리
-            -----------------------------------------------------------------------------
-            if typeof(AutoGucciF) == "function" then
-                pcall(function()
-                    AutoGucciF() -- 구찌 로직 실행
-                end)
-            end
-            
-            -- 필요 시 이곳에 다른 자동 기능들을 추가하세요
-            
+            task.wait(0.2)
         end
     end)
 end
 
------------------------------------------------------------------------------------------
--- [시스템 시작]
------------------------------------------------------------------------------------------
-StartAutomation()
+-- 토글 버튼 생성
+AntiTab:CreateToggle({
+    Name = "Auto Blob (Auto Spawn & Sit)",
+    CurrentValue = false,
+    Callback = function(Value)
+        AutoBlobEnabled = Value
+        if Value then
+            AutoBlobF()
+        end
+    end
+})
 
 -- =============================================
 -- ANTI PAINT
