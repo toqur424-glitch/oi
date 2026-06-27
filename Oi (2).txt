@@ -1051,7 +1051,6 @@ local rs = game:GetService("ReplicatedStorage")
 local workspace = game:GetService("Workspace")
 
 local plr = Players.LocalPlayer
-local cam = workspace.CurrentCamera
 
 -- ==============================================================================
 -- [ 리모트 이벤트 및 통신 경로 설정 ]
@@ -1066,7 +1065,7 @@ local DestroyToy = MenuToys:WaitForChild("DestroyToy")
 
 local StickyPartEvent = rs:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent")
 
--- 안티 킥 작동 여부 토글 (끄고 싶다면 false로 변경)
+-- 안티 킥 작동 여부 토글
 local AntiKickT = true 
 
 -- ==============================================================================
@@ -1076,38 +1075,40 @@ local function AntiKickF()
     local char = plr.Character
     if not char then return end
 
-    local inv = workspace:WaitForChild(plr.Name.."SpawnedInToys")
-    
+    -- 루프 내에서 폴더를 찾도록 변경하여 무한 대기 현상 방지
     task.spawn(function()
         while AntiKickT and char and char.Parent do
-            task.wait(0.05)
+            task.wait(0.1) -- 서버 부하를 줄이기 위해 딜레이 살짝 조정
 
             local hrp = char:FindFirstChild("HumanoidRootPart")
-            local torso = char:FindFirstChild("Torso")
-            if not hrp or not torso then continue end
+            if not hrp then continue end
 
             local ragdollHitbox = hrp:FindFirstChild("RagdollTouchedHitbox")
             if not ragdollHitbox then continue end
 
+            -- [수정됨] 무한 대기(WaitForChild)를 제거하고 실시간 확인으로 변경
+            local invName = plr.Name .. "SpawnedInToys"
+            local inv = workspace:FindFirstChild(invName)
+
             local stickyPartName = "NinjaShuriken"
-            
-            -- [수정됨] math.rad(90)을 사용하여 표창을 세우고, 위치를 캐릭터 바깥쪽으로 살짝 뺌
             local targetValue = CFrame.new(0, 0, 0.6) * CFrame.Angles(math.rad(90), 0, 0)
 
-            local stickyPartFolder = inv:FindFirstChild(stickyPartName)
+            local stickyPartFolder = inv and inv:FindFirstChild(stickyPartName)
             local stickyPart = stickyPartFolder and stickyPartFolder:FindFirstChild("StickyPart")
             local soundPart = stickyPartFolder and stickyPartFolder:FindFirstChild("SoundPart")
 
-            -- 1. 방어용 수리검 소환 로직
+            -- 1. 방어용 수리검 소환 로직 (InvokeServer 병목 현상 제거)
             if not stickyPart then
-                pcall(function()
-                    SpawnToyRemoteFunction:InvokeServer(stickyPartName, hrp.CFrame * CFrame.new(0, 10, 0), Vector3.new(0, 0, 0))
+                task.spawn(function() -- 비동기 처리로 스크립트 멈춤 방지
+                    pcall(function()
+                        SpawnToyRemoteFunction:InvokeServer(stickyPartName, hrp.CFrame * CFrame.new(0, 10, 0), Vector3.new(0, 0, 0))
+                    end)
                 end)
-                task.wait(0.2)
+                task.wait(0.5) -- 소환 후 약간 대기
                 continue
             end
 
-            -- [수정됨] 물리 엔진 충돌 방지 (날아감 방지)
+            -- 2. 물리 엔진 충돌 방지 (날아감 방지)
             pcall(function()
                 stickyPart.CanCollide = false
                 stickyPart.Massless = true
@@ -1117,13 +1118,13 @@ local function AntiKickF()
                 end
             end)
 
-            -- 2. 네트워크 소유권 강제 탈환 및 잡기 라인 제거
+            -- 3. 네트워크 소유권 강제 탈환 및 잡기 라인 제거
             pcall(function()
                 SetNetworkOwner:FireServer(stickyPart, stickyPart.CFrame)
                 DestroyGrabLine:FireServer(stickyPart)
             end)
 
-            -- 3. 거리 체크 및 비정상 상태 파괴
+            -- 4. 거리 체크 및 비정상 상태 파괴
             local distance = (hrp.Position - stickyPart.Position).Magnitude
             local partOwner = stickyPart:FindFirstChild("PartOwner")
             
@@ -1134,7 +1135,7 @@ local function AntiKickF()
                 continue
             end
 
-            -- 4. 강제 용접(Weld) 적용
+            -- 5. 강제 용접(Weld) 적용
             local stickyWeld = stickyPart:FindFirstChild("StickyWeld")
             if not stickyWeld or stickyWeld.Part1 ~= ragdollHitbox then
                 pcall(function()
@@ -1144,8 +1145,8 @@ local function AntiKickF()
         end
         
         -- 안티 킥 종료 시 장난감 정리
-        if not AntiKickT then
-            local shurikenFolder = inv:FindFirstChild("NinjaShuriken")
+        if not AntiKickT and workspace:FindFirstChild(plr.Name .. "SpawnedInToys") then
+            local shurikenFolder = workspace[plr.Name .. "SpawnedInToys"]:FindFirstChild("NinjaShuriken")
             if shurikenFolder then
                 pcall(function()
                     DestroyToy:FireServer(shurikenFolder)
