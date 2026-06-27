@@ -1044,6 +1044,86 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
+-- ANTI KICK (Shuriken in body)
+-- =============================================
+local AntiKickT = false
+local AntiKickThread = nil
+
+local function AntiKickLoop()
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local Workspace = game:GetService("Workspace")
+    local LocalPlayer = Players.LocalPlayer
+
+    while AntiKickT do
+        task.wait(0.05) -- 몸 안에 정확히 고정하기 위해 짧은 대기 시간 사용
+        
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        
+        -- 캐릭터나 RootPart가 없으면 스킵
+        if not char or not root then continue end
+        
+        local folderName = LocalPlayer.Name .. "SpawnedInToys"
+        local spawnedToys = Workspace:FindFirstChild(folderName)
+        
+        if spawnedToys then
+            local shuriken = spawnedToys:FindFirstChild("NinjaShuriken")
+            
+            if not shuriken then
+                -- 표창이 없거나 지워졌다면 새로 생성 (내 위치에 소환)
+                pcall(function()
+                    ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer("NinjaShuriken", root.CFrame, Vector3.new(0, 0, 0))
+                end)
+                task.wait(0.5) -- 소환될 때까지 잠시 대기
+            else
+                -- 표창이 존재한다면 내 몸 안(RootPart)에 CFrame을 지속적으로 맞춤
+                pcall(function()
+                    if shuriken.PrimaryPart then
+                        shuriken:PivotTo(root.CFrame)
+                    else
+                        for _, part in ipairs(shuriken:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CFrame = root.CFrame
+                            end
+                        end
+                    end
+                    
+                    -- 캐릭터가 표창 때문에 날아가거나 버그가 생기는 것을 방지 (충돌 무시 및 질량 제거)
+                    for _, part in ipairs(shuriken:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                            part.Massless = true
+                        end
+                    end
+                end)
+            end
+        end
+    end
+end
+
+-- AntiTab에 토글 UI 추가
+AntiTab:CreateToggle({
+    Name = "anti kick",
+    CurrentValue = false,
+    Callback = function(Value)
+        AntiKickT = Value
+        if Value then
+            if AntiKickThread then task.cancel(AntiKickThread) end
+            AntiKickThread = task.spawn(AntiKickLoop)
+            Rayfield:Notify({Title = "anti kick", Content = "Activated", Duration = 2})
+        else
+            AntiKickT = false
+            if AntiKickThread then
+                task.cancel(AntiKickThread)
+                AntiKickThread = nil
+            end
+            Rayfield:Notify({Title = "anti kick", Content = "Deactivated", Duration = 2})
+        end
+    end
+})
+
+-- =============================================
 -- 2. ANTI VOID
 -- =============================================
 local function SetAntiVoid(enable)
