@@ -1384,59 +1384,60 @@ AntiTab:CreateToggle({
     end
 })
 
--- ==============================================================================
--- [FUNCTION] Updated Auto Spawn & Sit Logic
--- ==============================================================================
+-- =============================================
+-- 수정된 Auto Blob (소환 + 자동 앉기)
+-- =============================================
+local AutoBlobEnabled = false
+local lastSpawnAttempt = 0
+
 local function AutoBlobF()
     task.spawn(function()
         while AutoBlobEnabled do
+            task.wait(1) -- 1초 주기로 체크
+            
             local myChar = LocalPlayer.Character
-            if myChar and myChar:FindFirstChild("HumanoidRootPart") then
-                local hum = myChar:FindFirstChildOfClass("Humanoid")
-                local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-                local blobFound = false
-                
-                -- 1. 블롭맨 존재 확인 및 자동 착석
-                if inv then
-                    for _, item in ipairs(inv:GetChildren()) do
-                        if item.Name:find("Blobman") then 
-                            blobFound = true
-                            local seat = item:FindFirstChild("VehicleSeat")
-                            if seat and not seat.Occupant then
-                                pcall(function() seat:Sit(hum) end)
-                            end
-                        end
-                    end
-                end
-                
-                -- 2. 소환 로직 (기존 성공하던 InvokeServer 방식 적용)
-                if not blobFound then
-                    if (tick() - lastSpawnAttempt) > 3.0 then
-                        lastSpawnAttempt = tick()
-                        
-                        -- [source: 8]에서 사용하는 리모트 탐색 경로 및 호출 방식 적용
-                        local remote = ReplicatedStorage:FindFirstChild("MenuToys") 
-                                       and ReplicatedStorage.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
-                        
-                        if remote then
-                            -- InvokeServer 사용 및 매개변수 추가
-                            pcall(function()
-                                remote:InvokeServer("CreatureBlobman", myChar.HumanoidRootPart.CFrame, Vector3.new(0, 0, 0))
-                            end)
+            if not myChar then continue end
+            local myHum = myChar:FindFirstChildOfClass("Humanoid")
+            
+            local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+            local blobmanFound = false
+            
+            -- 1. 소환된 블롭맨이 있는지 확인 및 앉기
+            if inv then
+                for _, item in ipairs(inv:GetChildren()) do
+                    if item.Name == "CreatureBlobman" then
+                        blobmanFound = true
+                        local seat = item:FindFirstChild("VehicleSeat")
+                        -- 앉아있지 않다면 앉기 시도
+                        if seat and seat.Occupant ~= myHum then
+                            pcall(function() seat:Sit(myHum) end)
                         end
                     end
                 end
             end
-            task.wait(1)
+            
+            -- 2. 블롭맨이 없다면 소환 (3초 쿨타임)
+            if not blobmanFound then
+                if (tick() - lastSpawnAttempt) > 3.0 then
+                    lastSpawnAttempt = tick()
+                    -- 소환 리모트 호출 (경로를 확인해주세요)
+                    local menuToys = ReplicatedStorage:FindFirstChild("MenuToys")
+                    local spawnRemote = menuToys and menuToys:FindFirstChild("SpawnToyRemoteFunction")
+                    
+                    if spawnRemote then
+                        pcall(function()
+                            spawnRemote:InvokeServer("CreatureBlobman", myChar.HumanoidRootPart.CFrame, Vector3.new(0, 0, 0))
+                        end)
+                    end
+                end
+            end
         end
     end)
 end
 
--- ==============================================================================
--- [UI] Rayfield Toggle Integration
--- ==============================================================================
+-- AntiTab에 토글 추가 (기존 것과 교체)
 AntiTab:CreateToggle({
-    Name = "Auto Blob (Auto Spawn & Sit)",
+    Name = "Auto Blob (Spawn & Sit)",
     CurrentValue = false,
     Callback = function(Value)
         AutoBlobEnabled = Value
