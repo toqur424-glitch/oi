@@ -1385,20 +1385,17 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- 개선된 Auto Blob (자동 소환 & 자동 앉기 & 삭제 시 복구)
+-- 개선된 빠른 Auto Blob (즉시 소환 & 즉시 탑승)
 -- =============================================
 local AutoBlobEnabled = false
-local currentBlob = nil -- 현재 타고 있는 블롭을 추적
 
 local function AutoBlobF()
     task.spawn(function()
         while AutoBlobEnabled do
-            task.wait(0.5)
             local myChar = LocalPlayer.Character
-            if not myChar then continue end
+            if not myChar then task.wait(1) continue end
             local hum = myChar:FindFirstChildOfClass("Humanoid")
             
-            -- 1. 블롭이 이미 존재하는지 확인
             local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
             local blobFound = false
             
@@ -1406,46 +1403,33 @@ local function AutoBlobF()
                 for _, item in ipairs(inv:GetChildren()) do
                     if item.Name == "CreatureBlobman" then
                         blobFound = true
-                        currentBlob = item
-                        
-                        -- 2. 블롭이 있다면, 내가 앉아있는지 확인하고 안 앉아있으면 앉기
                         local seat = item:FindFirstChild("VehicleSeat")
+                        -- 이미 타고 있는지 확인
                         if seat and seat.Occupant ~= hum then
+                            -- 최대한 빠르게 앉기 시도
                             seat:Sit(hum)
                         end
                     end
                 end
             end
 
-            -- 3. 블롭이 없거나 삭제된 경우 (재소환)
             if not blobFound then
-                currentBlob = nil
                 local remote = ReplicatedStorage:FindFirstChild("MenuToys") 
                                and ReplicatedStorage.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
-                
                 if remote then
-                    -- 캐릭터 앞쪽에 블롭 소환
                     local spawnPos = myChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, -5)
-                    pcall(function()
-                        remote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 0, 0))
-                    end)
+                    remote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 0, 0))
+                    
+                    -- 소환 직후엔 0.1초만 기다려서 바로 앉기 시도
+                    task.wait(0.1) 
                 end
+            else
+                -- 블롭이 이미 있다면 0.2초 간격으로 확인 (기존 0.5초에서 단축)
+                task.wait(0.2)
             end
         end
     end)
 end
-
--- 토글
-AntiTab:CreateToggle({
-    Name = "Auto Blob (Auto Spawn & Sit)",
-    CurrentValue = false,
-    Callback = function(Value)
-        AutoBlobEnabled = Value
-        if Value then
-            AutoBlobF()
-        end
-    end
-})
 
 -- =============================================
 -- ANTI PAINT
