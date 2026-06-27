@@ -1385,146 +1385,31 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- ANTI BLOB
+-- Modified Auto Blob function for improved stability
 -- =============================================
-local AntiBlobT = false
-local AntiBlobConnection = nil
-local notifyCooldowns = {}
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local AutoBlobEnabled = false
 
-local function CheckBlob(blob, myHRP, myAttach, source)
-    local script = blob:FindFirstChild("BlobmanSeatAndOwnerScript")
-    if not script then return end
-
-    for _, side in ipairs({"Left", "Right"}) do
-        local detector = blob:FindFirstChild(side .. "Detector")
-        if not detector then continue end
-
-        local weld = detector:FindFirstChild(side .. "Weld")
-        local align = detector:FindFirstChild(side .. "AlignOrientation")
-
-        if weld and weld:IsA("AlignPosition") and weld.Attachment0 == myAttach then
-            local msg = source .. " -> " .. side .. " Grab"
-            local now = tick()
-
-            if not notifyCooldowns[msg] or (now - notifyCooldowns[msg]) >= 2 then
-                notifyCooldowns[msg] = now
-                Rayfield:Notify({Title = "Anti Blob", Content = msg, Duration = 3})
-            end
-
-            pcall(function()
-                local character = LocalPlayer.Character
-                if not character then return end
-
-                local humanoid = character:FindFirstChild("Humanoid")
-                if humanoid then
-                    humanoid.PlatformStand = true
-                end
-
-                local bodyParts = {}
-                local myHRP = character:FindFirstChild("HumanoidRootPart")
-                local myHD = character:FindFirstChild("Head")
-                local myLA = character:FindFirstChild("Left Arm")
-                local myRA = character:FindFirstChild("Right Arm")
-                local myLL = character:FindFirstChild("Left Leg")
-                local myLR = character:FindFirstChild("Right Leg")
-
-                if myHRP then table.insert(bodyParts, myHRP) end
-                if myHD then table.insert(bodyParts, myHD) end
-                if myLA then table.insert(bodyParts, myLA) end
-                if myRA then table.insert(bodyParts, myRA) end
-                if myLL then table.insert(bodyParts, myLL) end
-                if myLR then table.insert(bodyParts, myLR) end
-
-                for _, part in ipairs(bodyParts) do
-                    part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                end
-
-                if align then align.Attachment0 = nil end
-                if weld then
-                    weld.Attachment0 = nil
-                    weld.Enabled = false
-                end
-                if align then align.Enabled = false end
-
-                task.wait(0.05)
-
-                if weld then weld.Enabled = true end
-                if align then align.Enabled = true end
-
-                if humanoid then
-                    humanoid.PlatformStand = false
-                end
-
-                for _, part in ipairs(bodyParts) do
-                    part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                end
-            end)
-        end
-    end
-end
-
-local function AntiBlobF()
-    if AntiBlobConnection then 
-        AntiBlobConnection:Disconnect() 
-        AntiBlobConnection = nil
-    end
-
-    if not AntiBlobT then return end
-
-    AntiBlobConnection = RunService.Stepped:Connect(function()
-        if not AntiBlobT then 
-            if AntiBlobConnection then 
-                AntiBlobConnection:Disconnect() 
-                AntiBlobConnection = nil
-            end
-            return 
-        end
-
-        local myChar = LocalPlayer.Character
-        if not myChar then return end
-        
-        local myHRP = myChar:FindFirstChild("HumanoidRootPart")
-        local myAttach = myHRP and myHRP:FindFirstChild("RootAttachment")
-
-        if not (myHRP and myAttach) then return end
-
-        local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-        if inv then
-            for _, blob in ipairs(inv:GetChildren()) do
-                if blob.Name == "CreatureBlobman" then
-                    CheckBlob(blob, myHRP, myAttach, "My Blob")
-                end
-            end
-        end
-
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                local invs = Workspace:FindFirstChild(player.Name .. "SpawnedInToys")
-                if invs then
-                    for _, blob in ipairs(invs:GetChildren()) do
-                        if blob.Name == "CreatureBlobman" then
-                            CheckBlob(blob, myHRP, myAttach, player.Name)
-                        end
-                    end
-                end
-            end
-        end
-
-        local plots = Workspace:FindFirstChild("PlotItems")
-        if plots then
-            for i = 1, 5 do
-                local plot = plots:FindFirstChild("Plot" .. i)
-                if plot then
-                    for _, blob in ipairs(plot:GetChildren()) do
-                        if blob.Name == "CreatureBlobman" then
-                            CheckBlob(blob, myHRP, myAttach, "Plot " .. i)
+local function AutoBlobF()
+    task.spawn(function()
+        while AutoBlobEnabled do
+            -- Increase interval to reduce server load
+            task.wait(1.0) 
+            
+            local myChar = LocalPlayer.Character
+            if not myChar then continue end
+            local hum = myChar:FindFirstChildOfClass("Humanoid")
+            if not hum or hum.Health <= 0 then continue end
+            
+            local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+            if inv then
+                for _, item in ipairs(inv:GetChildren()) do
+                    if item.Name == "CreatureBlobman" then
+                        local seat = item:FindFirstChild("VehicleSeat")
+                        -- Verify seat existence, availability, and eligibility
+                        if seat and not seat.Occupant then
+                            pcall(function()
+                                seat:Sit(hum)
+                            end)
                         end
                     end
                 end
@@ -1532,24 +1417,7 @@ local function AntiBlobF()
         end
     end)
 end
-
-AntiTab:CreateToggle({
-    Name = "Anti Blob",
-    CurrentValue = false,
-    Callback = function(Value)
-        AntiBlobT = Value
-        if Value then
-            AntiBlobF()
-            Rayfield:Notify({Title = "Anti Blob", Content = "Started", Duration = 2})
-        else
-            if AntiBlobConnection then
-                AntiBlobConnection:Disconnect()
-                AntiBlobConnection = nil
-            end
-            Rayfield:Notify({Title = "Anti Blob", Content = "Stopped", Duration = 2})
-        end
-    end
-})
+-- =============================================
 
 -- =============================================
 -- ANTI PAINT
