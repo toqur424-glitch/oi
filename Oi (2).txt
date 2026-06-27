@@ -1385,59 +1385,59 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- 수정된 Auto Blob (소환 + 자동 앉기)
+-- 개선된 Auto Blob (자동 소환 & 자동 앉기 & 삭제 시 복구)
 -- =============================================
 local AutoBlobEnabled = false
-local lastSpawnAttempt = 0
+local currentBlob = nil -- 현재 타고 있는 블롭을 추적
 
 local function AutoBlobF()
     task.spawn(function()
         while AutoBlobEnabled do
-            task.wait(1) -- 1초 주기로 체크
-            
+            task.wait(0.5)
             local myChar = LocalPlayer.Character
             if not myChar then continue end
-            local myHum = myChar:FindFirstChildOfClass("Humanoid")
+            local hum = myChar:FindFirstChildOfClass("Humanoid")
             
+            -- 1. 블롭이 이미 존재하는지 확인
             local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-            local blobmanFound = false
+            local blobFound = false
             
-            -- 1. 소환된 블롭맨이 있는지 확인 및 앉기
             if inv then
                 for _, item in ipairs(inv:GetChildren()) do
                     if item.Name == "CreatureBlobman" then
-                        blobmanFound = true
+                        blobFound = true
+                        currentBlob = item
+                        
+                        -- 2. 블롭이 있다면, 내가 앉아있는지 확인하고 안 앉아있으면 앉기
                         local seat = item:FindFirstChild("VehicleSeat")
-                        -- 앉아있지 않다면 앉기 시도
-                        if seat and seat.Occupant ~= myHum then
-                            pcall(function() seat:Sit(myHum) end)
+                        if seat and seat.Occupant ~= hum then
+                            seat:Sit(hum)
                         end
                     end
                 end
             end
-            
-            -- 2. 블롭맨이 없다면 소환 (3초 쿨타임)
-            if not blobmanFound then
-                if (tick() - lastSpawnAttempt) > 3.0 then
-                    lastSpawnAttempt = tick()
-                    -- 소환 리모트 호출 (경로를 확인해주세요)
-                    local menuToys = ReplicatedStorage:FindFirstChild("MenuToys")
-                    local spawnRemote = menuToys and menuToys:FindFirstChild("SpawnToyRemoteFunction")
-                    
-                    if spawnRemote then
-                        pcall(function()
-                            spawnRemote:InvokeServer("CreatureBlobman", myChar.HumanoidRootPart.CFrame, Vector3.new(0, 0, 0))
-                        end)
-                    end
+
+            -- 3. 블롭이 없거나 삭제된 경우 (재소환)
+            if not blobFound then
+                currentBlob = nil
+                local remote = ReplicatedStorage:FindFirstChild("MenuToys") 
+                               and ReplicatedStorage.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
+                
+                if remote then
+                    -- 캐릭터 앞쪽에 블롭 소환
+                    local spawnPos = myChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, -5)
+                    pcall(function()
+                        remote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 0, 0))
+                    end)
                 end
             end
         end
     end)
 end
 
--- AntiTab에 토글 추가 (기존 것과 교체)
+-- 토글
 AntiTab:CreateToggle({
-    Name = "Auto Blob (Spawn & Sit)",
+    Name = "Auto Blob (Auto Spawn & Sit)",
     CurrentValue = false,
     Callback = function(Value)
         AutoBlobEnabled = Value
