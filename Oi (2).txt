@@ -1044,7 +1044,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- ANTI KICK (Shuriken in body)
+-- ANTI KICK (Shuriken Behind Body & Fast Update)
 -- =============================================
 local AntiKickT = false
 local AntiKickThread = nil
@@ -1056,7 +1056,9 @@ local function AntiKickLoop()
     local LocalPlayer = Players.LocalPlayer
 
     while AntiKickT do
-        task.wait(0.05) -- 몸 안에 정확히 고정하기 위해 짧은 대기 시간 사용
+        -- 0.05초 대기 대신 task.wait()를 사용하여 게임의 매 프레임마다 초고속으로 위치를 업데이트합니다.
+        -- 이로 인해 표창이 몸에서 빠지거나 뒤쳐지는 현상이 사라집니다.
+        task.wait() 
         
         local char = LocalPlayer.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -1071,25 +1073,29 @@ local function AntiKickLoop()
             local shuriken = spawnedToys:FindFirstChild("NinjaShuriken")
             
             if not shuriken then
-                -- 표창이 없거나 지워졌다면 새로 생성 (내 위치에 소환)
+                -- 표창이 없거나 파괴되었다면 새로 생성
                 pcall(function()
                     ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer("NinjaShuriken", root.CFrame, Vector3.new(0, 0, 0))
                 end)
-                task.wait(0.5) -- 소환될 때까지 잠시 대기
+                task.wait(0.3) -- 서버 과부하를 막기 위해 소환 직후에만 잠깐 대기
             else
-                -- 표창이 존재한다면 내 몸 안(RootPart)에 CFrame을 지속적으로 맞춤
+                -- 내 몸통 기준 뒤쪽으로 3스터드(studs) 떨어진 위치를 계산합니다. (Z축 양수가 등 뒤 방향)
+                -- 거리를 조절하고 싶다면 CFrame.new(0, 0, 3)의 '3' 숫자를 줄이거나 늘려주세요.
+                local targetCFrame = root.CFrame * CFrame.new(0, 0, 3)
+                
+                -- 표창을 등 뒤 위치로 즉시 이동시킴
                 pcall(function()
                     if shuriken.PrimaryPart then
-                        shuriken:PivotTo(root.CFrame)
+                        shuriken:PivotTo(targetCFrame)
                     else
                         for _, part in ipairs(shuriken:GetDescendants()) do
                             if part:IsA("BasePart") then
-                                part.CFrame = root.CFrame
+                                part.CFrame = targetCFrame
                             end
                         end
                     end
                     
-                    -- 캐릭터가 표창 때문에 날아가거나 버그가 생기는 것을 방지 (충돌 무시 및 질량 제거)
+                    -- 캐릭터 물리 버그 방지 (충돌 및 질량 무시)
                     for _, part in ipairs(shuriken:GetDescendants()) do
                         if part:IsA("BasePart") then
                             part.CanCollide = false
