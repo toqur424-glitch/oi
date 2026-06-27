@@ -1044,7 +1044,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ ANTI KICK (Optimized) ]]
+-- [[ ANTI KICK (Forced Attachment) ]]
 -- =============================================
 local AntiTab = Window:CreateTab("Anti", nil)
 AntiTab:CreateSection("=== ANTI KICK ===")
@@ -1060,32 +1060,41 @@ local function AntiKickF()
                 local ragdollHitbox = hrp:FindFirstChild("RagdollTouchedHitbox")
                 
                 if ragdollHitbox then
-                    -- 수리검이 이미 붙어있는지 확인
+                    -- 1. 이미 붙어있는지 확인
                     local isAttached = false
-                    for _, child in pairs(ragdollHitbox:GetChildren()) do
-                        if child:IsA("WeldConstraint") and child.Part1 and child.Part1.Name == "StickyPart" then
-                            isAttached = true
-                            break
-                        end
+                    for _, obj in pairs(ragdollHitbox:GetChildren()) do
+                        if obj:IsA("WeldConstraint") then isAttached = true break end
                     end
 
-                    -- 붙어있지 않으면 즉시 바로 앞에서 생성 및 부착
+                    -- 2. 붙어있지 않다면 생성 및 강제 부착
                     if not isAttached then
                         pcall(function()
-                            -- 플레이어 앞 0.5 거리에서 즉시 생성
-                            local spawnCF = hrp.CFrame * CFrame.new(0, 0, -0.5)
-                            ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer("NinjaShuriken", spawnCF, Vector3.new(0,0,0))
+                            -- 수리검 생성
+                            ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer("NinjaShuriken", hrp.CFrame, Vector3.new(0,0,0))
+                            
+                            -- 생성된 수리검 찾기 (전체 맵에서 탐색은 위험하므로 플레이어 관련 폴더만 탐색)
+                            task.wait(0.1) -- 생성되는 시간을 조금 기다림
+                            local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+                            if inv then
+                                local shuriken = inv:FindFirstChild("NinjaShuriken")
+                                local stickyPart = shuriken and shuriken:FindFirstChild("StickyPart")
+                                
+                                -- 3. 찾은 수리검을 캐릭터 Hitbox에 강제 부착
+                                if stickyPart then
+                                    ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(stickyPart, ragdollHitbox, CFrame.new(0, 0, 0))
+                                end
+                            end
                         end)
                     end
                 end
             end
-            task.wait(0.2) -- 너무 빠른 루프는 서버 랙을 유발하므로 0.2초로 조정
+            task.wait(0.5) -- 부착 루프 간격
         end
     end)
 end
 
 AntiTab:CreateToggle({
-    Name = "Anti Kick (Stabilized)",
+    Name = "Anti Kick (Force Attach)",
     CurrentValue = false,
     Callback = function(Value)
         AntiKickT = Value
