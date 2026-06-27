@@ -1044,71 +1044,54 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ ANTI TAB - 통합 관리 ]]
+-- [[ ANTI KICK (Optimized) ]]
 -- =============================================
 local AntiTab = Window:CreateTab("Anti", nil)
-AntiTab:CreateSection("=== ANTI KICK & CORE ===")
+AntiTab:CreateSection("=== ANTI KICK ===")
 
--- 1. Anti Kick (AntiKickF)
 local AntiKickT = false
+
 local function AntiKickF()
     task.spawn(function()
         while AntiKickT do
             local char = LocalPlayer.Character
-            if not char then task.wait(1) continue end
-            
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            local ragdollHitbox = hrp and hrp:FindFirstChild("RagdollTouchedHitbox")
-            if not hrp or not ragdollHitbox then task.wait(0.5) continue end
-
-            local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-            local stickyPartName = "NinjaShuriken"
-            local stickyPartFolder = inv and inv:FindFirstChild(stickyPartName)
-            local stickyPart = stickyPartFolder and stickyPartFolder:FindFirstChild("StickyPart")
-            local soundPart = stickyPartFolder and stickyPartFolder:FindFirstChild("SoundPart")
-
-            if not stickyPart then
-                task.spawn(function()
-                    pcall(function()
-                        ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer(stickyPartName, hrp.CFrame * CFrame.new(0, 10, 0), Vector3.new(0, 0, 0))
-                    end)
-                end)
-                task.wait(0.5)
-            else
-                pcall(function()
-                    stickyPart.CanCollide = false
-                    stickyPart.Massless = true
-                    if soundPart then
-                        soundPart.CanCollide = false
-                        soundPart.Massless = true
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local hrp = char.HumanoidRootPart
+                local ragdollHitbox = hrp:FindFirstChild("RagdollTouchedHitbox")
+                
+                if ragdollHitbox then
+                    -- 수리검이 이미 붙어있는지 확인
+                    local isAttached = false
+                    for _, child in pairs(ragdollHitbox:GetChildren()) do
+                        if child:IsA("WeldConstraint") and child.Part1 and child.Part1.Name == "StickyPart" then
+                            isAttached = true
+                            break
+                        end
                     end
-                    ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner"):FireServer(stickyPart, stickyPart.CFrame)
-                    ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine"):FireServer(stickyPart)
-                end)
 
-                local stickyWeld = stickyPart:FindFirstChild("StickyWeld")
-                if not stickyWeld or stickyWeld.Part1 ~= ragdollHitbox then
-                    pcall(function()
-                        ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(stickyPart, ragdollHitbox, CFrame.new(0, 0, 0.6) * CFrame.Angles(math.rad(90), 0, 0))
-                    end)
+                    -- 붙어있지 않으면 즉시 바로 앞에서 생성 및 부착
+                    if not isAttached then
+                        pcall(function()
+                            -- 플레이어 앞 0.5 거리에서 즉시 생성
+                            local spawnCF = hrp.CFrame * CFrame.new(0, 0, -0.5)
+                            ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer("NinjaShuriken", spawnCF, Vector3.new(0,0,0))
+                        end)
+                    end
                 end
             end
-            task.wait(0.1)
+            task.wait(0.2) -- 너무 빠른 루프는 서버 랙을 유발하므로 0.2초로 조정
         end
     end)
 end
 
 AntiTab:CreateToggle({
-    Name = "Anti Kick (Auto Shuriken)",
+    Name = "Anti Kick (Stabilized)",
     CurrentValue = false,
     Callback = function(Value)
         AntiKickT = Value
         if Value then AntiKickF() end
     end
 })
-
--- 기존 다른 Anti 기능들(Anti Void, Anti Burn 등)을 여기에 이어 붙이세요.
--- [참고] 위에서 정의한 AntiKickF는 기존 코드의 로직을 간소화하여 반영했습니다.
 
 -- =============================================
 -- 2. ANTI VOID
