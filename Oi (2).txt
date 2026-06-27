@@ -1043,88 +1043,123 @@ AntiTab:CreateToggle({
     end
 })
 
--- =============================================
--- ANTI KICK (RunService Ultra Fast & Close Behind)
--- =============================================
-local AntiKickT = false
-local Connection = nil
+-- ==============================================================================
+-- [ 기본 서비스 및 변수 설정 ]
+-- ==============================================================================
+local Players = game:GetService("Players")
+local rs = game:GetService("ReplicatedStorage")
+local workspace = game:GetService("Workspace")
 
-local function UpdateShuriken()
-    if not AntiKickT then return end
-    
-    local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local Workspace = game:GetService("Workspace")
-    local LocalPlayer = Players.LocalPlayer
+local plr = Players.LocalPlayer
+local cam = workspace.CurrentCamera
 
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
+-- ==============================================================================
+-- [ 리모트 이벤트 및 통신 경로 설정 ]
+-- ==============================================================================
+local GrabEvents = rs:WaitForChild("GrabEvents")
+local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
+local DestroyGrabLine = GrabEvents:WaitForChild("DestroyGrabLine")
+
+local MenuToys = rs:WaitForChild("MenuToys")
+local SpawnToyRemoteFunction = MenuToys:WaitForChild("SpawnToyRemoteFunction")
+local DestroyToy = MenuToys:WaitForChild("DestroyToy")
+
+local StickyPartEvent = rs:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent")
+
+-- 안티 킥 작동 여부 토글 (끄고 싶다면 false로 변경)
+local AntiKickT = true 
+
+-- ==============================================================================
+-- [ 안티 킥 메인 함수 (AntiKickF) ]
+-- ==============================================================================
+local function AntiKickF()
+    local char = plr.Character
+    if not char then return end
+
+    local inv = workspace:WaitForChild(plr.Name.."SpawnedInToys")
     
-    if not char or not root then return end
-    
-    local folderName = LocalPlayer.Name .. "SpawnedInToys"
-    local spawnedToys = Workspace:FindFirstChild(folderName)
-    
-    if spawnedToys then
-        local shuriken = spawnedToys:FindFirstChild("NinjaShuriken")
-        
-        -- 등 바로 뒤 아주 가까운 위치 (0.8 스터드 뒤)
-        local targetCFrame = root.CFrame * CFrame.new(0, 0, 0.8)
-        
-        if not shuriken then
-            -- 표창이 없으면, 아예 처음부터 '등 뒤' 위치(targetCFrame)에 직접 스폰합니다.
+    task.spawn(function()
+        while AntiKickT and char and char.Parent do
+            task.wait(0.05)
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local torso = char:FindFirstChild("Torso")
+            if not hrp or not torso then continue end
+
+            local ragdollHitbox = hrp:FindFirstChild("RagdollTouchedHitbox")
+            if not ragdollHitbox then continue end
+
+            local stickyPartName = "NinjaShuriken"
+            local targetValue = CFrame.new(0.05, -0.3, 0) * CFrame.Angles(190, 0, 0)
+
+            local stickyPartFolder = inv:FindFirstChild(stickyPartName)
+            local stickyPart = stickyPartFolder and stickyPartFolder:FindFirstChild("StickyPart")
+            local soundPart = stickyPartFolder and stickyPartFolder:FindFirstChild("SoundPart")
+
+            -- 1. 방어용 수리검 소환 로직
+            if not stickyPart then
+                pcall(function()
+                    SpawnToyRemoteFunction:InvokeServer(stickyPartName, hrp.CFrame * CFrame.new(0, 10, 0), Vector3.new(0, 0, 0))
+                end)
+                task.wait(0.2)
+                continue
+            end
+
+            -- 2. 네트워크 소유권 강제 탈환 및 잡기 라인 제거
             pcall(function()
-                ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer("NinjaShuriken", targetCFrame, Vector3.new(0, 0, 0))
+                SetNetworkOwner:FireServer(stickyPart, stickyPart.CFrame)
+                DestroyGrabLine:FireServer(stickyPart)
             end)
-        else
-            -- 표창이 존재하면, 매 프레임 딜레이 없이 위치를 고정합니다.
-            pcall(function()
-                if shuriken.PrimaryPart then
-                    shuriken:PivotTo(targetCFrame)
-                else
-                    for _, part in ipairs(shuriken:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CFrame = targetCFrame
-                        end
-                    end
-                end
-                
-                -- 물리 간섭 방지
-                for _, part in ipairs(shuriken:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                        part.Massless = true
-                    end
-                end
-            end)
+
+            -- 3. 거리 체크 및 비정상 상태 파괴
+            local distance = (hrp.Position - stickyPart.Position).Magnitude
+            local partOwner = stickyPart:FindFirstChild("PartOwner")
+            
+            if distance > 8 or partOwner then
+                pcall(function()
+                    DestroyToy:FireServer(stickyPartFolder)
+                end)
+                continue
+            end
+
+            -- 4. 강제 용접(Weld) 적용
+            local stickyWeld = stickyPart:FindFirstChild("StickyWeld")
+            if not stickyWeld or stickyWeld.Part1 ~= ragdollHitbox then
+                pcall(function()
+                    StickyPartEvent:FireServer(stickyPart, ragdollHitbox, targetValue)
+                end)
+            end
         end
-    end
+        
+        -- 안티 킥 종료 시 장난감 정리
+        if not AntiKickT then
+            local shurikenFolder = inv:FindFirstChild("NinjaShuriken")
+            if shurikenFolder then
+                pcall(function()
+                    DestroyToy:FireServer(shurikenFolder)
+                end)
+            end
+        end
+    end)
 end
 
--- AntiTab에 토글 UI 추가
-AntiTab:CreateToggle({
-    Name = "anti kick",
-    CurrentValue = false,
-    Callback = function(Value)
-        AntiKickT = Value
-        local RunService = game:GetService("RunService")
-        
-        if Value then
-            -- 기존 루프가 있다면 제거
-            if Connection then Connection:Disconnect() end
-            
-            -- RunService.Heartbeat를 사용하여 게임의 물리 프레임마다 함수를 실행 (딜레이 0)
-            Connection = RunService.Heartbeat:Connect(UpdateShuriken)
-            Rayfield:Notify({Title = "anti kick", Content = "Activated", Duration = 2})
-        else
-            if Connection then
-                Connection:Disconnect()
-                Connection = nil
-            end
-            Rayfield:Notify({Title = "anti kick", Content = "Deactivated", Duration = 2})
-        end
+-- ==============================================================================
+-- [ 캐릭터 상태 감지 및 자동 실행 ]
+-- ==============================================================================
+plr.CharacterAdded:Connect(function(newChar)
+    newChar:WaitForChild("Humanoid")
+    newChar:WaitForChild("HumanoidRootPart")
+    task.wait(0.5)
+    
+    if AntiKickT then
+        AntiKickF()
     end
-})
+end)
+
+-- 최초 실행 루틴
+if plr.Character then
+    AntiKickF()
+end
 
 -- =============================================
 -- 2. ANTI VOID
