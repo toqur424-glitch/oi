@@ -1385,7 +1385,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- Optimized Auto Blob & Auto Respawn logic
+-- Optimized Auto Blob & Immediate Sit Logic
 -- =============================================
 local AutoBlobEnabled = false
 local lastSpawnAttempt = 0
@@ -1393,42 +1393,42 @@ local lastSpawnAttempt = 0
 local function AutoBlobF()
     task.spawn(function()
         while AutoBlobEnabled do
-            task.wait(1.5) -- 주기를 1.5초로 늘려 랙 감소
-            
             local myChar = LocalPlayer.Character
-            if not myChar then continue end
-            local hum = myChar:FindFirstChildOfClass("Humanoid")
-            if not hum or hum.Health <= 0 then continue end
-            
-            local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-            local blobExists = false
-            
-            if inv then
-                for _, item in ipairs(inv:GetChildren()) do
-                    if item.Name == "CreatureBlobman" then
-                        blobExists = true
-                        local seat = item:FindFirstChild("VehicleSeat")
-                        if seat and not seat.Occupant then
-                            pcall(function() seat:Sit(hum) end)
+            if myChar then
+                local hum = myChar:FindFirstChildOfClass("Humanoid")
+                local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+                
+                local blobFound = false
+                
+                if inv then
+                    for _, item in ipairs(inv:GetChildren()) do
+                        if item.Name == "CreatureBlobman" then
+                            blobFound = true
+                            local seat = item:FindFirstChild("VehicleSeat")
+                            -- 시트가 있으면 즉시 탑승 (앉아있지 않은 경우에만)
+                            if seat and not seat.Occupant then
+                                pcall(function() seat:Sit(hum) end)
+                            end
                         end
                     end
                 end
-            end
-            
-            -- 소환 실패 시 3초 간격으로 소환 요청
-            if not blobExists then
-                if (tick() - lastSpawnAttempt) > 3 then
-                    lastSpawnAttempt = tick()
-                    pcall(function()
-                        game:GetService("ReplicatedStorage").RemoteEvents.EquipItem:FireServer("CreatureBlobman")
-                    end)
+                
+                -- 블롭이 없으면 즉시 소환
+                if not blobFound then
+                    if (tick() - lastSpawnAttempt) > 1.5 then
+                        lastSpawnAttempt = tick()
+                        pcall(function()
+                            game:GetService("ReplicatedStorage").RemoteEvents.EquipItem:FireServer("CreatureBlobman")
+                        end)
+                    end
                 end
             end
+            task.wait(0.2) -- 반응 속도를 위해 주기를 0.2초로 단축
         end
     end)
 end
--- =============================================
 
+-- =============================================
 -- =============================================
 -- ANTI PAINT
 -- =============================================
