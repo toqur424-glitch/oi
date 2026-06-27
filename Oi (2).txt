@@ -1385,7 +1385,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- Optimized Auto Blob & Immediate Sit Logic
+-- Modified Auto Blob & Persistent Sit Logic
 -- =============================================
 local AutoBlobEnabled = false
 local lastSpawnAttempt = 0
@@ -1400,12 +1400,13 @@ local function AutoBlobF()
                 
                 local blobFound = false
                 
+                -- 1. 내 블롭이 있는지 확인하고 있으면 탑승 (기존 타주기 로직)
                 if inv then
                     for _, item in ipairs(inv:GetChildren()) do
                         if item.Name == "CreatureBlobman" then
                             blobFound = true
                             local seat = item:FindFirstChild("VehicleSeat")
-                            -- 시트가 있으면 즉시 탑승 (앉아있지 않은 경우에만)
+                            -- 시트가 비어있으면 즉시 탑승
                             if seat and not seat.Occupant then
                                 pcall(function() seat:Sit(hum) end)
                             end
@@ -1413,7 +1414,7 @@ local function AutoBlobF()
                     end
                 end
                 
-                -- 블롭이 없으면 즉시 소환
+                -- 2. 블롭이 없으면 1.5초 간격으로 소환 (자동 설치)
                 if not blobFound then
                     if (tick() - lastSpawnAttempt) > 1.5 then
                         lastSpawnAttempt = tick()
@@ -1423,12 +1424,23 @@ local function AutoBlobF()
                     end
                 end
             end
-            task.wait(0.2) -- 반응 속도를 위해 주기를 0.2초로 단축
+            task.wait(0.2) -- 반응 속도 최적화
         end
     end)
 end
 
--- =============================================
+-- 토글 버튼 생성 (이미 AntiTab에 생성되어 있다면 아래 내용을 수정하여 사용)
+AntiTab:CreateToggle({
+    Name = "Auto Blob (Auto Spawn & Sit)",
+    CurrentValue = false,
+    Callback = function(Value)
+        AutoBlobEnabled = Value
+        if Value then
+            AutoBlobF()
+        end
+    end
+})
+
 -- =============================================
 -- ANTI PAINT
 -- =============================================
