@@ -1385,7 +1385,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- 개선된 Auto Blob (자동 소환 & 자동 앉기 & 삭제 시 복구)
+-- 개선된 Auto Blob (자동 소환 & 자동 앉기 & 딜레이 제거)
 -- =============================================
 local AutoBlobEnabled = false
 local currentBlob = nil -- 현재 타고 있는 블롭을 추적
@@ -1393,10 +1393,11 @@ local currentBlob = nil -- 현재 타고 있는 블롭을 추적
 local function AutoBlobF()
     task.spawn(function()
         while AutoBlobEnabled do
-            -- 반응 속도를 0.5초에서 0.1초로 단축 (훨씬 빠르게 반응)
-            task.wait(0.1)
             local myChar = LocalPlayer.Character
-            if not myChar then continue end
+            if not myChar then 
+                task.wait(0.1)
+                continue 
+            end
             local hum = myChar:FindFirstChildOfClass("Humanoid")
             
             -- 1. 블롭이 이미 존재하는지 확인
@@ -1425,13 +1426,16 @@ local function AutoBlobF()
                                and ReplicatedStorage.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
                 
                 if remote then
-                    -- 캐릭터에게 훨씬 가깝게 소환 (기존 -5에서 -1.5로 수정)
+                    -- 캐릭터에게 가깝게 소환
                     local spawnPos = myChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, -1.5)
                     pcall(function()
                         remote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 0, 0))
                     end)
                 end
             end
+            
+            -- 대기 시간을 맨 아래로 이동시키고 0.05초로 단축 (소환 즉시 다음 확인 진행)
+            task.wait(0.05)
         end
     end)
 end
