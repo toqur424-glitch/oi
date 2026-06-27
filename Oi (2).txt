@@ -1385,34 +1385,43 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- Modified Auto Blob function for improved stability
+-- Auto Blob & Auto Respawn logic
 -- =============================================
 local AutoBlobEnabled = false
 
 local function AutoBlobF()
     task.spawn(function()
         while AutoBlobEnabled do
-            -- Increase interval to reduce server load
-            task.wait(1.0) 
+            task.wait(1.0)
             
             local myChar = LocalPlayer.Character
             if not myChar then continue end
             local hum = myChar:FindFirstChildOfClass("Humanoid")
             if not hum or hum.Health <= 0 then continue end
             
+            -- Check if Blobman exists in the designated area
             local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+            local blobExists = false
+            
             if inv then
                 for _, item in ipairs(inv:GetChildren()) do
                     if item.Name == "CreatureBlobman" then
+                        blobExists = true
                         local seat = item:FindFirstChild("VehicleSeat")
-                        -- Verify seat existence, availability, and eligibility
+                        -- Auto-sit if seat is empty
                         if seat and not seat.Occupant then
-                            pcall(function()
-                                seat:Sit(hum)
-                            end)
+                            pcall(function() seat:Sit(hum) end)
                         end
                     end
                 end
+            end
+            
+            -- If blob is missing, re-equip from inventory (Placeholder for specific game remote)
+            if not blobExists then
+                pcall(function()
+                    -- Replace 'RemoteEvent' and arguments with the actual game's path
+                    game:GetService("ReplicatedStorage").RemoteEvents.EquipItem:FireServer("CreatureBlobman")
+                end)
             end
         end
     end)
