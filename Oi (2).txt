@@ -1385,21 +1385,21 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- Auto Blob & Auto Respawn logic
+-- Optimized Auto Blob & Auto Respawn logic
 -- =============================================
 local AutoBlobEnabled = false
+local lastSpawnAttempt = 0
 
 local function AutoBlobF()
     task.spawn(function()
         while AutoBlobEnabled do
-            task.wait(1.0)
+            task.wait(1.5) -- 주기를 1.5초로 늘려 랙 감소
             
             local myChar = LocalPlayer.Character
             if not myChar then continue end
             local hum = myChar:FindFirstChildOfClass("Humanoid")
             if not hum or hum.Health <= 0 then continue end
             
-            -- Check if Blobman exists in the designated area
             local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
             local blobExists = false
             
@@ -1408,7 +1408,6 @@ local function AutoBlobF()
                     if item.Name == "CreatureBlobman" then
                         blobExists = true
                         local seat = item:FindFirstChild("VehicleSeat")
-                        -- Auto-sit if seat is empty
                         if seat and not seat.Occupant then
                             pcall(function() seat:Sit(hum) end)
                         end
@@ -1416,12 +1415,14 @@ local function AutoBlobF()
                 end
             end
             
-            -- If blob is missing, re-equip from inventory (Placeholder for specific game remote)
+            -- 소환 실패 시 3초 간격으로 소환 요청
             if not blobExists then
-                pcall(function()
-                    -- Replace 'RemoteEvent' and arguments with the actual game's path
-                    game:GetService("ReplicatedStorage").RemoteEvents.EquipItem:FireServer("CreatureBlobman")
-                end)
+                if (tick() - lastSpawnAttempt) > 3 then
+                    lastSpawnAttempt = tick()
+                    pcall(function()
+                        game:GetService("ReplicatedStorage").RemoteEvents.EquipItem:FireServer("CreatureBlobman")
+                    end)
+                end
             end
         end
     end)
