@@ -1044,66 +1044,59 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- ANTI KICK (Shuriken Behind Body & Fast Update)
+-- ANTI KICK (RunService Ultra Fast & Close Behind)
 -- =============================================
 local AntiKickT = false
-local AntiKickThread = nil
+local Connection = nil
 
-local function AntiKickLoop()
+local function UpdateShuriken()
+    if not AntiKickT then return end
+    
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local Workspace = game:GetService("Workspace")
     local LocalPlayer = Players.LocalPlayer
 
-    while AntiKickT do
-        -- 0.05초 대기 대신 task.wait()를 사용하여 게임의 매 프레임마다 초고속으로 위치를 업데이트합니다.
-        -- 이로 인해 표창이 몸에서 빠지거나 뒤쳐지는 현상이 사라집니다.
-        task.wait() 
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if not char or not root then return end
+    
+    local folderName = LocalPlayer.Name .. "SpawnedInToys"
+    local spawnedToys = Workspace:FindFirstChild(folderName)
+    
+    if spawnedToys then
+        local shuriken = spawnedToys:FindFirstChild("NinjaShuriken")
         
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
+        -- 등 바로 뒤 아주 가까운 위치 (0.8 스터드 뒤)
+        local targetCFrame = root.CFrame * CFrame.new(0, 0, 0.8)
         
-        -- 캐릭터나 RootPart가 없으면 스킵
-        if not char or not root then continue end
-        
-        local folderName = LocalPlayer.Name .. "SpawnedInToys"
-        local spawnedToys = Workspace:FindFirstChild(folderName)
-        
-        if spawnedToys then
-            local shuriken = spawnedToys:FindFirstChild("NinjaShuriken")
-            
-            if not shuriken then
-                -- 표창이 없거나 파괴되었다면 새로 생성
-                pcall(function()
-                    ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer("NinjaShuriken", root.CFrame, Vector3.new(0, 0, 0))
-                end)
-                task.wait(0.3) -- 서버 과부하를 막기 위해 소환 직후에만 잠깐 대기
-            else
-                -- 내 몸통 기준 뒤쪽으로 3스터드(studs) 떨어진 위치를 계산합니다. (Z축 양수가 등 뒤 방향)
-                -- 거리를 조절하고 싶다면 CFrame.new(0, 0, 3)의 '3' 숫자를 줄이거나 늘려주세요.
-                local targetCFrame = root.CFrame * CFrame.new(0, 0, 3)
-                
-                -- 표창을 등 뒤 위치로 즉시 이동시킴
-                pcall(function()
-                    if shuriken.PrimaryPart then
-                        shuriken:PivotTo(targetCFrame)
-                    else
-                        for _, part in ipairs(shuriken:GetDescendants()) do
-                            if part:IsA("BasePart") then
-                                part.CFrame = targetCFrame
-                            end
-                        end
-                    end
-                    
-                    -- 캐릭터 물리 버그 방지 (충돌 및 질량 무시)
+        if not shuriken then
+            -- 표창이 없으면, 아예 처음부터 '등 뒤' 위치(targetCFrame)에 직접 스폰합니다.
+            pcall(function()
+                ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer("NinjaShuriken", targetCFrame, Vector3.new(0, 0, 0))
+            end)
+        else
+            -- 표창이 존재하면, 매 프레임 딜레이 없이 위치를 고정합니다.
+            pcall(function()
+                if shuriken.PrimaryPart then
+                    shuriken:PivotTo(targetCFrame)
+                else
                     for _, part in ipairs(shuriken:GetDescendants()) do
                         if part:IsA("BasePart") then
-                            part.CanCollide = false
-                            part.Massless = true
+                            part.CFrame = targetCFrame
                         end
                     end
-                end)
-            end
+                end
+                
+                -- 물리 간섭 방지
+                for _, part in ipairs(shuriken:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                        part.Massless = true
+                    end
+                end
+            end)
         end
     end
 end
@@ -1114,15 +1107,19 @@ AntiTab:CreateToggle({
     CurrentValue = false,
     Callback = function(Value)
         AntiKickT = Value
+        local RunService = game:GetService("RunService")
+        
         if Value then
-            if AntiKickThread then task.cancel(AntiKickThread) end
-            AntiKickThread = task.spawn(AntiKickLoop)
+            -- 기존 루프가 있다면 제거
+            if Connection then Connection:Disconnect() end
+            
+            -- RunService.Heartbeat를 사용하여 게임의 물리 프레임마다 함수를 실행 (딜레이 0)
+            Connection = RunService.Heartbeat:Connect(UpdateShuriken)
             Rayfield:Notify({Title = "anti kick", Content = "Activated", Duration = 2})
         else
-            AntiKickT = false
-            if AntiKickThread then
-                task.cancel(AntiKickThread)
-                AntiKickThread = nil
+            if Connection then
+                Connection:Disconnect()
+                Connection = nil
             end
             Rayfield:Notify({Title = "anti kick", Content = "Deactivated", Duration = 2})
         end
