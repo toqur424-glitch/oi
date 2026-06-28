@@ -1044,115 +1044,53 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ ANTI-ANTI-KICK (상대방 표창 무력화) ]]
+-- [[ ANTI-ANTI-KICK (Teleport to Void) ]]
 -- =============================================
 local AntiAntiTab = Window:CreateTab("Anti-Kick Disruptor", nil)
-AntiAntiTab:CreateSection("=== 방해 모드 ===")
+AntiAntiTab:CreateSection("=== 방해 모드 (Void Teleport) ===")
 
 local DisruptT = false
+local VoidPosition = CFrame.new(0, -5000, 0) -- 맵 아래 5000 거리의 지하(바다)
 
 local function DisruptAntiKick()
-    -- Workspace에서 생성되는 모든 객체를 감시
+    -- 맵의 모든 변화를 감시
     game.Workspace.DescendantAdded:Connect(function(descendant)
         if not DisruptT then return end
         
-        -- 생성된 것이 'NinjaShuriken'의 StickyPart인지 확인
+        -- 상대방의 표창(NinjaShuriken/StickyPart)인지 확인
+        -- 주의: 상대방의 표창은 내 표창과 이름이 같을 수 있으므로, 
+        -- 본인 것이 아닌 것만 골라내는 로직이 필요할 수 있습니다.
         if descendant.Name == "StickyPart" and descendant.Parent.Name == "NinjaShuriken" then
             task.spawn(function()
-                -- 1. 표창이 내 캐릭터 혹은 특정 타겟에 붙으려 할 때 강제 삭제
-                -- 상대방의 스크립트가 InvokeServer를 호출할 때 바로 삭제하여 부착 방지
+                -- 부착되기 전에 즉시 좌표를 지하(바다)로 옮겨버림
                 pcall(function()
-                    descendant.Parent:Destroy() 
+                    local parentModel = descendant.Parent
+                    if parentModel then
+                        -- 물리 엔진이 따라오지 못하게 즉시 텔레포트
+                        parentModel:SetPrimaryPartCFrame(VoidPosition)
+                        
+                        -- 표창의 속도를 0으로 만들어 멈추게 함
+                        for _, part in pairs(parentModel:GetChildren()) do
+                            if part:IsA("BasePart") then
+                                part.Velocity = Vector3.new(0, 0, 0)
+                                part.RotVelocity = Vector3.new(0, 0, 0)
+                            end
+                        end
+                    end
                 end)
             end)
         end
     end)
 end
 
--- 기능 실행
+-- 기능 초기화
 DisruptAntiKick()
 
 AntiAntiTab:CreateToggle({
-    Name = "Disrupt Enemy Shuriken",
+    Name = "Sink Enemy Shuriken",
     CurrentValue = false,
     Callback = function(Value)
         DisruptT = Value
-    end
-})
-
--- =============================================
--- 4. ANTI EXPLOSION
--- =============================================
-local AntiExplosionT = false
-local AntiExplosionC = nil
-
-local function AntiExplosionF()
-    if AntiExplosionC then
-        AntiExplosionC:Disconnect()
-        AntiExplosionC = nil
-    end
-
-    if not AntiExplosionT then 
-        return 
-    end
-
-    local char = LocalPlayer.Character
-    if not char then 
-        return 
-    end
-
-    local hrp = char:WaitForChild("HumanoidRootPart")
-    local hum = char:WaitForChild("Humanoid")
-
-    AntiExplosionC = workspace.ChildAdded:Connect(function(model)
-        if not char or not hrp or not hum then
-            return
-        end
-        
-        if model:IsA("BasePart") and (model.Position - hrp.Position).Magnitude <= 20 then
-            if hum.SeatPart ~= nil then
-                hrp.Anchored = true
-                task.wait(0.03)
-                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                hrp.Anchored = false
-            else
-                hrp.Anchored = true
-                task.wait()
-                hum:ChangeState(Enum.HumanoidStateType.Running)
-                hrp.Anchored = false
-                hum.AutoRotate = true
-
-                for _, limb in ipairs(char:GetDescendants()) do
-                    if limb:IsA("BasePart") and limb.Name == "RagdollLimbPart" then
-                        limb.CanCollide = false
-                    end
-                end
-            end
-        end
-    end)
-end
-
-LocalPlayer.CharacterAdded:Connect(function(char)
-    char:WaitForChild("Humanoid")
-    char:WaitForChild("HumanoidRootPart")
-    task.wait(0.2)
-    if AntiExplosionT then
-        AntiExplosionF()
-    end
-end)
-
-AntiTab:CreateToggle({
-    Name = "Anti Explosion",
-    CurrentValue = false,
-    Callback = function(Value)
-        AntiExplosionT = Value
-        if Value then
-            AntiExplosionF()
-        elseif AntiExplosionC then
-            AntiExplosionC:Disconnect()
-            AntiExplosionC = nil
-        end
     end
 })
 
