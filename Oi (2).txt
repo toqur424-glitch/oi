@@ -1044,7 +1044,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ ANTI KICK (Fast & Inside Body) ]]
+-- [[ ANTI KICK (Perfect Inside Body & Stable) ]]
 -- =============================================
 local AntiTab = Window:CreateTab("Anti", nil)
 AntiTab:CreateSection("=== ANTI KICK ===")
@@ -1067,16 +1067,14 @@ local function AntiKickF()
             local stickyPart = stickyPartFolder and stickyPartFolder:FindFirstChild("StickyPart")
             local soundPart = stickyPartFolder and stickyPartFolder:FindFirstChild("SoundPart")
 
-            -- 1. 몸 안에 즉시 생성
+            -- 1. 표창이 없으면 내 몸 정중앙(0,0,0)에서 즉시 소환
             if not stickyPart then
                 pcall(function()
-                    -- CFrame.new(0,0,0)을 사용하여 캐릭터 몸(HumanoidRootPart) 정중앙에 스폰
-                    local spawnCF = hrp.CFrame
-                    ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer(stickyPartName, spawnCF, Vector3.new(0, 0, 0))
+                    ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer(stickyPartName, hrp.CFrame, Vector3.new(0, 0, 0))
                 end)
-                task.wait(0.05) -- 기존 0.3초 -> 0.05초로 대폭 단축 (최대한 빨리 인식)
+                task.wait(0.1) -- 소환 직후 인식할 수 있도록 아주 짧게 대기
             else
-                -- 2. 물리 충돌 및 무게 즉시 제거
+                -- 2. 물리 충돌 및 무게 제거 (서버 렉 방지)
                 pcall(function()
                     stickyPart.CanCollide = false
                     stickyPart.Massless = true
@@ -1088,24 +1086,29 @@ local function AntiKickF()
                     ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine"):FireServer(stickyPart)
                 end)
 
-                -- 3. 몸 안에 세워서 초고속 부착
+                -- 3. 떨어졌다 붙었다 하는 현상(스팸) 완벽 차단 및 즉시 부착
                 local stickyWeld = stickyPart:FindFirstChild("StickyWeld")
-                if not stickyWeld or stickyWeld.Part1 ~= ragdollHitbox then
+                
+                -- StickyWeld(용접)가 없을 때만 부착 명령을 보냄
+                if not stickyWeld then
                     pcall(function()
-                        -- CFrame.new(0,0,0)으로 몸 안에 위치 + Angles 90도로 세우기
+                        -- CFrame.new(0, 0, 0)을 사용하여 몸 밖으로 튀어나오지 않고 내부에 세워서 부착
                         local attachCF = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(90), 0, 0)
                         ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(stickyPart, ragdollHitbox, attachCF)
                     end)
-                    task.wait(0.05) -- 기존 0.2초 -> 0.05초로 단축하여 즉시 갱신
+                    -- ★ 핵심: 부착 명령을 보낸 후 서버가 붙일 수 있도록 0.5초 대기 (이게 없으면 계속 뗐다 붙였다 함)
+                    task.wait(0.5)
                 end
             end
-            task.wait(0.05) -- 루프 주기 최소화 (빠른 반응)
+            
+            -- 평상시 감지 속도는 빠르게 유지
+            task.wait(0.1) 
         end
     end)
 end
 
 AntiTab:CreateToggle({
-    Name = "Anti Kick (Fast Inside)",
+    Name = "Anti Kick (Inside & Stable)",
     CurrentValue = false,
     Callback = function(Value)
         AntiKickT = Value
