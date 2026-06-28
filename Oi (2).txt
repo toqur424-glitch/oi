@@ -1044,7 +1044,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ ANTI KICK (Perfect Inside Body & Stable) ]]
+-- [[ ANTI KICK (Direct HumanoidRootPart Attach) ]]
 -- =============================================
 local AntiTab = Window:CreateTab("Anti", nil)
 AntiTab:CreateSection("=== ANTI KICK ===")
@@ -1057,9 +1057,9 @@ local function AntiKickF()
             local char = LocalPlayer.Character
             if not char then task.wait(0.1) continue end
             
+            -- 불확실한 Hitbox 대신 무조건 존재하는 HumanoidRootPart를 직접 타겟으로 지정
             local hrp = char:FindFirstChild("HumanoidRootPart")
-            local ragdollHitbox = hrp and hrp:FindFirstChild("RagdollTouchedHitbox")
-            if not hrp or not ragdollHitbox then task.wait(0.1) continue end
+            if not hrp then task.wait(0.1) continue end
 
             local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
             local stickyPartName = "NinjaShuriken"
@@ -1067,14 +1067,14 @@ local function AntiKickF()
             local stickyPart = stickyPartFolder and stickyPartFolder:FindFirstChild("StickyPart")
             local soundPart = stickyPartFolder and stickyPartFolder:FindFirstChild("SoundPart")
 
-            -- 1. 표창이 없으면 내 몸 정중앙(0,0,0)에서 즉시 소환
+            -- 1. 내 몸(HumanoidRootPart) 좌표에서 소환
             if not stickyPart then
                 pcall(function()
                     ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer(stickyPartName, hrp.CFrame, Vector3.new(0, 0, 0))
                 end)
-                task.wait(0.1) -- 소환 직후 인식할 수 있도록 아주 짧게 대기
+                task.wait(0.1)
             else
-                -- 2. 물리 충돌 및 무게 제거 (서버 렉 방지)
+                -- 2. 서버 렉 방지 및 투명화/무게 제거 처리
                 pcall(function()
                     stickyPart.CanCollide = false
                     stickyPart.Massless = true
@@ -1086,29 +1086,28 @@ local function AntiKickF()
                     ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine"):FireServer(stickyPart)
                 end)
 
-                -- 3. 떨어졌다 붙었다 하는 현상(스팸) 완벽 차단 및 즉시 부착
+                -- 3. 몸 정중앙(HumanoidRootPart)에 직접 부착
                 local stickyWeld = stickyPart:FindFirstChild("StickyWeld")
                 
-                -- StickyWeld(용접)가 없을 때만 부착 명령을 보냄
-                if not stickyWeld then
+                -- 용접(Weld)이 아예 없거나, 붙은 곳이 내 몸통(hrp)이 아니라면 다시 붙임
+                if not stickyWeld or stickyWeld.Part1 ~= hrp then
                     pcall(function()
-                        -- CFrame.new(0, 0, 0)을 사용하여 몸 밖으로 튀어나오지 않고 내부에 세워서 부착
+                        -- CFrame.new(0, 0, 0)을 통해 몸통 정중앙 안쪽에 배치
                         local attachCF = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(90), 0, 0)
-                        ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(stickyPart, ragdollHitbox, attachCF)
+                        
+                        -- 타겟을 Hitbox가 아닌 hrp(HumanoidRootPart)로 직접 꽂아버림
+                        ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(stickyPart, hrp, attachCF)
                     end)
-                    -- ★ 핵심: 부착 명령을 보낸 후 서버가 붙일 수 있도록 0.5초 대기 (이게 없으면 계속 뗐다 붙였다 함)
-                    task.wait(0.5)
+                    task.wait(0.5) -- 부착 후 안정화 시간 보장
                 end
             end
-            
-            -- 평상시 감지 속도는 빠르게 유지
             task.wait(0.1) 
         end
     end)
 end
 
 AntiTab:CreateToggle({
-    Name = "Anti Kick (Inside & Stable)",
+    Name = "Anti Kick (Direct Core Attach)",
     CurrentValue = false,
     Callback = function(Value)
         AntiKickT = Value
