@@ -1044,7 +1044,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ ANTI KICK (Ultimate Fix - Physics & Spawn Corrected) ]]
+-- [[ ANTI KICK (Final Bulletproof Fix) ]]
 -- =============================================
 local AntiTab = Window:CreateTab("Anti", nil)
 AntiTab:CreateSection("=== ANTI KICK ===")
@@ -1055,69 +1055,68 @@ local function AntiKickF()
     task.spawn(function()
         while AntiKickT do
             local char = LocalPlayer.Character
-            if not char then task.wait(0.1) continue end
-            
-            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if not hrp then task.wait(0.1) continue end
-
-            -- 타겟팅 2중 백업: Hitbox가 없으면 기본 몸통(Torso)을 강제 타겟으로 잡음
-            local targetPart = hrp:FindFirstChild("RagdollTouchedHitbox") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or hrp
 
             local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
             local stickyPartName = "NinjaShuriken"
             local stickyPartFolder = inv and inv:FindFirstChild(stickyPartName)
             local stickyPart = stickyPartFolder and stickyPartFolder:FindFirstChild("StickyPart")
-            local soundPart = stickyPartFolder and stickyPartFolder:FindFirstChild("SoundPart")
 
-            -- [1단계] 표창이 아예 없다면 '안전한 허공'에 스폰 (몸 안에 겹쳐서 스폰하면 서버가 씹기 때문)
+            -- [1] 표창이 아예 없을 때 (어디서 스폰되든 일단 소환 요청)
             if not stickyPart then
                 pcall(function()
-                    local safeSpawnCF = hrp.CFrame * CFrame.new(0, 5, 0) -- 머리 위 5칸 허공
-                    ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer(stickyPartName, safeSpawnCF, Vector3.new(0, 0, 0))
+                    ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer(stickyPartName, hrp.CFrame, Vector3.new(0, 0, 0))
                 end)
-                task.wait(0.2) -- 서버가 표창을 만들 시간 제공
-
+                task.wait(0.2)
             else
-                -- 표창이 존재하는 경우, 먼저 내 몸에 붙어있는지 확인
-                local isAttached = false
+                -- [2] 표창이 내 몸(Character)의 어떤 부위라도 완벽히 용접되어 있는지 검사
+                local isWeldedToMe = false
                 local stickyWeld = stickyPart:FindFirstChild("StickyWeld")
                 
-                if stickyWeld and (stickyWeld.Part1 == targetPart or stickyWeld.Part1 == hrp) then
-                    isAttached = true
+                if stickyWeld and stickyWeld.Part1 and stickyWeld.Part1:IsDescendantOf(char) then
+                    isWeldedToMe = true
                 end
 
-                -- [2단계] 안 붙어 있다면? -> 무조건 붙이기부터 함 (이때 절대 충돌을 끄면 안됨, 땅으로 꺼짐 방지)
-                if not isAttached then
+                -- [3] 내 몸에 안 붙어있을 때 (바닥에 떨어져 있거나 방금 스폰되었을 때)
+                if not isWeldedToMe then
                     pcall(function()
-                        -- 몸 정중앙(0,0,0)에 90도로 세워서 텔레포트 후 부착
+                        -- ★ 핵심 1: 절대 충돌을 끄지 않음 (땅으로 꺼짐 원천 차단)
+                        stickyPart.CanCollide = true 
+                        
+                        -- ★ 핵심 2: 저 멀리 스폰되었어도 내 몸통(HumanoidRootPart) 중앙으로 즉시 호출 및 부착
                         local attachCF = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(90), 0, 0)
-                        ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(stickyPart, targetPart, attachCF)
+                        ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(stickyPart, hrp, attachCF)
                     end)
-                    task.wait(0.4) -- 서버가 용접(Weld)을 완료할 때까지 대기하여 깜빡임(스팸) 방지
+                    task.wait(0.5) -- 서버가 안전하게 용접(Weld)을 마칠 때까지 대기
 
-                -- [3단계] 완벽히 붙어 있다면? -> 그때 물리 충돌/무게 제거 및 렉 방지 처리
+                -- [4] 내 몸에 완벽하게 부착된 것을 확인했을 때
                 else
                     pcall(function()
+                        -- ★ 핵심 3: 몸에 붙은 게 확실할 때만 충돌과 무게를 지워서 덜덜거리는 렉 방지
                         stickyPart.CanCollide = false
                         stickyPart.Massless = true
+                        
+                        local soundPart = stickyPartFolder:FindFirstChild("SoundPart")
                         if soundPart then
                             soundPart.CanCollide = false
                             soundPart.Massless = true
                         end
-                        -- 부착이 완료된 후 네트워크 오너십을 가져와야 덜덜 떨리거나 밀려나지 않음
+                        
+                        -- 서버와 물리 엔진 꼬임 방지 (네트워크 주도권 뺏기)
                         ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner"):FireServer(stickyPart, stickyPart.CFrame)
                         ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine"):FireServer(stickyPart)
                     end)
                 end
             end
             
-            task.wait(0.1) -- 실시간 빠른 반응 유지
+            task.wait(0.1) -- 실시간 상태 추적
         end
     end)
 end
 
 AntiTab:CreateToggle({
-    Name = "Anti Kick (Fixed Physics & Spawn)",
+    Name = "Anti Kick (No Sinking & Auto-Pull)",
     CurrentValue = false,
     Callback = function(Value)
         AntiKickT = Value
