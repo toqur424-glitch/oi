@@ -1297,42 +1297,47 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ 이벤트 하이재킹: 상대 부착 무력화 ]]
+-- [[ 최종 무력화: 물리 제어권 탈취 & 공허 추방 ]]
 -- =============================================
 local AntiAntiTab = Window:CreateTab("Battle Control", nil)
-AntiAntiTab:CreateSection("=== EVENT HIJACKING ===")
+AntiAntiTab:CreateSection("=== ULTIMATE DISRUPT ===")
 
 local DisruptT = false
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StickyRemote = ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent")
+local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents")
 
--- 원본 발사 기능을 저장
-local OldFireServer = StickyRemote.FireServer
-
--- 이벤트 가로채기 (상대방의 부착 요청을 차단)
-StickyRemote.FireServer = newcclosure(function(self, ...)
-    if DisruptT then
-        local args = {...}
-        -- args[1] = 표창, args[2] = 타겟, args[3] = 부착 좌표
-        local target = args[2]
-        
-        -- 만약 타겟이 '나'라면(내 캐릭터와 연관되어 있다면)
-        if target and target:IsDescendantOf(game.Players.LocalPlayer.Character) then
-            -- 부착 이벤트를 가로채서 다른 곳으로 보내거나 아예 취소
-            warn("상대방의 표창 부착 시도 차단됨")
-            return -- 여기서 함수를 끝내버림 (서버로 명령이 안 감)
+local function SinkEnemyShuriken()
+    task.spawn(function()
+        while DisruptT do
+            for _, obj in pairs(Workspace:GetChildren()) do
+                -- 표창이고 내 것이 아닌 경우
+                if obj.Name == "NinjaShuriken" and not obj:IsDescendantOf(Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")) then
+                    local stickyPart = obj:FindFirstChild("StickyPart")
+                    if stickyPart then
+                        pcall(function()
+                            -- [핵심 1] 서버한테 "이 물건 이제 내 거야!"라고 선언 (Network Owner 탈취)
+                            -- 이걸 성공하면 서버가 더 이상 상대방의 제어를 인정하지 않습니다.
+                            GrabEvents:WaitForChild("SetNetworkOwner"):FireServer(stickyPart, CFrame.new(0, -9999, 0))
+                            
+                            -- [핵심 2] 위치를 강제로 지하로 고정
+                            stickyPart.CFrame = CFrame.new(0, -9999, 0)
+                            stickyPart.Velocity = Vector3.new(0, -100, 0) -- 아래로 가속
+                            stickyPart.Anchored = true
+                        end)
+                    end
+                end
+            end
+            task.wait(0.05)
         end
-    end
-    
-    -- 내 표창 부착은 정상적으로 허용
-    return OldFireServer(self, ...)
-end)
+    end)
+end
 
 AntiAntiTab:CreateToggle({
-    Name = "Block Enemy Attachment",
+    Name = "Take Control & Sink Enemy",
     CurrentValue = false,
     Callback = function(Value)
         DisruptT = Value
+        if Value then SinkEnemyShuriken() end
     end
 })
 
