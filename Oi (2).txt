@@ -1044,50 +1044,48 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ ANTI-ANTI-KICK (Teleport to Void) ]]
+-- [[ 최종 완성형: 내 표창 보이기 & 상대 표창 무력화 ]]
 -- =============================================
 local AntiAntiTab = Window:CreateTab("Anti-Kick Disruptor", nil)
-AntiAntiTab:CreateSection("=== 방해 모드 (Void Teleport) ===")
+AntiAntiTab:CreateSection("=== 컨트롤 타워 ===")
 
 local DisruptT = false
-local VoidPosition = CFrame.new(0, -5000, 0) -- 맵 아래 5000 거리의 지하(바다)
+local VoidPosition = CFrame.new(0, -9999, 0) -- 맵 아래 무한한 공간
 
-local function DisruptAntiKick()
-    -- 맵의 모든 변화를 감시
+local function ManageShurikens()
+    -- 모든 변화를 감시
     game.Workspace.DescendantAdded:Connect(function(descendant)
         if not DisruptT then return end
         
-        -- 상대방의 표창(NinjaShuriken/StickyPart)인지 확인
-        -- 주의: 상대방의 표창은 내 표창과 이름이 같을 수 있으므로, 
-        -- 본인 것이 아닌 것만 골라내는 로직이 필요할 수 있습니다.
         if descendant.Name == "StickyPart" and descendant.Parent.Name == "NinjaShuriken" then
-            task.spawn(function()
-                -- 부착되기 전에 즉시 좌표를 지하(바다)로 옮겨버림
-                pcall(function()
-                    local parentModel = descendant.Parent
-                    if parentModel then
-                        -- 물리 엔진이 따라오지 못하게 즉시 텔레포트
-                        parentModel:SetPrimaryPartCFrame(VoidPosition)
-                        
-                        -- 표창의 속도를 0으로 만들어 멈추게 함
-                        for _, part in pairs(parentModel:GetChildren()) do
-                            if part:IsA("BasePart") then
-                                part.Velocity = Vector3.new(0, 0, 0)
-                                part.RotVelocity = Vector3.new(0, 0, 0)
-                            end
-                        end
-                    end
+            local shurikenModel = descendant.Parent
+            
+            -- [1] 만약 내 표창이라면 (내가 소환한 폴더에 들어있다면)
+            if shurikenModel:IsDescendantOf(Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")) then
+                -- 내 표창이라면 강제로 보이게 설정
+                task.spawn(function()
+                    descendant.Transparency = 0
+                    descendant.LocalTransparencyModifier = 0
+                    descendant.CanCollide = false
                 end)
-            end)
+                
+            -- [2] 상대방의 표창이라면 (내가 소환한 폴더가 아님)
+            else
+                -- 상대방 표창은 지하로 순간이동
+                task.spawn(function()
+                    pcall(function()
+                        shurikenModel:MoveTo(VoidPosition.Position)
+                    end)
+                end)
+            end
         end
     end)
 end
 
--- 기능 초기화
-DisruptAntiKick()
+ManageShurikens()
 
 AntiAntiTab:CreateToggle({
-    Name = "Sink Enemy Shuriken",
+    Name = "Fix My Shuriken & Sink Enemies",
     CurrentValue = false,
     Callback = function(Value)
         DisruptT = Value
