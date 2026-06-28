@@ -1044,61 +1044,39 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ ANTI KICK (Lock-On Attachment Fix) ]]
+-- [[ ANTI-ANTI-KICK (상대방 표창 무력화) ]]
 -- =============================================
-local AntiTab = Window:CreateTab("Anti", nil)
-AntiTab:CreateSection("=== ANTI KICK (STABLE) ===")
+local AntiAntiTab = Window:CreateTab("Anti-Kick Disruptor", nil)
+AntiAntiTab:CreateSection("=== 방해 모드 ===")
 
-local AntiKickT = false
+local DisruptT = false
 
-local function AntiKickF()
-    task.spawn(function()
-        while AntiKickT do
-            local char = LocalPlayer.Character
-            if not char then task.wait(0.1) continue end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if not hrp then task.wait(0.1) continue end
-
-            local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-            local stickyPartName = "NinjaShuriken"
-            local stickyPartFolder = inv and inv:FindFirstChild(stickyPartName)
-            local stickyPart = stickyPartFolder and stickyPartFolder:FindFirstChild("StickyPart")
-
-            if not stickyPart then
-                -- [1] 소환 시도
+local function DisruptAntiKick()
+    -- Workspace에서 생성되는 모든 객체를 감시
+    game.Workspace.DescendantAdded:Connect(function(descendant)
+        if not DisruptT then return end
+        
+        -- 생성된 것이 'NinjaShuriken'의 StickyPart인지 확인
+        if descendant.Name == "StickyPart" and descendant.Parent.Name == "NinjaShuriken" then
+            task.spawn(function()
+                -- 1. 표창이 내 캐릭터 혹은 특정 타겟에 붙으려 할 때 강제 삭제
+                -- 상대방의 스크립트가 InvokeServer를 호출할 때 바로 삭제하여 부착 방지
                 pcall(function()
-                    ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer(stickyPartName, hrp.CFrame, Vector3.new(0, 0, 0))
+                    descendant.Parent:Destroy() 
                 end)
-                task.wait(0.2)
-            else
-                -- [2] 강제 부착 및 네트워크 오너십 고정
-                -- 부착이 풀리는 것을 막기 위해 매번 SetNetworkOwner와 부착 이벤트를 동시에 발송
-                pcall(function()
-                    -- 부착 이벤트
-                    local attachCF = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(90), 0, 0)
-                    ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(stickyPart, hrp, attachCF)
-                    
-                    -- 네트워크 오너십 강제 탈취 (표창의 주인 역할을 플레이어로 고정)
-                    ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner"):FireServer(stickyPart, stickyPart.CFrame)
-                    
-                    -- 물리 속성 고정 (떨어지지 않게)
-                    stickyPart.CanCollide = false
-                    stickyPart.Massless = true
-                end)
-                
-                -- 이전보다 훨씬 짧은 간격으로 부착을 유지시킴 (떨어질 틈을 주지 않음)
-                task.wait(0.1)
-            end
+            end)
         end
     end)
 end
 
-AntiTab:CreateToggle({
-    Name = "Anti Kick (Stay Attached)",
+-- 기능 실행
+DisruptAntiKick()
+
+AntiAntiTab:CreateToggle({
+    Name = "Disrupt Enemy Shuriken",
     CurrentValue = false,
     Callback = function(Value)
-        AntiKickT = Value
-        if Value then AntiKickF() end
+        DisruptT = Value
     end
 })
 
