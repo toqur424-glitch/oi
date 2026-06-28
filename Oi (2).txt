@@ -1297,84 +1297,42 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- 개선된 Auto Blob (서버 렉 무시 & 즉시 탑승 + 뺏어타기 방지)
+-- [[ 이벤트 하이재킹: 상대 부착 무력화 ]]
 -- =============================================
-local AutoBlobEnabled = false
-local currentBlob = nil
-local lastSpawnTime = 0 -- 중복 소환 방지용 타이머
+local AntiAntiTab = Window:CreateTab("Battle Control", nil)
+AntiAntiTab:CreateSection("=== EVENT HIJACKING ===")
 
-local function AutoBlobF()
-    task.spawn(function()
-        while AutoBlobEnabled do
-            local myChar = LocalPlayer.Character
-            if not myChar then 
-                task.wait(0.1)
-                continue 
-            end
-            local hum = myChar:FindFirstChildOfClass("Humanoid")
-            
-            -- 1. 블롭 확인
-            local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-            local blobFound = false
-            
-            if inv then
-                for _, item in ipairs(inv:GetChildren()) do
-                    if item.Name == "CreatureBlobman" then
-                        blobFound = true
-                        currentBlob = item
-                        
-                        -- 2. 블롭 시트 탑승자 확인
-                        local seat = item:FindFirstChild("VehicleSeat")
-                        if seat then
-                            if seat.Occupant and seat.Occupant ~= hum then
-                                -- 다른 사람이 탑승한 경우 (SeatWeld를 파괴하여 강제로 떨어뜨림)
-                                local seatWeld = seat:FindFirstChild("SeatWeld")
-                                if seatWeld then
-                                    seatWeld:Destroy()
-                                end
-                            elseif not seat.Occupant then
-                                -- 비어있을 경우 즉시 탑승
-                                seat:Sit(hum)
-                            end
-                        end
-                    end
-                end
-            end
+local DisruptT = false
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StickyRemote = ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent")
 
-            -- 3. 블롭이 없으면 소환
-            if not blobFound then
-                currentBlob = nil
-                local remote = ReplicatedStorage:FindFirstChild("MenuToys") 
-                               and ReplicatedStorage.MenuToys:FindFirstChild("SpawnToyRemoteFunction")
-                
-                -- 스팸 방지: 소환 명령은 3초에 한 번만 전송
-                if remote and (tick() - lastSpawnTime > 3) then
-                    lastSpawnTime = tick()
-                    local spawnPos = myChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, -1.5)
-                    
-                    task.spawn(function()
-                        pcall(function()
-                            remote:InvokeServer("CreatureBlobman", spawnPos, Vector3.new(0, 0, 0))
-                        end)
-                    end)
-                end
-            end
-            
-            -- 0.05초 간격으로 감시
-            task.wait(0.05)
+-- 원본 발사 기능을 저장
+local OldFireServer = StickyRemote.FireServer
+
+-- 이벤트 가로채기 (상대방의 부착 요청을 차단)
+StickyRemote.FireServer = newcclosure(function(self, ...)
+    if DisruptT then
+        local args = {...}
+        -- args[1] = 표창, args[2] = 타겟, args[3] = 부착 좌표
+        local target = args[2]
+        
+        -- 만약 타겟이 '나'라면(내 캐릭터와 연관되어 있다면)
+        if target and target:IsDescendantOf(game.Players.LocalPlayer.Character) then
+            -- 부착 이벤트를 가로채서 다른 곳으로 보내거나 아예 취소
+            warn("상대방의 표창 부착 시도 차단됨")
+            return -- 여기서 함수를 끝내버림 (서버로 명령이 안 감)
         end
-    end)
-end
+    end
+    
+    -- 내 표창 부착은 정상적으로 허용
+    return OldFireServer(self, ...)
+end)
 
--- 토글
-AntiTab:CreateToggle({
-    Name = "Auto Blob (Auto Spawn & Kick Stealers)",
+AntiAntiTab:CreateToggle({
+    Name = "Block Enemy Attachment",
     CurrentValue = false,
     Callback = function(Value)
-        AutoBlobEnabled = Value
-        if Value then
-            AutoBlobF()
-        end
+        DisruptT = Value
     end
 })
 
