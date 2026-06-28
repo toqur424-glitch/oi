@@ -1044,61 +1044,55 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ FINAL BATTLE: 강제 렌더링 & 타겟 무력화 ]]
+-- [[ HARD SYNC & ANTI-DESYNC (Final Fix) ]]
 -- =============================================
 local AntiAntiTab = Window:CreateTab("Battle Control", nil)
-AntiAntiTab:CreateSection("=== BATTLE MODE ===")
+AntiAntiTab:CreateSection("=== HARD SYNC MODE ===")
 
 local DisruptT = false
-local VoidPosition = Vector3.new(0, -5000, 0)
 
--- 1. 내 표창 강제 시각화 함수
-local function RefreshMyShuriken()
-    local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
-    if inv then
-        for _, shuriken in pairs(inv:GetChildren()) do
-            local part = shuriken:FindFirstChild("StickyPart")
-            if part then
-                -- 모델 구조를 강제로 재렌더링
-                part.Transparency = 0
-                part.LocalTransparencyModifier = 0
-                part.Color = Color3.fromRGB(255, 255, 255) -- 내 표창임을 구분하기 위해 흰색으로 강조
+local function ForceSyncAndSink()
+    task.spawn(function()
+        while DisruptT do
+            -- [1] 내 표창 강제 시각화 (이미지 갱신)
+            local myFolder = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+            if myFolder then
+                for _, shuriken in pairs(myFolder:GetChildren()) do
+                    local part = shuriken:FindFirstChild("StickyPart")
+                    if part then
+                        -- 서버와 동기화가 깨져 안 보이는 문제를 해결하기 위해
+                        -- 렌더링 속성을 강제로 다시 적용
+                        part.Transparency = 0
+                        part.LocalTransparencyModifier = 0
+                        part.Visible = true 
+                        part.CanQuery = true
+                    end
+                end
             end
-        end
-    end
-end
 
--- 2. 상대 표창 무력화 함수
-local function SinkEnemyShuriken()
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        -- 표창 모델이고 내 소유가 아닐 경우
-        if obj.Name == "NinjaShuriken" and not obj:IsDescendantOf(Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")) then
-            local stickyPart = obj:FindFirstChild("StickyPart")
-            if stickyPart then
-                -- 상대 표창을 즉시 맵 아래로 텔레포트시켜 부착 불가능하게 함
-                stickyPart.CFrame = CFrame.new(VoidPosition)
-                stickyPart.Anchored = true -- 공중에서 멈추게 함
+            -- [2] 상대 표창을 서버 시점 기준으로 강제 이동
+            -- 'GetDescendants' 대신 'GetChildren'으로 계층을 직접 훑어 부하 줄임
+            for _, obj in pairs(Workspace:GetChildren()) do
+                if obj.Name:find("NinjaShuriken") and not obj:IsDescendantOf(myFolder) then
+                    local stickyPart = obj:FindFirstChild("StickyPart")
+                    if stickyPart then
+                        -- [핵심] 클라이언트측 렉을 무시하고 강제로 좌표 변경
+                        stickyPart.CFrame = CFrame.new(0, -9999, 0)
+                        stickyPart.Anchored = true
+                    end
+                end
             end
+            task.wait(0.03) -- 0.03초(프레임 단위)로 더욱 빠르게 강제 동기화
         end
-    end
+    end)
 end
-
--- 루프를 통해 실시간 강제 적용
-task.spawn(function()
-    while true do
-        if DisruptT then
-            RefreshMyShuriken()
-            SinkEnemyShuriken()
-        end
-        task.wait(0.05) -- 0.05초마다 강제 동기화
-    end
-end)
 
 AntiAntiTab:CreateToggle({
-    Name = "Visual Fix & Enemy Sink",
+    Name = "Hard Sync (Fix My View & Sink Enemy)",
     CurrentValue = false,
     Callback = function(Value)
         DisruptT = Value
+        if Value then ForceSyncAndSink() end
     end
 })
 
