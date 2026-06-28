@@ -1044,7 +1044,7 @@ AntiTab:CreateToggle({
 })
 
 -- =============================================
--- [[ ANTI KICK (Aggressive Attach) ]]
+-- [[ ANTI KICK (최종 수정본 - 원본 로직 기반) ]]
 -- =============================================
 local AntiTab = Window:CreateTab("Anti", nil)
 AntiTab:CreateSection("=== ANTI KICK ===")
@@ -1055,46 +1055,59 @@ local function AntiKickF()
     task.spawn(function()
         while AntiKickT do
             local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                local hrp = char.HumanoidRootPart
-                local ragdollHitbox = hrp:FindFirstChild("RagdollTouchedHitbox")
-                
-                if ragdollHitbox then
-                    -- 1. 현재 붙어있는 수리검 개수 확인 (WeldConstraint 수로 판단)
-                    local isAttached = false
-                    for _, obj in pairs(ragdollHitbox:GetChildren()) do
-                        if obj:IsA("WeldConstraint") then 
-                            isAttached = true 
-                            break 
-                        end
-                    end
+            if not char then task.wait(0.5) continue end
+            
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local ragdollHitbox = hrp and hrp:FindFirstChild("RagdollTouchedHitbox")
+            if not hrp or not ragdollHitbox then task.wait(0.5) continue end
 
-                    -- 2. 붙어있지 않다면 생성 및 부착 시도
-                    if not isAttached then
-                        pcall(function()
-                            -- 생성 요청
-                            ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer("NinjaShuriken", hrp.CFrame, Vector3.new(0,0,0))
-                            
-                            -- 생성 후 즉시 맵 전체에서 내가 생성한 수리검을 탐색 (경로 불일치 대비)
-                            task.wait(0.2)
-                            for _, toy in pairs(Workspace:GetChildren()) do
-                                if toy.Name:find("NinjaShuriken") and toy:FindFirstChild("StickyPart") then
-                                    -- 해당 수리검을 캐릭터에 부착 이벤트 발사
-                                    ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(toy.StickyPart, ragdollHitbox, CFrame.new(0, 0, 0))
-                                    break
-                                end
-                            end
-                        end)
+            -- 1. 지정된 폴더에서 표창 찾기
+            local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+            local stickyPartName = "NinjaShuriken"
+            local stickyPartFolder = inv and inv:FindFirstChild(stickyPartName)
+            local stickyPart = stickyPartFolder and stickyPartFolder:FindFirstChild("StickyPart")
+            local soundPart = stickyPartFolder and stickyPartFolder:FindFirstChild("SoundPart")
+
+            -- 2. 표창이 없거나 지워졌다면 바로 뒤에 생성
+            if not stickyPart then
+                pcall(function()
+                    -- 기존 높이 10이 아닌, 캐릭터 등 바로 뒤(1)에 생성하여 튕김 방지
+                    local spawnCF = hrp.CFrame * CFrame.new(0, 0, 1)
+                    ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer(stickyPartName, spawnCF, Vector3.new(0, 0, 0))
+                end)
+                task.wait(0.3) -- 생성될 때까지 약간 대기
+            else
+                -- 3. 표창이 있다면 설정 변경 (물리 엔진 충돌 및 무게 제거)
+                pcall(function()
+                    stickyPart.CanCollide = false
+                    stickyPart.Massless = true
+                    if soundPart then
+                        soundPart.CanCollide = false
+                        soundPart.Massless = true
                     end
+                    -- 고무줄 현상 방지를 위한 네트워크 오너십 강제 설정
+                    ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner"):FireServer(stickyPart, stickyPart.CFrame)
+                    ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine"):FireServer(stickyPart)
+                end)
+
+                -- 4. 등에 세워서 부착 (떨어졌는지 실시간 감지)
+                local stickyWeld = stickyPart:FindFirstChild("StickyWeld")
+                if not stickyWeld or stickyWeld.Part1 ~= ragdollHitbox then
+                    pcall(function()
+                        -- 등에 90도로 세워서 붙이는 원본 좌표 그대로 사용
+                        local attachCF = CFrame.new(0, 0, 0.6) * CFrame.Angles(math.rad(90), 0, 0)
+                        ReplicatedStorage:WaitForChild("PlayerEvents"):WaitForChild("StickyPartEvent"):FireServer(stickyPart, ragdollHitbox, attachCF)
+                    end)
+                    task.wait(0.2) -- 부착 후 서버가 Weld를 생성할 시간을 주어 덜덜 떨리는 현상 방지
                 end
             end
-            task.wait(0.4)
+            task.wait(0.1) -- 0.1초마다 상태 체크하여 떨어지면 즉시 복구
         end
     end)
 end
 
 AntiTab:CreateToggle({
-    Name = "Anti Kick (Aggressive)",
+    Name = "Anti Kick (Shuriken on Back)",
     CurrentValue = false,
     Callback = function(Value)
         AntiKickT = Value
