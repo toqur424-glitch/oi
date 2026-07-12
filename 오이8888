@@ -1,0 +1,1286 @@
+-- Rayfield Load
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Game ID Check
+if game.PlaceId ~= 6961824067 then 
+    Rayfield:Notify({
+        Title = "Error",
+        Content = "Game not supported",
+        Duration = 3
+    })
+    return 
+end
+
+-- Variables (상단에 한 번만 선언하여 전역/지역적으로 공유)
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ContextActionService = game:GetService("ContextActionService")
+
+local LocalPlayer = Players.LocalPlayer
+local plr = LocalPlayer -- 호환성을 위해 둘 다 유지
+local camera = Workspace.CurrentCamera
+local rs = ReplicatedStorage
+
+-- GrabEvents Init
+local G = rs:WaitForChild("GrabEvents")
+local endGrabEarly = G:FindFirstChild("EndGrabEarly")
+if endGrabEarly then endGrabEarly:Destroy() end
+Instance.new("RemoteEvent", G).Name = "EndGrabEarly"
+
+local WalkConnection, FlyConnection, NoclipConnection, JumpConnection, JumpPowerConnection
+local WalkPower = 0.001
+local FlySpeed = 1
+local JumpPowerValue = 50
+
+-- Infinite Yield 및 외부 스크립트 로드
+pcall(function()
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+end)
+pcall(function()
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/dogeom282/dOgEoM1/refs/heads/main/Blackhole'))()
+end)
+pcall(function()
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/dogeom282/dOgEoM1/refs/heads/main/OceanSwimming'))()
+end)
+
+-- Q Key Teleport
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        local cam = Workspace.CurrentCamera
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        
+        if hrp and cam then
+            local rayOrigin = cam.CFrame.Position
+            local rayDirection = cam.CFrame.LookVector * 1000
+            local raycastParams = RaycastParams.new()
+            raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+            raycastParams.FilterDescendantsInstances = {char}
+            
+            local raycastResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+            
+            local targetPos
+            if raycastResult then
+                targetPos = raycastResult.Position + Vector3.new(0, 3, 0)
+            else
+                targetPos = rayOrigin + (rayDirection * 0.5)
+            end
+            
+            hrp.CFrame = CFrame.new(targetPos)
+        end
+    end
+end)
+
+-- Sticky Part View
+local function StickyPartViewF()
+    local targetNames = {
+        "NinjaKunai", "NinjaShuriken", "NinjaKatana",
+        "ToolCleaver", "ToolDiggingForkRusty",
+        "ToolPencil", "ToolPickaxe", "AG"
+    }
+
+    task.spawn(function()
+        while true do
+            task.wait(0.2)
+            
+            for _, folder in ipairs(Workspace:GetChildren()) do
+                if folder:IsA("Folder") and folder.Name:match("SpawnedInToys$") then
+                    for _, item in ipairs(folder:GetChildren()) do
+                        if item:IsA("Model") and table.find(targetNames, item.Name) then
+                            if not item:FindFirstChild("StickyPartView") then
+                                local highlight = Instance.new("Highlight")
+                                highlight.Name = "StickyPartView"
+                                highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                                highlight.FillTransparency = 1
+                                highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                                highlight.OutlineTransparency = 0
+                                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                                highlight.Parent = item
+                            end
+                        end
+                    end
+                end
+            end
+            
+            local plotItems = Workspace:FindFirstChild("PlotItems")
+            if plotItems then
+                for i = 1, 5 do
+                    local plot = plotItems:FindFirstChild("Plot" .. i)
+                    if plot then
+                        for _, item in ipairs(plot:GetChildren()) do
+                            if item:IsA("Model") and table.find(targetNames, item.Name) then
+                                if not item:FindFirstChild("StickyPartView") then
+                                    local highlight = Instance.new("Highlight")
+                                    highlight.Name = "StickyPartView"
+                                    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                                    highlight.FillTransparency = 1
+                                    highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                                    highlight.OutlineTransparency = 0
+                                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                                    highlight.Parent = item
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+StickyPartViewF()
+ 
+-- Force 3rd Person
+local ThirdPersonConn = nil
+local function forceThirdPerson()
+    if ThirdPersonConn then ThirdPersonConn:Disconnect() end
+    ThirdPersonConn = RunService.RenderStepped:Connect(function()
+        LocalPlayer.CameraMode = Enum.CameraMode.Classic
+        LocalPlayer.CameraMaxZoomDistance = 9999999999
+    end)
+end
+forceThirdPerson()
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    forceThirdPerson()
+end)
+
+-- UI Window
+local Window = Rayfield:CreateWindow({
+    Name = "FSOF",
+    LoadingTitle = "Loading...",
+    LoadingSubtitle = "by Script",
+    ToggleUIKeybind = "T",
+    Theme = "Dark",
+    DisableRayfieldPrompts = false,
+    ConfigurationSaving = { Enabled = false }
+})
+
+-- =============================================
+-- [[ MAIN TAB ]]
+-- =============================================
+local MainTab = Window:CreateTab("Main", nil)
+MainTab:CreateSection("=== MOVEMENT ===")
+
+MainTab:CreateToggle({
+    Name = "TP Walk",
+    CurrentValue = false,
+    Callback = function(Value)
+        if WalkConnection then WalkConnection:Disconnect() end
+        if Value then
+            WalkConnection = RunService.Heartbeat:Connect(function()
+                local Char = LocalPlayer.Character
+                local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+                local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+                if Root and Hum and Hum.MoveDirection.Magnitude > 0 then
+                    Root.CFrame = Root.CFrame + (Hum.MoveDirection * WalkPower)
+                end
+            end)
+        end
+    end
+})
+
+MainTab:CreateSlider({
+    Name = "TP Walk Power",
+    Range = {1, 10000},
+    Increment = 1,
+    CurrentValue = 1,
+    Callback = function(v) WalkPower = v / 1000 end
+})
+
+MainTab:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = false,
+    Callback = function(Value)
+        if NoclipConnection then NoclipConnection:Disconnect() end
+        if Value then
+            NoclipConnection = RunService.Stepped:Connect(function()
+                if LocalPlayer.Character then
+                    for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if v:IsA("BasePart") then v.CanCollide = false end
+                    end
+                end
+            end)
+        end
+    end
+})
+
+MainTab:CreateSection("=== JUMP ===")
+
+MainTab:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = false,
+    Callback = function(Value)
+        if JumpConnection then JumpConnection:Disconnect() end
+        if Value then
+            JumpConnection = UserInputService.JumpRequest:Connect(function()
+                local Char = LocalPlayer.Character
+                local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+                if Hum then Hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+            end)
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Jump Power Boost",
+    CurrentValue = false,
+    Callback = function(Value)
+        if JumpPowerConnection then JumpPowerConnection:Disconnect() end
+        if Value then
+            JumpPowerConnection = RunService.Stepped:Connect(function()
+                local Char = LocalPlayer.Character
+                local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+                if Hum then
+                    Hum.UseJumpPower = true
+                    Hum.JumpPower = JumpPowerValue
+                end
+            end)
+        else
+            local Char = LocalPlayer.Character
+            local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+            if Hum then Hum.JumpPower = 50 end
+        end
+    end
+})
+
+MainTab:CreateSlider({
+    Name = "Jump Power Value",
+    Range = {1, 1000},
+    Increment = 1,
+    CurrentValue = 50,
+    Callback = function(v) JumpPowerValue = v end
+})
+
+MainTab:CreateSection("=== FLY ===")
+
+MainTab:CreateSlider({
+    Name = "Fly Speed",
+    Range = {1, 100},
+    Increment = 1,
+    CurrentValue = 1,
+    Callback = function(v) FlySpeed = v end
+})
+
+MainTab:CreateToggle({
+    Name = "Fly",
+    CurrentValue = false,
+    Callback = function(Value)
+        if FlyConnection then FlyConnection:Disconnect() end
+        local Char = LocalPlayer.Character
+        local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+        if Value and Root then
+            local bv = Instance.new("BodyVelocity", Root)
+            bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+            bv.Velocity = Vector3.zero
+            local bg = Instance.new("BodyGyro", Root)
+            bg.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
+            bg.CFrame = Root.CFrame
+            FlyConnection = RunService.Heartbeat:Connect(function()
+                local Camera = Workspace.CurrentCamera
+                local MoveDir = Vector3.new(0,0,0)
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then MoveDir = MoveDir + Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then MoveDir = MoveDir - Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then MoveDir = MoveDir - Camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then MoveDir = MoveDir + Camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then MoveDir = MoveDir + Vector3.new(0,1,0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then MoveDir = MoveDir - Vector3.new(0,1,0) end
+                bg.CFrame = Camera.CFrame
+                bv.Velocity = MoveDir.Unit * (FlySpeed * 50)
+                if MoveDir.Magnitude == 0 then bv.Velocity = Vector3.zero end
+                if Char:FindFirstChildOfClass("Humanoid") then Char:FindFirstChildOfClass("Humanoid"):ChangeState(14) end
+            end)
+        else
+            if Root then
+                if Root:FindFirstChild("BodyVelocity") then Root.BodyVelocity:Destroy() end
+                if Root:FindFirstChild("BodyGyro") then Root.BodyGyro:Destroy() end
+            end
+        end
+    end
+})
+
+-- =============================================
+-- [[ ANTI TAB ]]
+-- =============================================
+local AntiTab = Window:CreateTab("Anti", nil)
+AntiTab:CreateSection("=== ANTI ===")
+
+local antiGrabConn = nil
+local savedPosition = nil
+local movementBV = nil
+local movementBG = nil
+local isMoving = false
+local torsoWeld = nil
+local weldKeepAlive = false
+local limbWelds = {}
+
+local function connectTorsos()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local torso = char:FindFirstChild("Torso")
+    if not hrp or not torso then return end
+    if torsoWeld and torsoWeld.Parent then torsoWeld:Destroy() end
+    torsoWeld = Instance.new("WeldConstraint")
+    torsoWeld.Part0 = hrp
+    torsoWeld.Part1 = torso
+    torsoWeld.Parent = hrp
+end
+
+local function fixAllLimbs()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local torso = char:FindFirstChild("Torso")
+    if not torso then return end
+    local limbs = {"Left Arm", "Right Arm", "Left Leg", "Right Leg", "Head"}
+    for _, limbName do
+        local limb = char:FindFirstChild(limbName)
+        if limb then
+            if not limbWelds[limbName] or not limbWelds[limbName].Parent then
+                local weld = Instance.new("WeldConstraint")
+                weld.Part0 = limb
+                weld.Part1 = torso
+                weld.Parent = limb
+                limbWelds[limbName] = weld
+            end
+        end
+    end
+end
+
+local function forceKeepBody()
+    if not weldKeepAlive then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local torso = char:FindFirstChild("Torso")
+    if hrp and torso then
+        if not torsoWeld or not torsoWeld.Parent or torsoWeld.Part0 ~= hrp or torsoWeld.Part1 ~= torso then
+            connectTorsos()
+        end
+    end
+    fixAllLimbs()
+end
+
+task.spawn(function()
+    while true do
+        forceKeepBody()
+        task.wait(0.001)
+    end
+end)
+
+local function startMoving()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    if movementBV then movementBV:Destroy() end
+    if movementBG then movementBG:Destroy() end
+    movementBV = Instance.new("BodyVelocity")
+    movementBV.Name = "AntiGrabMove"
+    movementBV.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    movementBV.Velocity = Vector3.zero
+    movementBV.Parent = hrp
+    movementBG = Instance.new("BodyGyro")
+    movementBG.Name = "AntiGrabGyro"
+    movementBG.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
+    movementBG.Parent = hrp
+    isMoving = true
+end
+
+local function stopMoving()
+    if movementBV then movementBV:Destroy() end
+    if movementBG then movementBG:Destroy() end
+    movementBV = nil
+    movementBG = nil
+    isMoving = false
+end
+
+local function updateMovement()
+    if not isMoving then return end
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp or not movementBV or not movementBG then return end
+    local moveDir = Vector3.zero
+    local speed = 20
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camera.CFrame.LookVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camera.CFrame.LookVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camera.CFrame.RightVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camera.CFrame.RightVector end
+    movementBV.Velocity = moveDir.Magnitude > 0 and moveDir.Unit * speed or Vector3.zero
+    movementBG.CFrame = camera.CFrame
+end
+
+task.spawn(function()
+    while true do
+        updateMovement()
+        task.wait()
+    end
+end)
+
+local function setRagdollF(state)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local RagdollRemote = rs:FindFirstChild("CharacterEvents") and rs.CharacterEvents:FindFirstChild("RagdollRemote")
+    if RagdollRemote then
+        RagdollRemote:FireServer(hrp, state and 1 or 0)
+    end
+end
+
+local function AntiGrabF(enable)
+    if antiGrabConn then antiGrabConn:Disconnect(); antiGrabConn = nil end
+    if not enable then 
+        weldKeepAlive = false
+        stopMoving()
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid")
+        if hrp and hrp.Anchored then hrp.Anchored = false end
+        if hum then
+            hum.RequiresNeck = true
+            hum.Sit = false
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+        return 
+    end
+
+    weldKeepAlive = true
+    connectTorsos()
+    fixAllLimbs()
+
+    local lastHeldState = false
+    local sitHoldTimer = 0
+    local shouldKeepSit = false
+    local wasHeld = false
+    local lastRagdollTime = 0
+    local ragdollDuration = 0.48
+
+    antiGrabConn = RunService.Heartbeat:Connect(function(deltaTime)
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hum = char:FindFirstChild("Humanoid")
+        local isHeld = LocalPlayer:FindFirstChild("IsHeld")
+        if not hum or not isHeld then return end
+
+        local head = char:FindFirstChild("Head")
+        local POR = head and head:FindFirstChild("PartOwner")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hrp2 = char:FindFirstChild("Torso")
+        if not hrp then return end
+
+        local now = tick()
+        hum.RequiresNeck = false
+        hum.AutoRotate = true
+        local rag = hum:FindFirstChild("Ragdolled")
+        
+        if isHeld.Value == true or POR then
+            hrp.Anchored = true
+            startMoving()
+        else
+            if hrp.Anchored then hrp.Anchored = false end
+            stopMoving()
+        end
+
+        if hum.Health <= 0 then
+            lastHeldState = false; shouldKeepSit = false; sitHoldTimer = 0; wasHeld = false
+            hum.Sit = false; hum.AutoRotate = true; stopMoving()
+            hum:ChangeState(Enum.HumanoidStateType.Dead)
+            char:BreakJoints()
+            return
+        end
+
+        if isHeld.Value == true and hum.MoveDirection.Magnitude > 0 then
+            local moveVector = hum.MoveDirection * deltaTime * 10
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            moveVector = Vector3.new(moveVector.X, 0, moveVector.Z)
+            hrp.CFrame = hrp.CFrame + moveVector
+            if hrp2 then hrp2.CFrame = hrp2.CFrame + moveVector end
+        end
+
+        if isHeld.Value ~= lastHeldState then
+            if isHeld.Value == true then
+                wasHeld = true; shouldKeepSit = true; sitHoldTimer = 0.3
+                hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+                hum.Sit = true; hum.AutoRotate = true; lastRagdollTime = now
+                if POR then
+                    local ce = rs:FindFirstChild("CharacterEvents")
+                    if ce then
+                        if ce:FindFirstChild("Struggle") then ce.Struggle:FireServer() end
+                        if ce:FindFirstChild("RagdollRemote") then ce.RagdollRemote:FireServer(hrp, 0) end
+                    end
+                end
+                setRagdollF(true)
+            else
+                if wasHeld then shouldKeepSit = true; sitHoldTimer = 0.3 end
+            end
+            lastHeldState = isHeld.Value
+        end
+
+        if lastRagdollTime > 0 and now - lastRagdollTime >= ragdollDuration then
+            setRagdollF(false); lastRagdollTime = 0
+        end
+
+        if sitHoldTimer > 0 then
+            sitHoldTimer = sitHoldTimer - deltaTime
+            if isHeld.Value == true or POR or (rag and rag.Value == true) then
+                shouldKeepSit = true; sitHoldTimer = 0.3; hum.Sit = true
+                if isHeld.Value == true then hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics) end
+            else
+                hum.Sit = true
+            end
+        end
+
+        if sitHoldTimer <= 0 and shouldKeepSit then
+            if not rag or rag.Value == false then
+                hum.Sit = false; hum:ChangeState(Enum.HumanoidStateType.Running)
+                shouldKeepSit = false; wasHeld = false
+            else
+                sitHoldTimer = 0.3
+            end
+        end
+
+        if shouldKeepSit then hum.Sit = true end
+
+        if POR then
+            local ce = rs:FindFirstChild("CharacterEvents")
+            if ce then
+                if ce:FindFirstChild("Struggle") then ce.Struggle:FireServer() end
+                if ce:FindFirstChild("RagdollRemote") then ce.RagdollRemote:FireServer(hrp, 0) end
+            end
+            shouldKeepSit = true; sitHoldTimer = 0.3; hum.Sit = true; hum.AutoRotate = true
+            lastRagdollTime = now; setRagdollF(true)
+        end
+    end)
+end
+
+AntiTab:CreateToggle({
+    Name = "Anti Grab (Ragdoll)",
+    CurrentValue = false,
+    Callback = function(Value) AntiGrabF(Value) end
+})
+
+-- Anti Release (Death Proof)
+local AntiReleaseT = false
+local antiReleaseThread = nil
+local antiReleaseSpawnThread = nil
+
+local function startAntiRelease()
+    antiReleaseSpawnThread = task.spawn(function()
+        while AntiReleaseT do
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+            local spawnedToysFolder = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+            
+            if rootPart and spawnedToysFolder then
+                if not spawnedToysFolder:FindFirstChild("FoodHamburger") then
+                    local spawnArgs = { "FoodHamburger", rootPart.CFrame * CFrame.new(-3.53, 0, 3.53), Vector3.new(0, 140, 0) }
+                    pcall(function()
+                        rs:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction"):InvokeServer(unpack(spawnArgs))
+                    end)
+                end
+            end
+            task.wait(0.3)
+        end
+    end)
+    
+    antiReleaseThread = task.spawn(function()
+        while AntiReleaseT do
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+            local spawnedToysFolder = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+            
+            if character and rootPart and spawnedToysFolder then
+                local currentItem = spawnedToysFolder:FindFirstChild("FoodHamburger")
+                local holdPart = currentItem and currentItem:FindFirstChild("HoldPart")
+                if holdPart then
+                    local holdRemote = holdPart:FindFirstChild("HoldItemRemoteFunction")
+                    local dropRemote = holdPart:FindFirstChild("DropItemRemoteFunction")
+                    if holdRemote and dropRemote then
+                        pcall(function() holdRemote:InvokeServer(currentItem, character) end)
+                        task.wait(0.5)
+                        if not AntiReleaseT then break end
+                        pcall(function()
+                            dropRemote:InvokeServer(currentItem, CFrame.new(rootPart.Position.X, 99999, rootPart.Position.Z), Vector3.zero)
+                        end)
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function stopAntiRelease()
+    AntiReleaseT = false
+    if antiReleaseSpawnThread then task.cancel(antiReleaseSpawnThread) end
+    if antiReleaseThread then task.cancel(antiReleaseThread) end
+    pcall(function()
+        local folder = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+        local item = folder and folder:FindFirstChild("FoodHamburger")
+        if item then rs:WaitForChild("MenuToys"):WaitForChild("DestroyToy"):FireServer(item) end
+    end)
+end
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    if AntiReleaseT then
+        newChar:WaitForChild("HumanoidRootPart")
+        task.wait(0.5)
+        if antiReleaseThread then task.cancel(antiReleaseThread) end
+        if antiReleaseSpawnThread then task.cancel(antiReleaseSpawnThread) end
+        startAntiRelease()
+    end
+end)
+
+AntiTab:CreateToggle({
+    Name = "Anti Release",
+    CurrentValue = false,
+    Callback = function(Value)
+        AntiReleaseT = Value
+        if Value then startAntiRelease() else stopAntiRelease() end
+    end
+})
+
+-- Anti Massless
+local AntiMasslessT = false
+local AntiMasslessThread = nil
+
+AntiTab:CreateToggle({
+    Name = "Anti Massless",
+    CurrentValue = false,
+    Callback = function(Value)
+        AntiMasslessT = Value
+        if AntiMasslessThread then task.cancel(AntiMasslessThread) end
+        if Value then
+            AntiMasslessThread = task.spawn(function()
+                while AntiMasslessT do
+                    local char = LocalPlayer.Character
+                    if char then
+                        for _, part in ipairs(char:GetDescendants()) do
+                            if part:IsA("BasePart") and part.Massless then part.Massless = false end
+                        end
+                    end
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end
+})
+
+-- Anti Paint
+local AntiPaintT = false
+local AntiPaintThread = nil
+local partList = {"Head", "HumanoidRootPart", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg"}
+
+AntiTab:CreateToggle({
+    Name = "Anti Paint",
+    CurrentValue = false,
+    Callback = function(Value)
+        AntiPaintT = Value
+        if AntiPaintThread then task.cancel(AntiPaintThread) end
+        local char = LocalPlayer.Character
+        if Value then
+            AntiPaintThread = task.spawn(function()
+                while AntiPaintT do
+                    if char then
+                        for _, pName in ipairs(partList) do
+                            local p = char:FindFirstChild(pName)
+                            if p and p:IsA("BasePart") then p.CanTouch = false end
+                        end
+                    end
+                    task.wait(0.1)
+                end
+            end)
+            Rayfield:Notify({Title = "Anti Paint", Content = "ON", Duration = 2})
+        else
+            if char then
+                for _, pName in ipairs(partList) do
+                    local p = char:FindFirstChild(pName)
+                    if p and p:IsA("BasePart") then p.CanTouch = true end
+                end
+            end
+            Rayfield:Notify({Title = "Anti Paint", Content = "OFF", Duration = 2})
+        end
+    end
+})
+
+-- Anti Banana
+local AntiBananaT = false
+local AntiBananaThread = nil
+
+AntiTab:CreateToggle({
+    Name = "Anti Banana",
+    CurrentValue = false,
+    Callback = function(Value)
+        AntiBananaT = Value
+        if AntiBananaThread then task.cancel(AntiBananaThread) end
+        if Value then
+            AntiBananaThread = task.spawn(function()
+                while AntiBananaT do
+                    local char = LocalPlayer.Character
+                    if char and char:FindFirstChild("HumanoidRootPart") then
+                        for _, p in ipairs(Players:GetPlayers()) do
+                            if p == LocalPlayer then continue end
+                            local folder = Workspace:FindFirstChild(p.Name .. "SpawnedInToys")
+                            if folder then
+                                for _, item in ipairs(folder:GetChildren()) do
+                                    if item:IsA("Model") and (item.Name == "FoodBanana" or item.Name == "FoodBananaPeel") then
+                                        local hp = item:FindFirstChild("HoldPart")
+                                        if hp and hp:FindFirstChild("HoldItemRemoteFunction") then
+                                            pcall(function()
+                                                hp.HoldItemRemoteFunction:InvokeServer(item, char)
+                                                hp.DropItemRemoteFunction:InvokeServer(item, CFrame.new(0, -999999, 0), Vector3.new(0, -999999, 0))
+                                            end)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    task.wait(0.1)
+                end
+            end)
+            Rayfield:Notify({Title = "Anti Banana", Content = "ON", Duration = 2})
+        else
+            Rayfield:Notify({Title = "Anti Banana", Content = "OFF", Duration = 2})
+        end
+    end
+})
+
+-- Auto Blob
+local AutoBlobEnabled = false
+local currentBlob = nil
+local lastSpawnTime = 0
+
+local function AutoBlobF()
+    task.spawn(function()
+        while AutoBlobEnabled do
+            local myChar = LocalPlayer.Character
+            local hum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+            if not myChar or not hum then task.wait(0.1); continue end
+            
+            local inv = Workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
+            local blobFound = false
+            if inv then
+                for _, item in ipairs(inv:GetChildren()) do
+                    if item.Name == "CreatureBlobman" then
+                        blobFound = true; currentBlob = item
+                        local seat = item:FindFirstChild("VehicleSeat")
+                        if seat then
+                            if seat.Occupant and seat.Occupant ~= hum then
+                                local sw = seat:FindFirstChild("SeatWeld")
+                                if sw then sw:Destroy() end
+                            elseif not seat.Occupant then
+                                seat:Sit(hum)
+                            end
+                        end
+                    end
+                end
+            end
+
+            if not blobFound then
+                currentBlob = nil
+                local mt = rs:FindFirstChild("MenuToys")
+                local remote = mt and mt:FindFirstChild("SpawnToyRemoteFunction")
+                if remote and (tick() - lastSpawnTime > 3) then
+                    lastSpawnTime = tick()
+                    pcall(function()
+                        remote:InvokeServer("CreatureBlobman", myChar.HumanoidRootPart.CFrame * CFrame.new(0, 0, -1.5), Vector3.zero)
+                    end)
+                end
+            end
+            task.wait(0.05)
+        end
+    end)
+end
+
+AntiTab:CreateToggle({
+    Name = "Auto Blob (Auto Spawn & Kick Stealers)",
+    CurrentValue = false,
+    Callback = function(Value)
+        AutoBlobEnabled = Value
+        if Value then AutoBlobF() end
+    end
+})
+
+-- Anti Lag
+local antiLagAuto = false
+local grabCount = 0
+local recoveryThread = nil
+local beamScript = nil
+
+local function getBeamScript()
+    if beamScript and beamScript.Parent then return beamScript end
+    beamScript = LocalPlayer.PlayerScripts:FindFirstChild("CharacterAndBeamMove")
+    return beamScript
+end
+
+Workspace.ChildAdded:Connect(function(obj)
+    if obj:IsA("Model") and obj.Name == "GrabParts" then grabCount = grabCount + 1 end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if not antiLagAuto then grabCount = 0; continue end
+        if grabCount > 333 then
+            grabCount = 0
+            local script = getBeamScript()
+            if script then
+                script.Enabled = false
+                Rayfield:Notify({Title = "Anti Lag", Content = "Auto Blocked - Recovery in 60s", Duration = 3})
+            end
+            if recoveryThread then task.cancel(recoveryThread) end
+            recoveryThread = task.spawn(function()
+                task.wait(60)
+                if not antiLagAuto then return end
+                local scr2 = getBeamScript()
+                if scr2 then scr2.Enabled = true; Rayfield:Notify({Title = "Anti Lag", Content = "Auto Recovered", Duration = 2}) end
+                recoveryThread = nil
+            end)
+        else
+            if grabCount > 0 then grabCount = grabCount - 1 end
+        end
+    end
+end)
+
+AntiTab:CreateToggle({
+    Name = "Anti Lag Auto",
+    CurrentValue = true,
+    Callback = function(Value)
+        antiLagAuto = Value
+        if not Value then
+            if recoveryThread then task.cancel(recoveryThread); recoveryThread = nil end
+            local scr = getBeamScript()
+            if scr then scr.Enabled = true end
+            grabCount = 0
+        end
+        Rayfield:Notify({Title = "Anti Lag", Content = Value and "Auto Mode ON" or "Auto Mode OFF", Duration = 2})
+    end
+})
+
+-- Anti Vehicle Toy
+getgenv().AntiVehicleToyEnabled = false
+local AntiVehicleToyThread = nil
+local Whitelist = {}
+local WhiteListMode = false
+
+local function startAntiVehicleToy()
+    if AntiVehicleToyThread then task.cancel(AntiVehicleToyThread) end
+    if not getgenv().AntiVehicleToyEnabled then return end
+    
+    AntiVehicleToyThread = task.spawn(function()
+        local FallenY = Workspace.FallenPartsDestroyHeight
+        local targetY = (FallenY <= -50000 and -49999) or (FallenY <= -100 and -99) or -100
+        local dropPos = CFrame.new(0, targetY, 9999)
+        local targetItems = {"CreatureBlobman", "TractorRed", "TractorOrange", "TractorGreen", "SantaSleigh"}
+        local processedBlobs = {}
+        
+        while getgenv().AntiVehicleToyEnabled do
+            task.wait(0.1)
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if not root or not hum then continue end
+            
+            local allItems = {}
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p == LocalPlayer then continue end
+                if WhiteListMode and table.find(Whitelist, p.Name) then continue end
+                local folder = Workspace:FindFirstChild(p.Name .. "SpawnedInToys")
+                if folder then
+                    for _, item in ipairs(folder:GetChildren()) do
+                        if item:IsA("Model") and table.find(targetItems, item.Name) then
+                            local vs = item:FindFirstChildOfClass("VehicleSeat")
+                            if vs and (not vs.Occupant or vs.Occupant == hum) then
+                                if not processedBlobs[tostring(item:GetDebugId())] then table.insert(allItems, item) end
+                            end
+                        end
+                    end
+                end
+            end
+            
+            for _, item in ipairs(allItems) do
+                local vs = item:FindFirstChildOfClass("VehicleSeat")
+                if vs then
+                    root.Anchored = true; vs:Sit(hum)
+                    task.wait(0.1)
+                    hum:ChangeState(Enum.HumanoidStateType.Running)
+                    task.wait()
+                    if item.PrimaryPart then item:SetPrimaryPartCFrame(dropPos) end
+                    root.Anchored = false
+                    processedBlobs[tostring(item:GetDebugId())] = true
+                end
+                break
+            end
+        end
+    end)
+end
+
+AntiTab:CreateToggle({
+    Name = "Anti Vehicle Toy",
+    CurrentValue = false,
+    Callback = function(Value)
+        getgenv().AntiVehicleToyEnabled = Value
+        if Value then startAntiVehicleToy() else if AntiVehicleToyThread then task.cancel(AntiVehicleToyThread) end end
+    end
+})
+
+-- Train Gucci
+local TrainGucciEnabled = false
+local TrainGucciThread = nil
+local sitJumpT = false
+
+local function ragdollLoopF()
+    while sitJumpT do
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local ce = rs:FindFirstChild("CharacterEvents")
+            if ce and ce:FindFirstChild("RagdollRemote") then ce.RagdollRemote:FireServer(hrp, 0) end
+        end
+        task.wait()
+    end
+end
+
+local function sitOnTrain()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChild("Humanoid")
+    if not hum then return end
+    local success, seat = pcall(function() return Workspace.Map.AlwaysHereTweenedObjects.Train.Object.ObjectModel.Seat end)
+    if success and seat and seat.Occupant ~= hum then seat:Sit(hum) end
+end
+
+local function TrainGucciF()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local OCF = hrp.CFrame
+    if not sitJumpT then task.spawn(sitOnTrain); sitJumpT = true end
+    task.spawn(ragdollLoopF)
+    task.wait(0.3)
+    hrp.CFrame = OCF; sitJumpT = false
+end
+
+AntiTab:CreateToggle({
+    Name = "Train Gucci",
+    CurrentValue = false,
+    Callback = function(Value)
+        TrainGucciEnabled = Value
+        if TrainGucciThread then task.cancel(TrainGucciThread) end
+        if Value then
+            TrainGucciThread = task.spawn(function() while TrainGucciEnabled do TrainGucciF(); task.wait(1) end end)
+        else
+            sitJumpT = false
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+            if hum then hum.Sit = false end
+        end
+    end
+})
+
+-- =============================================
+-- [[ GRAB TAB ]]
+-- =============================================
+local GrabTab = Window:CreateTab("Grab", nil)
+GrabTab:CreateSection("=== GRAB ===")
+
+local LoopGrabActive = false
+local LoopGrabConnection = nil
+local SetNetworkOwner = G:WaitForChild("SetNetworkOwner")
+
+GrabTab:CreateToggle({
+    Name = "Loop Grab",
+    CurrentValue = false,
+    Callback = function(Value)
+        LoopGrabActive = Value
+        if LoopGrabConnection then LoopGrabConnection:Disconnect() end
+        if Value then
+            LoopGrabConnection = RunService.PreSimulation:Connect(function()
+                local grabParts = Workspace:FindFirstChild("GrabParts")
+                local gp = grabParts and grabParts:FindFirstChild("GrabPart")
+                local weld = gp and gp:FindFirstChildOfClass("WeldConstraint")
+                local part1 = weld and weld.Part1
+                local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if part1 and myHRP then
+                    SetNetworkOwner:FireServer(part1, CFrame.lookAt(myHRP.Position, part1.Position))
+                    part1.AssemblyLinearVelocity = Vector3.zero
+                    part1.AssemblyAngularVelocity = Vector3.zero
+                end
+            end)
+        end
+    end
+})
+
+-- Kick Grab
+local KickGrabT = false
+local AnhKick = false
+local KickGrabConnection = nil
+
+GrabTab:CreateToggle({
+    Name = "Kick Grab",
+    CurrentValue = false,
+    Callback = function(Value)
+        KickGrabT = Value
+        if KickGrabConnection then KickGrabConnection:Disconnect() end
+        if Value then
+            KickGrabConnection = RunService.Heartbeat:Connect(function()
+                local grabParts = Workspace:FindFirstChild("GrabParts")
+                if not grabParts then return end
+                for _, gp in ipairs(grabParts:GetChildren()) do
+                    if gp.Name == "GrabPart" then
+                        local weld = gp:FindFirstChildOfClass("WeldConstraint")
+                        local part1 = weld and weld.Part1
+                        if part1 then
+                            for _, p in ipairs(Players:GetPlayers()) do
+                                if p ~= LocalPlayer and p.Character and part1:IsDescendantOf(p.Character) then
+                                    local th = p.Character:FindFirstChild("HumanoidRootPart")
+                                    if th then
+                                        SetNetworkOwner:FireServer(th, th.CFrame)
+                                        G.DestroyGrabLine:FireServer(th)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+})
+
+GrabTab:CreateToggle({
+    Name = "Kick Grab Anchored",
+    CurrentValue = false,
+    Callback = function(Value) AnhKick = Value end
+})
+
+-- F Key Attack (Kick Grab 2)
+getgenv().KickGrabActive = false
+getgenv().FKeyAttackActive = false
+local fAttackTarget = nil
+local fAttackConnection = nil
+
+local function getScreenCenterTarget()
+    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    local ray = camera:ViewportPointToRay(screenCenter.X, screenCenter.Y)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    if LocalPlayer.Character then raycastParams.FilterDescendantsInstances = {LocalPlayer.Character} end
+    local result = Workspace:Raycast(ray.Origin, ray.Direction * 1000, raycastParams)
+    if result and result.Instance then
+        for _, pl in ipairs(Players:GetPlayers()) do
+            if pl ~= LocalPlayer and pl.Character and result.Instance:IsDescendantOf(pl.Character) then return pl end
+        end
+    end
+    return nil
+end
+
+GrabTab:CreateKeybind({
+    Name = "Kick Grab 2 (F)",
+    CurrentKeybind = "F",
+    HoldToInteract = false,
+    Callback = function()
+        if not getgenv().KickGrabActive then
+            getgenv().KickGrabActive = true
+            Rayfield:Notify({ Title = "Kick Grab 2", Content = "ON", Duration = 2 })
+            return
+        end
+        local target = getScreenCenterTarget()
+        if target and target.Character then
+            Rayfield:Notify({ Title = "Kick Grab 2", Content = "Attacking " .. target.Name, Duration = 2 })
+            local tr = target.Character:FindFirstChild("HumanoidRootPart")
+            local mr = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if tr and mr then
+                G.CreateGrabLine:FireServer(tr, CFrame.new())
+                SetNetworkOwner:FireServer(tr, CFrame.lookAt(mr.Position, tr.Position))
+                G.DestroyGrabLine:FireServer(tr)
+            end
+        end
+    end
+})
+
+-- Massless Grab & Kill Grab
+local MasslessGrabT = false
+local MasslessGrabThread = nil
+GrabTab:CreateToggle({
+    Name = "Massless Grab",
+    CurrentValue = false,
+    Callback = function(Value)
+        MasslessGrabT = Value
+        if MasslessGrabThread then task.cancel(MasslessGrabThread) end
+        if Value then
+            MasslessGrabThread = task.spawn(function()
+                while MasslessGrabT do
+                    local gp = Workspace:FindFirstChild("GrabParts")
+                    if gp then
+                        for _, d in ipairs({gp:FindFirstChild("DragPart"), gp:FindFirstChild("DragPart1")}) do
+                            if d then
+                                local ao = d:FindFirstChildOfClass("AlignOrientation")
+                                if ao then ao.MaxAngularVelocity = math.huge; ao.MaxTorque = math.huge end
+                                local ap = d:FindFirstChildOfClass("AlignPosition")
+                                if ap then ap.MaxForce = math.huge; ap.MaxVelocity = math.huge end
+                            end
+                        end
+                    end
+                    task.wait()
+                end
+            end)
+        end
+    end
+})
+
+-- Noclip Grab
+local NoclipGrabActive = false
+local NoclipGrabThread = nil
+local trackedParts = {}
+
+GrabTab:CreateToggle({
+    Name = "Noclip Grab",
+    CurrentValue = false,
+    Callback = function(Value)
+        NoclipGrabActive = Value
+        if NoclipGrabThread then task.cancel(NoclipGrabThread) end
+        if Value then
+            NoclipGrabThread = task.spawn(function()
+                while NoclipGrabActive do
+                    local gp = Workspace:FindFirstChild("GrabParts")
+                    if gp then
+                        for _, part in ipairs(gp:GetChildren()) do
+                            if part.Name == "GrabPart" then
+                                local w = part:FindFirstChildOfClass("WeldConstraint")
+                                if w and w.Part1 then w.Part1.CanCollide = false end
+                            end
+                        end
+                    end
+                    task.wait()
+                end
+            end)
+        end
+    end
+})
+
+-- =============================================
+-- [[ KICK TAB ]]
+-- =============================================
+local KickTab = Window:CreateTab("Kick", nil)
+local kickTargetList = {}
+
+local kickDropdown = KickTab:CreateDropdown({
+    Name = "Kick List",
+    Options = kickTargetList,
+    CurrentOption = {"OPEN"},
+    MultipleOptions = true,
+    Callback = function(opt) kickTargetList = opt end
+})
+
+KickTab:CreateInput({
+    Name = "Add Target",
+    PlaceholderText = "Username",
+    RemoveTextAfterFocusLost = true,
+    Callback = function(v)
+        if v == "" then return end
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(v:lower()) then
+                table.insert(kickTargetList, p.Name)
+                kickDropdown:Refresh(kickTargetList, true)
+                break
+            end
+        end
+    end
+})
+
+KickTab:CreateButton({
+    Name = "Clear List",
+    Callback = function() kickTargetList = {}; kickDropdown:Refresh(kickTargetList, true) end
+})
+
+-- =============================================
+-- [[ FUN TAB ]]
+-- =============================================
+local FunTab = Window:CreateTab("Fun", nil)
+FunTab:CreateSection("FLIP")
+
+local FlipEnabled = false
+local h = 0.0174533
+
+local function doFlip(dir)
+    if not FlipEnabled then return end
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hum and hrp and hum.Health > 0 then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        task.wait()
+        hum.Sit = true
+        for i = 1, 360 do
+            task.delay(i/720, function()
+                if hrp and hum and hum.Parent then
+                    hum.Sit = true
+                    hrp.CFrame *= CFrame.Angles(dir * h, 0, 0)
+                end
+            end)
+        end
+        task.wait(0.55)
+        if hum and hum.Parent then hum.Sit = false end
+    end
+end
+
+FunTab:CreateToggle({
+    Name = "Enable Flip (Z = Front / X = Back)",
+    CurrentValue = false,
+    Callback = function(Value)
+        FlipEnabled = Value
+        if Value then
+            ContextActionService:BindAction("Frontflip", function(_, state) if state == Enum.UserInputState.Begin then doFlip(-1) end end, false, Enum.KeyCode.Z)
+            ContextActionService:BindAction("Backflip", function(_, state) if state == Enum.UserInputState.Begin then doFlip(1) end end, false, Enum.KeyCode.X)
+        else
+            ContextActionService:UnbindAction("Frontflip")
+            ContextActionService:UnbindAction("Backflip")
+        end
+    end
+})
+
+-- [[ FUN TAB - ANTI FOOD KEYBIND ]] (구문 정상 마감)
+local AntiFoodActive = false
+local AntiFoodThread = nil
+local targetItemsDict = { ["FoodBanana"] = true, ["FoodHamburger"] = true, ["FoodPizzaCheese"] = true, ["FoodDonut"] = true } 
+
+local function ProcessItem(item)
+    local hp = item:FindFirstChild("HoldPart")
+    if hp and hp:FindFirstChild("HoldItemRemoteFunction") then
+        task.spawn(function()
+            pcall(function()
+                hp.HoldItemRemoteFunction:InvokeServer(item, LocalPlayer.Character)
+                hp.DropItemRemoteFunction:InvokeServer(item)
+            end)
+        end)
+    end
+end
+
+FunTab:CreateToggle({
+    Name = "Anti Food",
+    CurrentValue = false,
+    Callback = function(Value)
+        AntiFoodActive = Value
+        if AntiFoodThread then task.cancel(AntiFoodThread) end
+        if Value then
+            AntiFoodThread = task.spawn(function()
+                while AntiFoodActive do
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p ~= LocalPlayer then
+                            local folder = Workspace:FindFirstChild(p.Name .. "SpawnedInToys")
+                            if folder then
+                                for _, item in ipairs(folder:GetChildren()) do
+                                    if targetItemsDict[item.Name] then ProcessItem(item) end
+                                end
+                            end
+                        end
+                    end
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end
+})
