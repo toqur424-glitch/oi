@@ -4070,41 +4070,6 @@ function BreakPlot(...)
 end
 
 
--- [[ 3. UI 버튼 추가 (※ DefenseTab 부분을 본인 스크립트의 탭 변수명으로 변경하세요) ]]
-if DefenseTab then
-    DefenseTab:CreateSection("======================================")
-    DefenseTab:CreateSection("            MAP DESTRUCTION           ")
-    DefenseTab:CreateSection("======================================")
-
-    DefenseTab:CreateButton({
-        Name = "Break Map (All)",
-        Callback = function()
-            BreakMap()
-        end
-    })
-
-    DefenseTab:CreateSection("======================================")
-    DefenseTab:CreateSection("           PLOT DESTRUCTION           ")
-    DefenseTab:CreateSection("======================================")
-
-    for i = 1, 5 do
-        DefenseTab:CreateButton({
-            Name = "Break Plot " .. i,
-            Callback = function()
-                local plot = workspace.Plots:FindFirstChild("Plot" .. i)
-                if plot then
-                    BreakPlot(plot)
-                else
-                    warn("[Sigma Breaker] Plot" .. i .. " not found in workspace.Plots")
-                end
-            end
-        })
-    end
-
-    DefenseTab:CreateSection("======================================")
-else
-    warn("[Sigma Breaker] 버튼을 넣을 UI 탭(DefenseTab)을 찾지 못했습니다. 변수명을 확인하세요.")
-end
 
 -- =============================================
 -- SHADER TAB
