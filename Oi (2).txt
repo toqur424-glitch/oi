@@ -323,7 +323,7 @@ MainTab:CreateToggle({
 })
 
 --======================================================================================
--- ⚙️ [ WORLD BREAK CORE LOGIC ] - (스크립트 맨 위나 UI 세팅하기 전 상단에 붙여넣기)
+-- ⚙️ [ WORLD BREAK CORE LOGIC - SAFE VERSION ] 
 --======================================================================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -331,13 +331,13 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local plr = Players.LocalPlayer
-local mouse = plr:GetMouse()
-local rs = ReplicatedStorage
-
-getgenv().NCP_Enabled = false 
+local WorldBreak_Enabled = false 
 local Processing = false
 
-local function CanSpawnToy() return plr:FindFirstChild("CanSpawnToy") and plr.CanSpawnToy.Value end
+-- 장난감 소환 가능 여부 확인
+local function CanSpawnToy() 
+    return plr:FindFirstChild("CanSpawnToy") and plr.CanSpawnToy.Value 
+end
 
 local function GetPlayerFromPart(part)
     if not part then return nil end
@@ -348,12 +348,24 @@ local function GetPlayerFromPart(part)
     return nil
 end
 
+-- 📌 노클립 적용 함수
 local function NoClipPart()
-    if not getgenv().NCP_Enabled or Processing or not CanSpawnToy() then return end
-    Processing = true
+    if not WorldBreak_Enabled or Processing then return end
+    
+    if not CanSpawnToy() then
+        warn("[WorldBreak] ⚠️ 장난감 소환 쿨타임이거나 소환할 수 없는 상태입니다.")
+        return 
+    end
 
+    Processing = true
+    local mouse = plr:GetMouse() -- 마우스를 실행할 때 가져오도록 변경 (안전성)
     local tt = mouse.Target
-    if not tt or not tt:IsA("BasePart") then Processing = false return end
+
+    if not tt or not tt:IsA("BasePart") then 
+        warn("[WorldBreak] ⚠️ 마우스가 가리키는 파트(타겟)가 없습니다.")
+        Processing = false 
+        return 
+    end
 
     local player = GetPlayerFromPart(tt)
     if player then
@@ -368,10 +380,20 @@ local function NoClipPart()
     local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
     local inv = Workspace:FindFirstChild(plr.Name .. "SpawnedInToys")
 
-    if not hrp or not torso or not inv then Processing = false return end
+    if not hrp or not torso or not inv then 
+        warn("[WorldBreak] ⚠️ 캐릭터 정보나 장난감 폴더를 찾을 수 없습니다.")
+        Processing = false 
+        return 
+    end
+
+    print("[WorldBreak] 🎯 타겟 확인: " .. tt.Name .. " / 표창 소환 시도 중...")
 
     task.spawn(function()
-        pcall(function() rs.MenuToys.SpawnToyRemoteFunction:InvokeServer("NinjaShuriken", hrp.CFrame * CFrame.new(0, 5, 20), Vector3.zero) end)
+        local success, err = pcall(function() 
+            local menuToys = ReplicatedStorage:WaitForChild("MenuToys", 3)
+            menuToys.SpawnToyRemoteFunction:InvokeServer("NinjaShuriken", hrp.CFrame * CFrame.new(0, 5, 20), Vector3.zero) 
+        end)
+        if not success then warn("[WorldBreak] ❌ 표창 소환 실패: " .. tostring(err)) end
     end)
 
     local kunai = nil
@@ -381,93 +403,68 @@ local function NoClipPart()
         if kunai then break end
     end
 
-    if not kunai then Processing = false return end
+    if not kunai then 
+        warn("[WorldBreak] ❌ 표창이 인벤토리에 생성되지 않았습니다.")
+        Processing = false 
+        return 
+    end
 
-    local stickyPart = kunai:FindFirstChild("StickyPart")
-    local soundPart = kunai:FindFirstChild("SoundPart")
+    local stickyPart = kunai:WaitForChild("StickyPart", 3)
+    local soundPart = kunai:WaitForChild("SoundPart", 3)
 
     if stickyPart and soundPart then
-        pcall(function()
-            rs.GrabEvents.SetNetworkOwner:FireServer(soundPart, CFrame.lookAt(torso.Position, soundPart.Position))
+        local success, err = pcall(function()
+            local grabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 3)
+            local playerEvents = ReplicatedStorage:WaitForChild("PlayerEvents", 3)
+            
+            grabEvents.SetNetworkOwner:FireServer(soundPart, CFrame.lookAt(torso.Position, soundPart.Position))
             task.wait(0.1)
-            rs.PlayerEvents.StickyPartEvent:FireServer(stickyPart, tt, CFrame.new(107.5, 9.00000049e+33, -3.86856262e+25, 1, 0, 0, 0, 0.0662516952, -0.997802973, 0, 0.997802973, 0.0662516952))
+            playerEvents.StickyPartEvent:FireServer(stickyPart, tt, CFrame.new(107.5, 9.00000049e+33, -3.86856262e+25, 1, 0, 0, 0, 0.0662516952, -0.997802973, 0, 0.997802973, 0.0662516952))
         end)
+        if not success then warn("[WorldBreak] ❌ 물리 법칙 적용 실패: " .. tostring(err)) end
     end
 
     kunai.Name = ""
+    print("[WorldBreak] ✅ 노클립 적용 완료!")
     Processing = false
 end
 
+-- Q키 입력 시 노클립 실행
 UserInputService.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == Enum.KeyCode.Q and getgenv().NCP_Enabled then 
+    if not processed and input.KeyCode == Enum.KeyCode.Q and WorldBreak_Enabled then 
         NoClipPart() 
     end
 end)
 
+-- 🗑️ 모든 장난감 파괴 함수
 local function DestroyAllToys()
     local toyFolder = Workspace:FindFirstChild(plr.Name .. "SpawnedInToys")
     if toyFolder then
+        local menuToys = ReplicatedStorage:WaitForChild("MenuToys", 3)
         for _, toy in ipairs(toyFolder:GetChildren()) do
             if toy.Name ~= "ToyNumber" and toy.Name ~= "완전한 사람" and not Players:GetPlayerFromCharacter(toy) then
-                pcall(function() rs:WaitForChild("MenuToys"):WaitForChild("DestroyToy"):FireServer(toy) end)
+                pcall(function() menuToys:WaitForChild("DestroyToy"):FireServer(toy) end)
             end
         end
+        print("[WorldBreak] 🗑️ 모든 장난감을 파괴했습니다.")
     end
 end
 
+-- 🔪 표창만 제거 함수
 local function ClearShurikens()
     local inv = Workspace:FindFirstChild(plr.Name .. "SpawnedInToys")
     if not inv then return end
-    local destroyRemote = rs:FindFirstChild("MenuToys") and rs.MenuToys:FindFirstChild("DestroyToy")
+    local menuToys = ReplicatedStorage:WaitForChild("MenuToys", 3)
+    local destroyRemote = menuToys:WaitForChild("DestroyToy", 3)
+    
     for _, child in pairs(inv:GetChildren()) do
         if child.Name == "NinjaShuriken" or child.Name == "" then
             pcall(function() destroyRemote:FireServer(child) end)
         end
     end
+    print("[WorldBreak] 🔪 표창을 모두 제거했습니다.")
 end
 
---======================================================================================
--- 🎨 [ UI TABS & BUTTONS ] - (여기에 본인이 쓰시는 UI 라이브러리로 탭과 버튼을 추가하세요)
---======================================================================================
-
--- 아래는 예시입니다. 유저님이 사용하시는 UI 라이브러리 문법에 맞게 '이름'과 'Callback' 부분만 복사해 쓰시면 됩니다!
-
--- [1] 새로운 탭 생성하기 (예: Rayfield나 Orion 등)
--- local WorldBreakTab = Window:MakeTab({ Name = "World Break", Icon = "globe" })
-
--- [2] 토글 추가
--- WorldBreakTab:AddToggle({
---     Name = "🔴 World Break (Q)",
---     Default = false,
---     Callback = function(Value)
---         getgenv().NCP_Enabled = Value
---     end    
--- })
-
--- [3] 버튼 추가 1
--- WorldBreakTab:AddButton({
---     Name = "📌 Apply NoClip",
---     Callback = function()
---         NoClipPart()
---     end    
--- })
-
--- [4] 버튼 추가 2
--- WorldBreakTab:AddButton({
---     Name = "🗑️ Destroy All Toys",
---     Callback = function()
---         DestroyAllToys()
---     end    
--- })
-
--- [5] 버튼 추가 3
--- WorldBreakTab:AddButton({
---     Name = "🔪 Clear All Shurikens",
---     Callback = function()
---         ClearShurikens()
---     end    
--- })
-              
 -- =============================================
 -- [[ ANTI TAB ]]
 -- =============================================
