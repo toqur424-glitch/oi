@@ -322,7 +322,93 @@ MainTab:CreateToggle({
     end
 })
 
+--======================================================================================
+-- ⚙️ [ WORLD BREAK INTEGRATED SCRIPT ] - 이 코드 하나면 끝납니다.
+--======================================================================================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
+local plr = Players.LocalPlayer
+getgenv().WorldBreak_Enabled = false 
+local Processing = false
+
+-- [1] 핵심 로직 정의
+local function CanSpawnToy() return plr:FindFirstChild("CanSpawnToy") and plr.CanSpawnToy.Value end
+
+local function NoClipPart()
+    if not getgenv().WorldBreak_Enabled or Processing or not CanSpawnToy() then return end
+    Processing = true
+    local mouse = plr:GetMouse()
+    local tt = mouse.Target
+    if not tt or not tt:IsA("BasePart") then Processing = false return end
+
+    local char = plr.Character or plr.CharacterAdded:Wait()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    local inv = Workspace:FindFirstChild(plr.Name .. "SpawnedInToys")
+
+    if not hrp or not torso or not inv then Processing = false return end
+
+    task.spawn(function()
+        pcall(function() ReplicatedStorage.MenuToys.SpawnToyRemoteFunction:InvokeServer("NinjaShuriken", hrp.CFrame * CFrame.new(0, 5, 20), Vector3.zero) end)
+    end)
+
+    local kunai = nil
+    for i = 1, 30 do task.wait(0.1); kunai = inv:FindFirstChild("NinjaShuriken"); if kunai then break end end
+    if not kunai then Processing = false return end
+
+    local stickyPart, soundPart = kunai:FindFirstChild("StickyPart"), kunai:FindFirstChild("SoundPart")
+    if stickyPart and soundPart then
+        pcall(function()
+            ReplicatedStorage.GrabEvents.SetNetworkOwner:FireServer(soundPart, CFrame.lookAt(torso.Position, soundPart.Position))
+            task.wait(0.1)
+            ReplicatedStorage.PlayerEvents.StickyPartEvent:FireServer(stickyPart, tt, CFrame.new(107.5, 9.00000049e+33, -3.86856262e+25, 1, 0, 0, 0, 0.0662516952, -0.997802973, 0, 0.997802973, 0.0662516952))
+        end)
+    end
+    kunai.Name = ""
+    Processing = false
+end
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.Q and getgenv().WorldBreak_Enabled then NoClipPart() end
+end)
+
+-- [2] UI 자동 생성 (UI 라이브러리 로딩 대기)
+task.spawn(function()
+    -- Window가 정의될 때까지 대기 (nil value 에러 방지)
+    repeat task.wait() until getgenv().Window or (typeof(Window) ~= "nil")
+    local win = getgenv().Window or Window
+    
+    local WorldBreakTab = win:MakeTab({ Name = "World Break", Icon = "globe" })
+
+    WorldBreakTab:AddToggle({
+        Name = "🔴 World Break (Q)",
+        Default = false,
+        Callback = function(Value) getgenv().WorldBreak_Enabled = Value end    
+    })
+
+    WorldBreakTab:AddButton({
+        Name = "📌 Apply NoClip",
+        Callback = function() NoClipPart() end    
+    })
+
+    WorldBreakTab:AddButton({
+        Name = "🗑️ Destroy All Toys",
+        Callback = function()
+            local toyFolder = Workspace:FindFirstChild(plr.Name .. "SpawnedInToys")
+            if toyFolder then
+                for _, toy in ipairs(toyFolder:GetChildren()) do
+                    if toy.Name ~= "ToyNumber" and toy.Name ~= "완전한 사람" and not Players:GetPlayerFromCharacter(toy) then
+                        pcall(function() ReplicatedStorage.MenuToys.DestroyToy:FireServer(toy) end)
+                    end
+                end
+            end
+        end    
+    })
+end)
+--======================================================================================
 
 -- =============================================
 -- [[ ANTI TAB ]]
