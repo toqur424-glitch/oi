@@ -90,7 +90,7 @@ GrabTab:CreateKeybind({
 local KickTab = Window:CreateTab("Kick (블롭맨)", nil)
 local blobLoopT4 = false
 local kickTargetList = {}
-local recoveringTargets = {} -- 무한 TP 꼬임 방지 테이블
+local recoveringTargets = {} 
 
 local function updateTargetList()
     kickTargetList = {}
@@ -109,7 +109,7 @@ function loopPlayerBlobF4()
             local player = Players:FindFirstChild(name)
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
-            -- [상태 감지] 사망했거나 캐릭터가 없으면 초기화 상태로 돌림 (리스폰 추적용)
+            -- 상대방 사망 및 리스폰 감지 시 상태 초기화
             if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
                 initializedTargets[name] = nil
                 continue
@@ -119,32 +119,42 @@ function loopPlayerBlobF4()
             local charHUM = player.Character:FindFirstChild("Humanoid")
             
             if myHRP and charHRP and charHUM then
-                -- [자동 리커버리 시스템] 범위 이탈 및 리스폰 시 즉시 추적 비동기 실행
+                -- [수정된 자동 리커버리: 가져오고 셋오너 거는 방식]
                 if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[player.Name]) and not recoveringTargets[player.Name] then
                     recoveringTargets[player.Name] = true
-                    initializedTargets[player.Name] = true
+                    initializedTargets[player.Name] = true -- 중복 진입 즉시 차단
                     
                     task.spawn(function()
                         local originalCF = myHRP.CFrame
-                        -- 1. 타겟에게 즉시 이동
-                        myHRP.CFrame = charHRP.CFrame
-                        task.wait(0.05) -- 위치 동기화 딜레이
                         
-                        -- 2. 강제 셋오너 주입 (소유권 강탈)
-                        for i = 1, 60 do
-                            if charHRP and myHRP then
-                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            end
+                        -- 1. 상대방 위치로 즉시 순간이동
+                        myHRP.CFrame = charHRP.CFrame
+                        task.wait(0.03)
+                        
+                        -- 2. 그 자리에서 오너십을 먼저 강탈하여 내 클라이언트에 종속시킴
+                        for i = 1, 40 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                         
-                        -- 3. 원래 내 위치로 복귀
+                        -- 3. 상대를 내 위치(공중 타겟 좌표)로 강제로 잡아 끌어옴 (가져오기)
+                        charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
+                        task.wait(0.02)
+                        
+                        -- 4. 원래 내 위치로 복귀
                         myHRP.CFrame = originalCF
-                        task.wait(0.4) -- 타겟이 내 공중 좌표로 완전히 끌려올 때까지 거리 체크 유예 (무한 TP 방지)
+                        task.wait(0.03)
+                        
+                        -- 5. 복귀 완료 후 다시 한 번 셋오너를 연사하여 락(Lock)을 걸어버림
+                        for i = 1, 40 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        end
+                        
+                        task.wait(0.2) -- 완전 안정화 대기
                         recoveringTargets[player.Name] = nil
                     end)
                 end
                 
-                -- [극한 고정 좌표 제어] 복귀 중에도 실시간으로 타겟을 내 머리 위로 강제 고정
+                -- [메인 루프 극한 고정 및 교차 킥]
                 local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -152,7 +162,6 @@ function loopPlayerBlobF4()
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [교차 셋오너/디스트로이]
                 frameToggle = not frameToggle
                 if frameToggle then
                     for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
@@ -180,7 +189,7 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "리커버리 수정 및 극한 고정 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "리커버리 순서 재정렬 및 최적화 완료", Duration = 3})
 
 KickTab:CreateInput({
     Name = "Add Target (여기에 닉네임 입력)",
