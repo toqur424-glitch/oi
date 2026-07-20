@@ -112,22 +112,22 @@ function loopPlayerBlobF4()
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
-                -- [핸드셰이크 강화] 초기 진입 시 물리 소유권 독점 강화
+                -- [핸드셰이크 강화] 초기 진입 시 물리 소유권 즉시 강제 확보
                 if not initializedTargets[player.Name] then
-                    for i = 1, 40 do
+                    charHUM.PlatformStand = true
+                    charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                    for i = 1, 50 do
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end
                     initializedTargets[player.Name] = true
                 end
                 
-                -- [물리 상태 선제 제압]
+                -- [물리 상태 선제 제압] 매 루프마다 가속도 제거
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHUM.PlatformStand = true
-                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 
-                -- [교차 프레임]
+                -- [교차 프레임] 빈도 조절
                 frameToggle = not frameToggle
                 if frameToggle then
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
