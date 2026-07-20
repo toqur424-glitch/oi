@@ -103,7 +103,6 @@ function loopPlayerBlobF4()
         for _, name in pairs(kickTargetList) do
             local player = Players:FindFirstChild(name)
             
-            -- [감지] 리셋/탈주/사망 시 상태 초기화
             if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
                 initializedTargets[name] = nil
                 continue
@@ -114,41 +113,28 @@ function loopPlayerBlobF4()
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
-                -- [재연결 감지] 범위 이탈 시 초기화
                 if (charHRP.Position - myHRP.Position).Magnitude > 200 then
                     initializedTargets[player.Name] = nil
                 end
                 
-                -- [핸드셰이크] 타겟 새로 잡기/재연결 시 1회 TP
-                if not initializedTargets[player.Name] then
-                    local originalCF = myHRP.CFrame
-                    myHRP.CFrame = charHRP.CFrame
-                    task.wait(0.1) 
-                    for i = 1, 20 do
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    end
-                    myHRP.CFrame = originalCF
-                    initializedTargets[player.Name] = true
-                end
-                
-                -- [기본 고정] 상태 유지
+                -- [강화된 루프 고정] 매 프레임 좌표를 이중으로 주입하여 흔들림 원천 봉쇄
                 charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [교차 프레임 로직] 셋오너 & 디스트로이 + 좌표 강제 고정
+                -- [빈도 상향] 셋오너 & 디스트로이 교차 빈도 및 강도 극대화
                 frameToggle = not frameToggle
                 if frameToggle then
-                    for i = 1, 10 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                    for i = 1, 15 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                 else
-                    charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0) -- 디스트로이 시점에도 좌표 재고정
-                    for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
+                    charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0) -- 고정력 보완
+                    for i = 1, 10 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
                 end
             end
         end
-        task.wait(0.0001)
+        task.wait(0.00001) -- 빈도 극대화를 위한 대기시간 최소화
     end
 end
 
