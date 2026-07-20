@@ -96,6 +96,8 @@ local kickTargetList = {}
 
 -- [극대화] 오너 킥 루프
 function loopPlayerBlobF4()
+    local initializedTargets = {} -- 타겟 초기화 상태 저장
+    
     while blobLoopT4 do
         for _, name in pairs(kickTargetList) do
             local player = Players:FindFirstChild(name)
@@ -105,13 +107,27 @@ function loopPlayerBlobF4()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 
                 if charHRP and charHUM and myHRP then
-                    -- [루프 고정] 상대방을 내 머리 위 25좌표로 계속 덮어씌움
+                    -- [초기 핸드셰이크] 실행 시 1회 TP 후 복귀
+                    if not initializedTargets[player.Name] then
+                        local originalCF = myHRP.CFrame
+                        myHRP.CFrame = charHRP.CFrame -- 상대에게 이동
+                        task.wait(0.2) 
+                        for i = 1, 10 do -- 확실한 킥 권한 확보
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        end
+                        myHRP.CFrame = originalCF -- 원래 자리로 복귀
+                        initializedTargets[player.Name] = true
+                    end
+                    
+                    -- [루프 고정] 내 머리 위 25좌표로 계속 강제 덮어씌움
                     charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                     
                     -- [극대화] 강제 고정력
                     charHRP.AssemblyLinearVelocity = Vector3.zero
+                    charHRP.AssemblyAngularVelocity = Vector3.zero
                     charHUM.PlatformStand = true
-                    -- [극대화] 리모트 연사
+                    
+                    -- [유지] 리모트 연사
                     for i = 1, 3 do
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end
