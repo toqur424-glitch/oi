@@ -91,13 +91,10 @@ local KickTab = Window:CreateTab("Kick (블롭맨)", nil)
 local blobLoopT4 = false
 local kickTargetList = {}
 
--- [자동 타겟팅] 맵에 있는 모든 사람 리스트에 추가
 local function updateTargetList()
     kickTargetList = {}
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= plr then
-            table.insert(kickTargetList, p.Name)
-        end
+        if p ~= plr then table.insert(kickTargetList, p.Name) end
     end
 end
 
@@ -106,7 +103,7 @@ function loopPlayerBlobF4()
     local frameToggle = false
     
     while blobLoopT4 do
-        updateTargetList() -- 매 루프마다 실시간 인원 체크
+        updateTargetList()
         for _, name in pairs(kickTargetList) do
             local player = Players:FindFirstChild(name)
             if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
@@ -119,24 +116,28 @@ function loopPlayerBlobF4()
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
+                -- [극한 고정력 강화] 좌표 강제 주입 주기를 물리 엔진보다 빠르게 설정
                 local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+                
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
+                -- [핸드셰이크] 연결 초기에 소유권을 확실히 뺏어옴
                 if not initializedTargets[player.Name] then
-                    for i = 1, 100 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                    for i = 1, 150 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                     initializedTargets[player.Name] = true
                 end
                 
+                -- [교차 프레임] 셋오너 연사량 2배 증폭
                 frameToggle = not frameToggle
                 if frameToggle then
-                    for i = 1, 10 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                    for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                 else
-                    charHRP.CFrame = targetCF
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    charHRP.CFrame = targetCF 
+                    for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
                 end
             end
         end
@@ -155,7 +156,7 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "전원 타겟팅 및 고정 스크립트 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "극한 고정 킥 스크립트 적용됨", Duration = 3})
 
 KickTab:CreateInput({
     Name = "Add Target (여기에 닉네임 입력)",
