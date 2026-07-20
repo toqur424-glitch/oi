@@ -42,7 +42,6 @@ local fAttackTarget = nil
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
-    local isHrpFrame = true
     fAttackConnection = RunService.RenderStepped:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
         local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
@@ -50,6 +49,7 @@ local function startFKeyAttack(targetPlayer)
         local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
         local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
         if not myRoot or not tgtRoot then return end
+        
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
         
@@ -91,7 +91,6 @@ local KickTab = Window:CreateTab("Kick (블롭맨)", nil)
 local blobLoopT4 = false
 local kickTargetList = {}
 
--- [극대화] 오너 킥 루프
 function loopPlayerBlobF4()
     local initializedTargets = {}
     local frameToggle = false
@@ -109,32 +108,33 @@ function loopPlayerBlobF4()
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
-                -- [극강의 고정력] 핸드셰이크 단계에서 위치 정보를 100회 주입하여 서버 물리 간섭 차단
+                -- [극한 고정] 물리 갱신 차단 루프
+                local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+                
+                -- 위치 강제 고정 (위치 오차를 0으로 만듦)
+                charHRP.CFrame = targetCF
+                charHRP.AssemblyLinearVelocity = Vector3.zero
+                charHRP.AssemblyAngularVelocity = Vector3.zero
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                
+                -- [핸드셰이크 강화]
                 if not initializedTargets[player.Name] then
-                    for i = 1, 100 do
-                        charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    end
+                    for i = 1, 100 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                     initializedTargets[player.Name] = true
                 end
                 
-                -- [물리 엔진 제어] 매 루프마다 물리 상태를 Physics로 강제 고정
-                charHUM.PlatformStand = true
-                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
-                
-                -- [교차 프레임] 고정력 유지를 위해 셋오너 연사 강화
+                -- [교차 프레임] 고정력 분산 없이 연사 밀도 극대화
                 frameToggle = not frameToggle
                 if frameToggle then
-                    for i = 1, 5 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                    for i = 1, 10 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                 else
+                    charHRP.CFrame = targetCF -- 고정 프레임 강제
                     rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                 end
             end
         end
-        task.wait() 
+        RunService.RenderStepped:Wait() -- 핑 영향 최소화하며 루프 속도 최고치 유지
     end
 end
 
@@ -146,13 +146,10 @@ KickTab:CreateToggle({
     end
 })
 
---=============================================
--- [나머지 필수 탭들 유지]
---=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "극강 고정 킥 스크립트 적용됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "극한 고정 킥 스크립트 적용됨", Duration = 3})
 
 KickTab:CreateInput({
     Name = "Add Target (여기에 닉네임 입력)",
