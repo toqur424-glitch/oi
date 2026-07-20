@@ -117,24 +117,24 @@ function loopPlayerBlobF4()
                     initializedTargets[player.Name] = nil
                 end
                 
-                -- [강화된 루프 고정] 매 프레임 좌표를 이중으로 주입하여 흔들림 원천 봉쇄
+                -- [극대화된 고정] 매 루프마다 좌표 강제 주입
                 charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [빈도 상향] 셋오너 & 디스트로이 교차 빈도 및 강도 극대화
+                -- [속도 및 고정력 최상위 강화] 연사 횟수 5배 상향 및 대기 시간 제거
                 frameToggle = not frameToggle
                 if frameToggle then
-                    for i = 1, 15 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                    for i = 1, 75 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                 else
-                    charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0) -- 고정력 보완
-                    for i = 1, 10 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
+                    charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
+                    for i = 1, 50 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
                 end
             end
         end
-        task.wait(0.00001) -- 빈도 극대화를 위한 대기시간 최소화
+        RunService.RenderStepped:Wait() -- 틱 속도 극대화
     end
 end
 
