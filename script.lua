@@ -106,37 +106,41 @@ function loopPlayerBlobF4()
         updateTargetList()
         for _, name in pairs(kickTargetList) do
             local player = Players:FindFirstChild(name)
-            if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+            
+            -- [상태 감지 및 자동 복귀 루틴]
+            if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or player.Character.Humanoid.Health <= 0 then
                 initializedTargets[name] = nil
                 continue
             end
 
             local charHRP = player.Character.HumanoidRootPart
             local charHUM = player.Character:FindFirstChild("Humanoid")
-            local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
-                -- [극한 고정력 강화] 좌표 강제 주입 주기를 물리 엔진보다 빠르게 설정
-                local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+                -- [자동 리커버리 루프] 범위 이탈 시 즉시 TP 후 복귀
+                if (charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[player.Name] then
+                    local originalCF = myHRP.CFrame
+                    myHRP.CFrame = charHRP.CFrame
+                    task.wait(0.05)
+                    for i = 1, 150 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                    myHRP.CFrame = originalCF
+                    initializedTargets[player.Name] = true
+                end
                 
+                -- [극한 고정]
+                local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [핸드셰이크] 연결 초기에 소유권을 확실히 뺏어옴
-                if not initializedTargets[player.Name] then
-                    for i = 1, 150 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
-                    initializedTargets[player.Name] = true
-                end
-                
-                -- [교차 프레임] 셋오너 연사량 2배 증폭
                 frameToggle = not frameToggle
                 if frameToggle then
                     for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                 else
-                    charHRP.CFrame = targetCF 
+                    charHRP.CFrame = targetCF
                     for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
                 end
             end
@@ -146,7 +150,7 @@ function loopPlayerBlobF4()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (전원)",
+    Name = "블롭맨 오너 킥 실행 (자동 복귀)",
     Callback = function(v)
         blobLoopT4 = v
         if v then task.spawn(loopPlayerBlobF4) end
@@ -156,7 +160,7 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "극한 고정 킥 스크립트 적용됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "자동 리커버리 및 극한 고정 적용됨", Duration = 3})
 
 KickTab:CreateInput({
     Name = "Add Target (여기에 닉네임 입력)",
