@@ -29,23 +29,6 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [TARGET 탭] - 타겟 설정 기능
---=============================================
-local TargetTab = Window:CreateTab("Target (대상)", nil)
-TargetTab:CreateSection("=== 특정 타겟 지정 ===")
-
-getgenv().TargetPlayerName = ""
-
-TargetTab:CreateInput({
-    Name = "타겟 닉네임 입력",
-    PlaceholderText = "닉네임 입력 (빈칸 시 전체/기본 대상)",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(Text)
-        getgenv().TargetPlayerName = Text
-    end,
-})
-
---=============================================
 -- [GRAB 탭] - 극대화된 킥 그랩 (F키)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
@@ -93,30 +76,11 @@ GrabTab:CreateKeybind({
             if fAttackConnection then fAttackConnection:Disconnect() end
             return 
         end
-        
         local target = nil 
-        local searchName = getgenv().TargetPlayerName or ""
-        searchName = string.match(searchName, "^%s*(.-)%s*$") -- 앞뒤 공백 제거
-        
-        if searchName ~= "" then
-            -- [수정] 평문 매칭(Plain Match) 적용으로 타겟팅 오작동 원천 차단
-            for _, p in pairs(Players:GetPlayers()) do 
-                if p ~= plr and p.Character and (string.find(string.lower(p.Name), string.lower(searchName), 1, true) or string.find(string.lower(p.DisplayName), string.lower(searchName), 1, true)) then 
-                    target = p 
-                    break 
-                end 
-            end
-        else
-            for _, p in pairs(Players:GetPlayers()) do 
-                if p ~= plr and p.Character then target = p break end 
-            end
+        for _, p in pairs(Players:GetPlayers()) do 
+            if p ~= plr and p.Character then target = p break end 
         end
-        
-        if target then 
-            startFKeyAttack(target) 
-        else
-            Rayfield:Notify({Title = "Error", Content = " 대상을 찾을 수 없습니다.", Duration = 3})
-        end
+        if target then startFKeyAttack(target) end
     end
 })
 
@@ -130,26 +94,8 @@ local recoveringTargets = {}
 
 local function updateTargetList()
     kickTargetList = {}
-    local searchName = getgenv().TargetPlayerName or ""
-    searchName = string.match(searchName, "^%s*(.-)%s*$") -- 앞뒤 공백 제거
-    
-    if searchName ~= "" then
-        -- [수정] 닉네임이 입력된 경우 정규식 패턴 오작동을 차단하고 정확히 해당 유저만 리스트에 삽입
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= plr then
-                local nameMatch = string.find(string.lower(p.Name), string.lower(searchName), 1, true)
-                local displayNameMatch = string.find(string.lower(p.DisplayName), string.lower(searchName), 1, true)
-                
-                if nameMatch or displayNameMatch then 
-                    table.insert(kickTargetList, p.Name) 
-                end
-            end
-        end
-    else
-        -- 입력창이 완전히 비어있을 때만 기존 원본 코드대로 전체 유저를 타겟팅
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= plr then table.insert(kickTargetList, p.Name) end
-        end
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= plr then table.insert(kickTargetList, p.Name) end
     end
 end
 
@@ -239,119 +185,6 @@ KickTab:CreateToggle({
         if v then task.spawn(loopPlayerBlobF4) end
     end
 })
-
--- [ 설정 부분 ]
-local targetPlayerName = "타겟_플레이어_이름을_여기에_입력하세요" -- 공격할 플레이어 이름
-
-local Players = game:GetService("Players")
-local RS = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-
--- 리모트 이벤트 및 펑션 가져오기
-local MenuToys = RS:WaitForChild("MenuToys")
-local GrabEvents = RS:WaitForChild("GrabEvents")
-
-local SpawnToy = MenuToys:WaitForChild("SpawnToyRemoteFunction")
-local DestroyToy = MenuToys:WaitForChild("DestroyToy")
-local SetNetOwner = GrabEvents:WaitForChild("SetNetworkOwner")
-local DestroyLine = GrabEvents:WaitForChild("DestroyGrabLine")
-
--- 상태 변수
-local isActive = true
-local ragdollConnection
-local palletToy
-
-local function StartPalletRagdoll(targetName)
-    local targetPlayer = Players:FindFirstChild(targetName)
-    if not targetPlayer then
-        warn("타겟 플레이어를 찾을 수 없습니다.")
-        return
-    end
-
-    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
-
-    -- 1. 판자 소환하기
-    SpawnToy:InvokeServer("PalletLightBrown", myHRP.CFrame * CFrame.new(0, 10, 20), Vector3.zero)
-
-    -- 2. 소환된 판자 찾기
-    local toysFolder = workspace:WaitForChild(LocalPlayer.Name .. "SpawnedInToys", 5)
-    if not toysFolder then return end
-
-    palletToy = toysFolder:WaitForChild("PalletLightBrown", 5)
-    if not palletToy then return end
-
-    local soundPart = palletToy:WaitForChild("SoundPart", 3)
-    if not soundPart then return end
-
-    -- 3. 네트워크 소유권 가져오기 및 연결선 제거
-    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-    DestroyLine:FireServer(soundPart)
-
-    -- 4. 로컬 플레이어에게 보이지 않게 투명화 및 충돌 해제
-    for _, part in pairs(palletToy:GetChildren()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-            part.CanQuery = false
-            part.Transparency = 1 
-        end
-    end
-
-    local strikePhase = false
-
-    -- 5. 물리 충돌 루프 (RunService.Stepped 사용)
-    ragdollConnection = RunService.Stepped:Connect(function()
-        if not isActive or not palletToy.Parent then 
-            if ragdollConnection then ragdollConnection:Disconnect() end
-            return 
-        end
-
-        local tChar = targetPlayer.Character
-        local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-
-        if tRoot and tHum and tHum.Health > 0 then
-            local ragdolledVal = tHum:FindFirstChild("Ragdolled")
-            local isRagdolled = ragdolledVal and ragdolledVal.Value or false
-
-            -- 타겟이 아직 레그돌 상태가 아니라면 초고속 타격
-            if not isRagdolled then
-                strikePhase = not strikePhase
-                if strikePhase then
-                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
-                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0) -- 위에서 아래로
-                else
-                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
-                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)  -- 아래서 위로
-                end
-            else
-                -- 레그돌 상태가 되면 렉 방지를 위해 공중으로 치워두기
-                soundPart.CFrame = CFrame.new(0, 9e9, 0)
-                soundPart.AssemblyLinearVelocity = Vector3.zero
-            end
-        else
-            -- 타겟이 죽거나 없으면 대기 상태
-            soundPart.CFrame = CFrame.new(0, 9e9, 0)
-            soundPart.AssemblyLinearVelocity = Vector3.zero
-        end
-    end)
-end
-
--- 실행
-StartPalletRagdoll(targetPlayerName)
-
--- 멈추고 싶을 때 사용하는 함수 (예: 채팅 명령어 등에 연결하여 사용)
-local function StopPalletRagdoll()
-    isActive = false
-    if ragdollConnection then
-        ragdollConnection:Disconnect()
-        ragdollConnection = nil
-    end
-    if palletToy and palletToy.Parent then
-        DestroyToy:FireServer(palletToy)
-    end
-end
 
 --=============================================
 -- [나머지 필수 탭들 유지]
