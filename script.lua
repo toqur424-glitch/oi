@@ -113,24 +113,23 @@ function loopPlayerBlobF4()
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
-                -- [강력한 위치 강제 주입]
+                -- [위치 고정 강화] 매 프레임 좌표 주입 (가장 확실한 고정 방식)
                 charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [핑 안 터지게 연사량 최적화 + 고정력 강화]
+                -- [핑 안정화] 빈도를 줄이고 1회씩만 호출하여 패킷 부하 대폭 감소
                 frameToggle = not frameToggle
                 if frameToggle then
-                    for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 else
-                    charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
-                    for i = 1, 15 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                 end
             end
         end
-        task.wait() -- 핑 안정화를 위해 RenderStepped:Wait 대신 task.wait() 사용
+        task.wait() 
     end
 end
 
