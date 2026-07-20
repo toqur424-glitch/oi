@@ -48,17 +48,14 @@ local function startFKeyAttack(targetPlayer)
         local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local tgtChar = fAttackTarget.Character
         local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
-        local tgtTorso = tgtChar and (tgtChar:FindFirstChild("Torso") or tgtChar:FindFirstChild("UpperTorso"))
         local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
         if not myRoot or not tgtRoot then return end
-        -- [극대화] 타겟 물리 속도 0 고정 & 조작 불가
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
         
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- [극대화] 다중 연사 (킥 속도 극대화)
         for i = 1, 4 do
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
@@ -79,7 +76,7 @@ GrabTab:CreateKeybind({
             if fAttackConnection then fAttackConnection:Disconnect() end
             return 
         end
-        local target = nil -- (간략화된 타겟팅 로직)
+        local target = nil 
         for _, p in pairs(Players:GetPlayers()) do 
             if p ~= plr and p.Character then target = p break end 
         end
@@ -112,25 +109,26 @@ function loopPlayerBlobF4()
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
-                -- [핸드셰이크 강화] 초기 진입 시 물리 소유권 즉시 강제 확보
+                -- [극강의 고정력] 핸드셰이크 단계에서 위치 정보를 100회 주입하여 서버 물리 간섭 차단
                 if not initializedTargets[player.Name] then
-                    charHUM.PlatformStand = true
-                    charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                    for i = 1, 50 do
+                    for i = 1, 100 do
+                        charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end
                     initializedTargets[player.Name] = true
                 end
                 
-                -- [물리 상태 선제 제압] 매 루프마다 가속도 제거
+                -- [물리 엔진 제어] 매 루프마다 물리 상태를 Physics로 강제 고정
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 
-                -- [교차 프레임] 빈도 조절
+                -- [교차 프레임] 고정력 유지를 위해 셋오너 연사 강화
                 frameToggle = not frameToggle
                 if frameToggle then
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    for i = 1, 5 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                 else
                     rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                 end
@@ -154,7 +152,7 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "강력한 킥 스크립트 적용됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "극강 고정 킥 스크립트 적용됨", Duration = 3})
 
 KickTab:CreateInput({
     Name = "Add Target (여기에 닉네임 입력)",
