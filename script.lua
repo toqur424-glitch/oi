@@ -90,6 +90,8 @@ GrabTab:CreateKeybind({
 -- [KICK 탭] - 극대화된 블롭맨 셋오너 킥
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨)", nil)
+KickTab:CreateSection("=== 셋 오너 킥 ===")
+
 local blobLoopT4 = false
 local kickTargetList = {}
 local recoveringTargets = {} 
@@ -207,17 +209,15 @@ KickTab:CreateInput({
         end
         
         table.insert(kickTargetList, found.Name)
-        -- 주의: kickDropdown 변수가 정의되지 않았었기 때문에 에러 방지를 위해 pcall 처리했습니다.
-        pcall(function() kickDropdown:Refresh(kickTargetList, true) end)
         Rayfield:Notify({Title = "추가됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
 })
 
 --=============================================
--- [PALLET RAGDOLL 탭] - 판자 레그돌 (새로 추가됨)
+-- [PALLET 탭] - 판자 레그돌 (새로 추가된 부분)
 --=============================================
 local PalletTab = Window:CreateTab("Pallet (레그돌)", nil)
-PalletTab:CreateSection("=== 판자 레그돌 타격 ===")
+PalletTab:CreateSection("=== 판자 레그돌 공격 ===")
 
 local MenuToys = rs:WaitForChild("MenuToys", 5)
 local GrabEvents = rs:WaitForChild("GrabEvents", 5)
@@ -243,7 +243,6 @@ local function StartPalletRagdoll(targetName)
     StopPalletRagdoll()
     isPalletActive = true
 
-    -- 부분 닉네임 검색 지원
     local targetPlayer = nil
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Name:lower():find(targetName:lower()) or (p.DisplayName and p.DisplayName:lower():find(targetName:lower())) then
@@ -323,7 +322,7 @@ local function StartPalletRagdoll(targetName)
         end
     end)
     
-    Rayfield:Notify({Title = "실행 완료", Content = targetPlayer.Name.." 님에게 레그돌 공격 시작!", Duration = 3})
+    Rayfield:Notify({Title = "실행 완료", Content = targetPlayer.Name.." 님에게 판자 공격 시작!", Duration = 3})
 end
 
 PalletTab:CreateInput({
@@ -360,8 +359,8 @@ local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({
     Name = "재설정", 
     Callback = function() 
-        Rayfield:Notify({Title="알림", Content="초기화 완료", Duration=3}) 
+        Rayfield:Notify({Title="알림", Content="초기화 완료"}) 
     end
 })
 
-Rayfield:Notify({Title = "로딩 완료", Content = "네트워크 동기화 타이밍 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "모든 스크립트 로드 완료!", Duration = 3})
