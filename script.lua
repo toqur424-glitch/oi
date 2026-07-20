@@ -103,7 +103,7 @@ function loopPlayerBlobF4()
         for _, name in pairs(kickTargetList) do
             local player = Players:FindFirstChild(name)
             
-            -- [감지] 리셋/탈주/사망 시 초기화
+            -- [감지] 리셋/탈주/사망 시 상태 초기화
             if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
                 initializedTargets[name] = nil
                 continue
@@ -131,18 +131,19 @@ function loopPlayerBlobF4()
                     initializedTargets[player.Name] = true
                 end
                 
-                -- [강제 고정] 위치 및 상태
+                -- [기본 고정] 상태 유지
                 charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [교차 프레임 로직] 셋오너 & 디스트로이 교차 실행
+                -- [교차 프레임 로직] 셋오너 & 디스트로이 + 좌표 강제 고정
                 frameToggle = not frameToggle
                 if frameToggle then
                     for i = 1, 10 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                 else
+                    charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0) -- 디스트로이 시점에도 좌표 재고정
                     for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
                 end
             end
