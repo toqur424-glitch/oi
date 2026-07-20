@@ -1,0 +1,528 @@
+--=============================================
+-- 초기 설정 및 UI 라이브러리 로드
+--=============================================
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local plr = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local rs = ReplicatedStorage
+
+local GrabEvents = rs:WaitForChild("GrabEvents")
+local CreateGrabLine = GrabEvents:WaitForChild("CreateGrabLine")
+local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
+local DestroyGrabLine = GrabEvents:WaitForChild("DestroyGrabLine")
+
+-- UI 창 생성
+local Window = Rayfield:CreateWindow({
+    Name = "🔥 FSOF Extreme Kick Hub",
+    LoadingTitle = "스크립트 불러오는 중...",
+    LoadingSubtitle = "by Modified Script",
+    ToggleUIKeybind = "T", -- T 키를 누르면 UI가 켜지거나 숨겨집니다.
+    Theme = "Dark",
+    DisableRayfieldPrompts = false,
+    ConfigurationSaving = { Enabled = false }
+})
+
+--=============================================
+-- [1] GRAB 탭 (F키 극대화 킥그랩)
+--=============================================
+local GrabTab = Window:CreateTab("Grab (원격)", nil)
+GrabTab:CreateSection("=== 킥 그랩 (원격 타겟팅) ===")
+
+local function getScreenCenterTarget()
+    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    local ray = camera:ViewportPointToRay(screenCenter.X, screenCenter.Y)
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    if plr.Character then
+        raycastParams.FilterDescendantsInstances = {plr.Character}
+    end
+
+    local result = workspace:Raycast(ray.Origin, ray.Direction * 1000, raycastParams)
+    if result and result.Instance then
+        for _, pl in ipairs(Players:GetPlayers()) do
+            if pl ~= plr and pl.Character and result.Instance:IsDescendantOf(pl.Character) then
+                return pl
+            end
+        end
+    end
+    return nil
+end
+
+local fAttackTarget = nil
+local fAttackConnection = nil
+getgenv().FKeyAttackActive = false
+getgenv().KickGrabActive = false
+
+local function stopFKeyAttack()
+    getgenv().FKeyAttackActive = false
+    fAttackTarget = nil
+    if fAttackConnection then
+        fAttackConnection:Disconnect()
+        fAttackConnection = nil
+    end
+end
+
+local function startFKeyAttack(targetPlayer)
+    getgenv().FKeyAttackActive = true
+    fAttackTarget = targetPlayer
+    local isHrpFrame = true
+
+    fAttackConnection = RunService.RenderStepped:Connect(function()
+        if not getgenv().FKeyAttackActive or not fAttackTarget then
+            stopFKeyAttack()
+            return
+        end
+
+        local myChar = plr.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local tgtChar = fAttackTarget.Character
+        local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
+        local tgtTorso = tgtChar:FindFirstChild("Torso") or tgtChar:FindFirstChild("UpperTorso")
+        local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
+        
+        if not myRoot or not tgtRoot then return end
+
+        -- [극대화] 타겟 물리 속도 0으로 완벽 고정
+        tgtRoot.AssemblyLinearVelocity = Vector3.zero
+        tgtRoot.AssemblyAngularVelocity = Vector3.zero
+        if tgtTorso then
+            tgtTorso.AssemblyLinearVelocity = Vector3.zero
+            tgtTorso.AssemblyAngularVelocity = Vector3.zero
+        end
+        if tgtHum then
+            tgtHum.PlatformStand = true 
+        end
+
+        local camCF = camera.CFrame
+        local teleportPos = camCF.Position + camCF.LookVector * 20
+        pcall(function()
+            tgtRoot.CFrame = CFrame.new(teleportPos)
+        end)
+
+        local grabCFrame = CFrame.new(-0.090301513671875, 0.4190945625305176, 0.4999980926513672, 0.39632707834243774, 0, -0.9181094169616699, -1.0944717132588266e-07, 1, -4.7245869438938826e-08, 0.9181094169616699, 5.960464477539063e-08, 0.39632707834243774)
+
+        -- [극대화] 프레임당 4번 다중 연사 (킥 속도 극한)
+        for i = 1, 4 do
+            if isHrpFrame then
+                pcall(function()
+                    CreateGrabLine:FireServer(tgtRoot, grabCFrame)
+                    SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                    DestroyGrabLine:FireServer(tgtRoot)
+                end)
+            else
+                pcall(function()
+                    if tgtTorso then
+                        CreateGrabLine:FireServer(tgtTorso, grabCFrame)
+                        SetNetworkOwner:FireServer(tgtTorso, CFrame.lookAt(myRoot.Position, tgtTorso.Position))
+                        DestroyGrabLine:FireServer(tgtTorso)
+                    end
+                    CreateGrabLine:FireServer(tgtRoot, grabCFrame)
+                    SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                    DestroyGrabLine:FireServer(tgtRoot)
+                end)
+            end
+        end
+        isHrpFrame = not isHrpFrame
+    end)
+end
+
+GrabTab:CreateKeybind({
+    Name = "F키 조준 킥 그랩 (화면 중앙 대상)",
+    CurrentKeybind = "F",
+    HoldToInteract = false,
+    Callback = function()
+        if not getgenv().KickGrabActive then
+            getgenv().KickGrabActive = true
+            Rayfield:Notify({ Title = "Kick Grab", Content = "활성화됨 - F키를 눌러 화면 중앙 타겟 공격", Duration = 2 })
+            return
+        end
+
+        if getgenv().FKeyAttackActive then
+            stopFKeyAttack()
+            Rayfield:Notify({ Title = "Kick Grab", Content = "공격 중지됨", Duration = 1 })
+            return
+        end
+
+        local target = getScreenCenterTarget()
+        if not target then
+            Rayfield:Notify({ Title = "Kick Grab", Content = "화면 중앙에 타겟이 없습니다.", Duration = 2 })
+            return
+        end
+
+        local myChar = plr.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local tgtChar = target.Character
+        local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
+
+        if not myRoot or not tgtRoot then return end
+
+        local distance = (myRoot.Position - tgtRoot.Position).Magnitude
+        if distance > 25 then
+            Rayfield:Notify({ Title = "Kick Grab", Content = "타겟이 너무 멉니다 (최대 25)", Duration = 2 })
+            return
+        end
+
+        startFKeyAttack(target)
+        Rayfield:Notify({ Title = "Kick Grab", Content = target.Name .. " 공격 시작!", Duration = 2 })
+    end
+})
+
+--=============================================
+-- [2] KICK 탭 (Blobman 타겟팅 킥)
+--=============================================
+local KickTab = Window:CreateTab("Kick (블롭맨)", nil)
+KickTab:CreateSection("=== 타겟 목록 ===")
+
+local kickTargetList = {}
+local OwnerKickMODED = false
+local SitMODED = false
+local OnlyOwner = false
+local SkipOL = false
+local GRABMODE = false
+local OLTPValue = Vector3.new(0, 20, 0)
+local blobLoopT4 = false
+local currentBlobS = nil
+local lastTPTime = 0
+local TP_COOLDOWN = 1
+
+local kickDropdown = KickTab:CreateDropdown({
+    Name = "타겟 목록 (선택)",
+    Options = kickTargetList,
+    CurrentOption = {"OPEN"},
+    MultipleOptions = true,
+    Callback = function(opt)
+        kickTargetList = opt
+    end
+})
+
+KickTab:CreateInput({
+    Name = "타겟 추가 (유저네임 일부 입력)",
+    PlaceholderText = "여기에 이름 입력...",
+    RemoveTextAfterFocusLost = true,
+    Callback = function(v)
+        if v == "" then return end
+        local found = nil
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
+                found = p
+                break
+            end
+        end
+        if not found then return end
+        for _, n in ipairs(kickTargetList) do
+            if n == found.Name then return end
+        end
+        table.insert(kickTargetList, found.Name)
+        kickDropdown:Refresh(kickTargetList, true)
+    end
+})
+
+KickTab:CreateButton({
+    Name = "목록 초기화",
+    Callback = function()
+        kickTargetList = {}
+        kickDropdown:Refresh(kickTargetList, true)
+    end
+})
+
+KickTab:CreateSection("=== 블롭맨 셋오너 킥 실행 ===")
+
+-- 헬퍼 함수들
+local function UpdateCurrentBlobman()
+    local char = plr.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    for _, blobs in Workspace:GetDescendants() do
+        if blobs.Name == "CreatureBlobman" then
+            local seat = blobs:FindFirstChild("VehicleSeat")
+            if seat then
+                local weld = seat:FindFirstChild("SeatWeld")
+                if weld and weld.Part1 == hrp then
+                    currentBlobS = blobs
+                    break
+                end
+            end
+        end
+    end
+end
+
+local function BlobGrab(blob, target, side)
+    if not blob or not target then return end
+    local detector = blob:FindFirstChild(side.."Detector")
+    if not detector then return end
+    local weld = detector:FindFirstChild(side.."Weld")
+    if not weld then return end
+    local script = blob:FindFirstChild("BlobmanSeatAndOwnerScript")
+    if script and script:FindFirstChild("CreatureGrab") then
+        pcall(function() script.CreatureGrab:FireServer(detector, target, weld) end)
+    end
+end
+
+local function BlobRelease(blob, target, side)
+    if not blob or not target then return end
+    local detector = blob:FindFirstChild(side.."Detector")
+    if not detector then return end
+    local weld = detector:FindFirstChild(side.."Weld")
+    if not weld then return end
+    local script = blob:FindFirstChild("BlobmanSeatAndOwnerScript")
+    if script and script:FindFirstChild("CreatureRelease") then
+        pcall(function() script.CreatureRelease:FireServer(weld, target) end)
+    end
+end
+
+local function TP(target)
+    local now = tick()
+    if now - lastTPTime < TP_COOLDOWN then return false end
+    local TCHAR = target.Character
+    if not TCHAR then return false end
+    local THRP = TCHAR:FindFirstChild("Torso") or TCHAR:FindFirstChild("HumanoidRootPart")
+    if not THRP then return false end
+    local localChar = plr.Character
+    local localHRP = localChar and localChar:FindFirstChild("HumanoidRootPart")
+    if not localHRP then return false end
+    local ping = plr:GetNetworkPing()
+    local offset = THRP.Position + (THRP.Velocity * (ping + 0.15))
+    localHRP.CFrame = CFrame.new(offset) * THRP.CFrame.Rotation
+    lastTPTime = now
+    return true
+end
+
+local function UnOwner(target)
+    local head = target.Character:FindFirstChild("HumanoidRootPart")
+    if head and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        rs.GrabEvents.DestroyGrabLine:FireServer(head, head.CFrame)
+        return true
+    end
+    return false
+end
+
+local function BACK(originCF)
+    if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        plr.Character.HumanoidRootPart.CFrame = originCF
+        plr.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+        plr.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+    end
+end
+
+local function safeGetCharacterParts(player)
+    if not player then return nil end
+    local char = player.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local head = char:FindFirstChild("Head")
+    return char, hrp, head
+end
+
+local ownerKickInitialized = false
+
+function loopPlayerBlobF4()
+    UpdateCurrentBlobman()
+    local runningTasks = {}
+    local monitoredPlayers = {}
+    local independentHoldConnections = {}
+    local anchorToggleTasks = {}
+    local ownerTags = {}
+    local originPositions = {}
+    local bodyPositions = {}
+
+    local function cleanupBodyPosition(player)
+        if bodyPositions[player] and bodyPositions[player].Parent then
+            bodyPositions[player]:Destroy()
+        end
+        bodyPositions[player] = nil
+    end
+
+    local function processPlayer(player)
+        if not player then return end
+        while blobLoopT4 do
+            if not player.Parent then
+                cleanupBodyPosition(player)
+                return
+            end
+            local character = player.Character
+            while blobLoopT4 and (not character or not character:FindFirstChild("Humanoid")) do
+                if not player.Parent then return end
+                task.wait(0.001)
+                character = player.Character
+            end
+            local charHUM = character and character:FindFirstChild("Humanoid")
+            if not charHUM then task.wait(0.001) continue end
+            
+            local _, safeHRP, head = safeGetCharacterParts(player)
+            if not safeHRP or not head then task.wait(0.001) continue end
+            
+            local myChar = plr.Character
+            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            if not myHRP then task.wait(0.001) continue end
+            
+            local myOriginalCF = myHRP.CFrame
+            local charHRP = character:FindFirstChild("HumanoidRootPart")
+            local charTOR = character:FindFirstChild("Torso")
+            
+            if not ownerKickInitialized then
+                if charHUM and myHRP and charHRP then
+                    for i = 1, 30 do 
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    end
+                    task.wait(0.001)
+                end
+                ownerKickInitialized = true
+            end
+            
+            local distance = (myHRP.Position - charHRP.Position).Magnitude
+            if distance > 40 then TP(player) task.wait(0.001) end
+            
+            local tpRunning = true
+            task.spawn(function()
+                while tpRunning and blobLoopT4 do
+                    if not player.Parent then break end
+                    TP(player)
+                    task.wait(0.001)
+                end
+            end)
+            
+            local shouldContinue = false
+            while blobLoopT4 do
+                if not character.Parent or not charHUM or charHUM.Health <= 0 then 
+                    tpRunning = false
+                    shouldContinue = true
+                    break
+                end
+                local mySeat = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") and plr.Character:FindFirstChildOfClass("Humanoid").SeatPart
+                local amIRiding = mySeat and mySeat.Parent and mySeat.Parent.Name == "CreatureBlobman"
+                rs.GrabEvents.SetNetworkOwner:FireServer(head, head.CFrame)
+                local ownerTag = head:FindFirstChild("PartOwner")
+                if ownerTag and ownerTag:IsA("StringValue") and ownerTag.Value == plr.Name then
+                    break
+                else
+                    if amIRiding then
+                        BlobGrab(currentBlobS, charHRP, "Right")
+                        BlobRelease(currentBlobS, charHRP, "Right")
+                    end
+                end
+                task.wait(0.001)
+            end
+            
+            if not shouldContinue then
+                tpRunning = false
+                UnOwner(player)
+                if myOriginalCF then
+                    charHRP.CFrame = myOriginalCF * CFrame.new(0, OLTPValue.Y, 0)
+                    task.wait(0.001)
+                end
+                BACK(myOriginalCF)
+                
+                cleanupBodyPosition(player)
+                
+                -- [극대화] 무한 홀딩 BodyPosition
+                local bp = Instance.new("BodyPosition")
+                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bp.P = math.huge
+                bp.D = 50
+                bp.Parent = charHRP
+                bodyPositions[player] = bp
+                
+                independentHoldConnections[player] = RunService.Heartbeat:Connect(function()
+                    if not blobLoopT4 or not character or not character.Parent or not charHRP or not charHUM or charHUM.Health <= 0 then
+                        if independentHoldConnections[player] then independentHoldConnections[player]:Disconnect() end
+                        cleanupBodyPosition(player)
+                        return
+                    end
+                    
+                    -- [극대화] 타겟 완벽 고정
+                    charHRP.AssemblyLinearVelocity = Vector3.zero
+                    charHRP.AssemblyAngularVelocity = Vector3.zero
+                    if charTOR then
+                        charTOR.AssemblyLinearVelocity = Vector3.zero
+                        charTOR.AssemblyAngularVelocity = Vector3.zero
+                    end
+                    charHUM.PlatformStand = true
+                    
+                    local currentDistance = (myHRP.Position - charHRP.Position).Magnitude
+                    if currentDistance > 50 then
+                        TP(player)
+                        if myOriginalCF then charHRP.CFrame = myOriginalCF * CFrame.new(0, OLTPValue.Y, 0) end
+                        BACK(myOriginalCF)
+                    end
+                    
+                    -- [극대화] 연사 속도
+                    local currentSeat = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") and plr.Character:FindFirstChildOfClass("Humanoid").SeatPart
+                    local isRidingNow = currentSeat and currentSeat.Parent and currentSeat.Parent.Name == "CreatureBlobman"
+                    
+                    for i = 1, 3 do
+                        if not isRidingNow then
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) 
+                        else
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) 
+                        end
+                    end
+                    
+                    if blobLoopT4 and bodyPositions[player] and bodyPositions[player].Parent then
+                        bodyPositions[player].Position = myHRP.Position + OLTPValue
+                    end
+                end)
+                
+                while blobLoopT4 do
+                    if not character.Parent or not charHRP.Parent or charHUM.Health <= 0 then 
+                        if independentHoldConnections[player] then independentHoldConnections[player]:Disconnect() end
+                        cleanupBodyPosition(player)
+                        break 
+                    end
+                    task.wait(0.001)
+                end
+                cleanupBodyPosition(player)
+            end
+            task.wait(0.001)
+        end
+    end
+
+    task.spawn(function()
+        while blobLoopT4 do
+            for _, name in ipairs(kickTargetList) do
+                local player = game.Players:FindFirstChild(name)
+                if not player or player == plr then continue end
+                if not monitoredPlayers[player] then
+                    monitoredPlayers[player] = true
+                    if not runningTasks[player] then
+                        runningTasks[player] = task.spawn(function()
+                            pcall(function() processPlayer(player) end)
+                            runningTasks[player] = nil
+                            monitoredPlayers[player] = nil
+                        end)
+                    end
+                end
+            end
+            task.wait(0.001)
+        end
+        ownerKickInitialized = false
+    end)
+end
+
+KickTab:CreateToggle({
+    Name = "블롭맨 오너 킥 실행 (ON/OFF)",
+    CurrentValue = false,
+    Callback = function(Value)
+        blobLoopT4 = Value
+        if Value then
+            task.spawn(loopPlayerBlobF4)
+            Rayfield:Notify({Title = "Owner Kick", Content = "실행됨! (타겟 목록을 묶습니다)", Duration = 2})
+        else
+            Rayfield:Notify({Title = "Owner Kick", Content = "정지됨.", Duration = 2})
+        end
+    end
+})
+
+-- 로딩 완료 알림
+Rayfield:Notify({
+    Title = "성공!",
+    Content = "스크립트 로딩이 완료되었습니다.",
+    Duration = 3
+})
