@@ -113,28 +113,24 @@ function loopPlayerBlobF4()
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
-                if (charHRP.Position - myHRP.Position).Magnitude > 200 then
-                    initializedTargets[player.Name] = nil
-                end
-                
-                -- [극대화된 고정] 매 루프마다 좌표 강제 주입
+                -- [강력한 위치 강제 주입]
                 charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [속도 및 고정력 최상위 강화] 연사 횟수 5배 상향 및 대기 시간 제거
+                -- [핑 안 터지게 연사량 최적화 + 고정력 강화]
                 frameToggle = not frameToggle
                 if frameToggle then
-                    for i = 1, 75 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                    for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                 else
                     charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
-                    for i = 1, 50 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
+                    for i = 1, 15 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
                 end
             end
         end
-        RunService.RenderStepped:Wait() -- 틱 속도 극대화
+        task.wait() -- 핑 안정화를 위해 RenderStepped:Wait 대신 task.wait() 사용
     end
 end
 
