@@ -16,118 +16,6 @@ local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
--- =====================================================================
--- [ 판자 레그돌 코어 로직 ] (UI 로드 전 미리 함수 정의)
--- =====================================================================
-local MenuToys = rs:WaitForChild("MenuToys", 5)
-local GrabEvents = rs:WaitForChild("GrabEvents", 5)
-
-local isActive = false
-local ragdollConnection
-local palletToy
-local ragdollTargetName = "" -- 레그돌 타겟 저장용 변수
-
-local function StopPalletRagdoll()
-    isActive = false
-    if ragdollConnection then
-        ragdollConnection:Disconnect()
-        ragdollConnection = nil
-    end
-    if palletToy and palletToy.Parent then
-        local DestroyToy = MenuToys:FindFirstChild("DestroyToy")
-        if DestroyToy then DestroyToy:FireServer(palletToy) end
-    end
-end
-
-local function StartPalletRagdoll(targetName)
-    StopPalletRagdoll() 
-    isActive = true
-
-    local targetPlayer = nil
-    -- 입력한 이름과 일치하는 유저 찾기 (대소문자 무관, 부분 일치 지원)
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Name:lower():find(targetName:lower()) or (p.DisplayName and p.DisplayName:lower():find(targetName:lower())) then
-            targetPlayer = p
-            break
-        end
-    end
-
-    if not targetPlayer then 
-        Rayfield:Notify({Title = "오류", Content = "해당 유저를 찾을 수 없습니다.", Duration = 2})
-        isActive = false
-        return 
-    end
-
-    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
-
-    local SpawnToy = MenuToys:FindFirstChild("SpawnToyRemoteFunction")
-    local SetNetOwner = GrabEvents:FindFirstChild("SetNetworkOwner")
-    local DestroyLine = GrabEvents:FindFirstChild("DestroyGrabLine")
-
-    if not (SpawnToy and SetNetOwner and DestroyLine) then return end
-
-    -- 판자 소환
-    SpawnToy:InvokeServer("PalletLightBrown", myHRP.CFrame * CFrame.new(0, 10, 20), Vector3.zero)
-
-    local toysFolder = workspace:WaitForChild(plr.Name .. "SpawnedInToys", 5)
-    if not toysFolder then return end
-
-    palletToy = toysFolder:WaitForChild("PalletLightBrown", 5)
-    if not palletToy then return end
-
-    local soundPart = palletToy:WaitForChild("SoundPart", 3)
-    if not soundPart then return end
-
-    -- 네트워크 소유권 및 투명화 처리
-    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-    DestroyLine:FireServer(soundPart)
-
-    for _, part in pairs(palletToy:GetChildren()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-            part.CanQuery = false
-            part.Transparency = 1 
-        end
-    end
-
-    local strikePhase = false
-
-    -- 물리 타격 루프 (RunService.Stepped 사용)
-    ragdollConnection = RunService.Stepped:Connect(function()
-        if not isActive or not palletToy.Parent then 
-            StopPalletRagdoll()
-            return 
-        end
-
-        local tChar = targetPlayer.Character
-        local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-
-        if tRoot and tHum and tHum.Health > 0 then
-            local ragdolledVal = tHum:FindFirstChild("Ragdolled")
-            local isRagdolled = ragdolledVal and ragdolledVal.Value or false
-
-            if not isRagdolled then
-                strikePhase = not strikePhase
-                if strikePhase then
-                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
-                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
-                else
-                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
-                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
-                end
-            else
-                soundPart.CFrame = CFrame.new(0, 9e9, 0)
-                soundPart.AssemblyLinearVelocity = Vector3.zero
-            end
-        else
-            soundPart.CFrame = CFrame.new(0, 9e9, 0)
-            soundPart.AssemblyLinearVelocity = Vector3.zero
-        end
-    end)
-end
-
 --=============================================
 -- [UI 생성]
 --=============================================
@@ -237,7 +125,7 @@ function loopPlayerBlobF4()
                     task.spawn(function()
                         local originalCF = myHRP.CFrame
                         myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                        task.wait(0.15) 
+                        task.wait(0.15)
                         
                         pcall(function()
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
@@ -320,43 +208,142 @@ KickTab:CreateInput({
 })
 
 --=============================================
--- [PALLET RAGDOLL 탭] - 판자 레그돌 (UI 수정 완료)
+-- [판자 레그돌 탭 통합]
 --=============================================
-local PalletTab = Window:CreateTab("Pallet Ragdoll (판자)", nil)
-PalletTab:CreateSection("판자 레그돌 (투명 초고속 타격)")
+local MenuToys = rs:WaitForChild("MenuToys", 5)
+local GrabEvents = rs:WaitForChild("GrabEvents", 5)
+
+local isPalletActive = false
+local ragdollConnection
+local palletToy
+local targetPlayerName = ""
+
+local function StopPalletRagdoll()
+    isPalletActive = false
+    if ragdollConnection then
+        ragdollConnection:Disconnect()
+        ragdollConnection = nil
+    end
+    if palletToy and palletToy.Parent then
+        local DestroyToy = MenuToys and MenuToys:FindFirstChild("DestroyToy")
+        if DestroyToy then DestroyToy:FireServer(palletToy) end
+    end
+end
+
+local function StartPalletRagdoll(targetName)
+    StopPalletRagdoll()
+    isPalletActive = true
+
+    local targetPlayer = Players:FindFirstChild(targetName)
+    if not targetPlayer then 
+        Rayfield:Notify({Title = "오류", Content = "플레이어를 찾을 수 없습니다.", Duration = 2})
+        return 
+    end
+
+    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+
+    local SpawnToy = MenuToys and MenuToys:FindFirstChild("SpawnToyRemoteFunction")
+    local SetNetOwner = GrabEvents and GrabEvents:FindFirstChild("SetNetworkOwner")
+    local DestroyLine = GrabEvents and GrabEvents:FindFirstChild("DestroyGrabLine")
+
+    if not (SpawnToy and SetNetOwner and DestroyLine) then return end
+
+    SpawnToy:InvokeServer("PalletLightBrown", myHRP.CFrame * CFrame.new(0, 10, 20), Vector3.zero)
+
+    local toysFolder = workspace:WaitForChild(plr.Name .. "SpawnedInToys", 5)
+    if not toysFolder then return end
+
+    palletToy = toysFolder:WaitForChild("PalletLightBrown", 5)
+    if not palletToy then return end
+
+    local soundPart = palletToy:WaitForChild("SoundPart", 3)
+    if not soundPart then return end
+
+    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
+    DestroyLine:FireServer(soundPart)
+
+    for _, part in pairs(palletToy:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+            part.CanQuery = false
+            part.Transparency = 1 
+        end
+    end
+
+    local strikePhase = false
+
+    ragdollConnection = RunService.Stepped:Connect(function()
+        if not isPalletActive or not palletToy.Parent then 
+            StopPalletRagdoll()
+            return 
+        end
+
+        local tChar = targetPlayer.Character
+        local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+
+        if tRoot and tHum and tHum.Health > 0 then
+            local ragdolledVal = tHum:FindFirstChild("Ragdolled")
+            local isRagdolled = ragdolledVal and ragdolledVal.Value or false
+
+            if not isRagdolled then
+                strikePhase = not strikePhase
+                if strikePhase then
+                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
+                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
+                else
+                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
+                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
+                end
+            else
+                soundPart.CFrame = CFrame.new(0, 9e9, 0)
+                soundPart.AssemblyLinearVelocity = Vector3.zero
+            end
+        else
+            soundPart.CFrame = CFrame.new(0, 9e9, 0)
+            soundPart.AssemblyLinearVelocity = Vector3.zero
+        end
+    end)
+end
+
+local PalletTab = Window:CreateTab("판자 레그돌", nil)
 
 PalletTab:CreateInput({
     Name = "타겟 플레이어 이름",
-    PlaceholderText = "닉네임의 일부만 적어도 작동",
-    RemoveTextAfterFocusLost = false,
+    PlaceholderText = "예: Player1",
+    RemoveTextAfterFocusLost = true,
     Callback = function(Value)
-        ragdollTargetName = Value
-    end
+        targetPlayerName = Value
+    end	  
 })
 
 PalletTab:CreateToggle({
     Name = "판자 레그돌 (On/Off)",
     CurrentValue = false,
-    Flag = "PalletToggle",
     Callback = function(Value)
         if Value then
-            if ragdollTargetName ~= "" then
-                StartPalletRagdoll(ragdollTargetName)
-                Rayfield:Notify({Title = "실행", Content = ragdollTargetName.."에게 레그돌 실행 중!", Duration = 2})
+            if targetPlayerName ~= "" then
+                StartPalletRagdoll(targetPlayerName)
             else
-                Rayfield:Notify({Title = "경고", Content = "타겟 플레이어 이름을 먼저 입력하세요.", Duration = 2})
+                Rayfield:Notify({Title = "알림", Content = "타겟 플레이어 이름을 먼저 입력하세요.", Duration = 2})
             end
         else
             StopPalletRagdoll()
-            Rayfield:Notify({Title = "중지", Content = "판자 레그돌이 중지되었습니다.", Duration = 2})
         end
-    end
+    end    
 })
 
 --=============================================
--- [SETTINGS 탭]
+-- [Settings 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
-SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
+SettingsTab:CreateButton({
+    Name = "재설정", 
+    Callback = function() 
+        StopPalletRagdoll()
+        Rayfield:Notify({Title="알림", Content="초기화 완료", Duration=2}) 
+    end
+})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "모든 스크립트가 성공적으로 로드되었습니다.", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "네트워크 동기화 타이밍 최적화 완료", Duration = 3})
