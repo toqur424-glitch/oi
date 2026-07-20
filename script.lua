@@ -102,24 +102,18 @@ function loopPlayerBlobF4()
             if player and player.Character then
                 local charHRP = player.Character:FindFirstChild("HumanoidRootPart")
                 local charHUM = player.Character:FindFirstChild("Humanoid")
-                if charHRP and charHUM then
-                    -- [고정] 머리 위 Y=25 고정 로직
-                    local bp = charHRP:FindFirstChild("FixPos")
-                    if not bp then
-                        bp = Instance.new("BodyPosition")
-                        bp.Name = "FixPos"
-                        bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                        bp.P = 10000
-                        bp.Parent = charHRP
-                    end
-                    bp.Position = plr.Character.HumanoidRootPart.Position + Vector3.new(0, 25, 0)
+                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                
+                if charHRP and charHUM and myHRP then
+                    -- [루프 고정] 상대방을 내 머리 위 25좌표로 계속 덮어씌움
+                    charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                     
                     -- [극대화] 강제 고정력
                     charHRP.AssemblyLinearVelocity = Vector3.zero
                     charHUM.PlatformStand = true
                     -- [극대화] 리모트 연사
                     for i = 1, 3 do
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, charHRP.Position))
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end
                 end
             end
