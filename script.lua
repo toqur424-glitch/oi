@@ -132,3 +132,35 @@ local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
 Rayfield:Notify({Title = "로딩 완료", Content = "강력한 킥 스크립트 적용됨", Duration = 3})
+
+KickTab:CreateInput({
+    Name = "Add Target (여기에 닉네임 입력)",
+    PlaceholderText = "예: Player1",
+    RemoveTextAfterFocusLost = true,
+    Callback = function(v)
+        if v == "" then return end
+        local found = nil
+        -- 입력한 이름과 일치하는 유저를 서버 내에서 자동으로 찾습니다.
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
+                found = p
+                break
+            end
+        end
+        
+        if not found then 
+            Rayfield:Notify({Title = "오류", Content = "해당 유저를 찾을 수 없습니다.", Duration = 2})
+            return 
+        end
+        
+        -- 이미 추가된 유저인지 중복 체크
+        for _, n in ipairs(kickTargetList) do
+            if n == found.Name then return end
+        end
+        
+        -- 리스트에 추가
+        table.insert(kickTargetList, found.Name)
+        kickDropdown:Refresh(kickTargetList, true)
+        Rayfield:Notify({Title = "추가됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
+    end
+})
