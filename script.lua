@@ -102,7 +102,7 @@ function loopPlayerBlobF4()
         for _, name in pairs(kickTargetList) do
             local player = Players:FindFirstChild(name)
             
-            -- [감지] 리셋/탈주 시 상태 초기화
+            -- [감지] 리셋/탈주/사망 시 상태 초기화
             if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
                 initializedTargets[name] = nil
                 continue
@@ -113,7 +113,7 @@ function loopPlayerBlobF4()
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
-                -- [범위 감지] 멀어지면 재연결 시도
+                -- [재연결 감지] 범위 이탈 시 초기화
                 if (charHRP.Position - myHRP.Position).Magnitude > 200 then
                     initializedTargets[player.Name] = nil
                 end
@@ -123,21 +123,24 @@ function loopPlayerBlobF4()
                     local originalCF = myHRP.CFrame
                     myHRP.CFrame = charHRP.CFrame
                     task.wait(0.1) 
-                    for i = 1, 20 do
+                    for i = 1, 25 do -- 권한 탈취 강화
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end
                     myHRP.CFrame = originalCF
                     initializedTargets[player.Name] = true
                 end
                 
-                -- [루프 고정] 머리 위 25 고정
+                -- [강제 고정] 캐릭터 물리 상태 강제 유지
                 charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHUM.PlatformStand = true
                 
-                -- [유지] 리모트 연사 속도 극대화
-                for i = 1, 10 do
+                -- [강제 물리 고정] 땅에 붙는 현상 방지
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                
+                -- [제어권 유지] 리모트 연사 속도 극대화
+                for i = 1, 20 do
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 end
             end
