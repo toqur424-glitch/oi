@@ -103,6 +103,17 @@ function loopPlayerBlobF4()
                 local charHRP = player.Character:FindFirstChild("HumanoidRootPart")
                 local charHUM = player.Character:FindFirstChild("Humanoid")
                 if charHRP and charHUM then
+                    -- [고정] 머리 위 Y=25 고정 로직
+                    local bp = charHRP:FindFirstChild("FixPos")
+                    if not bp then
+                        bp = Instance.new("BodyPosition")
+                        bp.Name = "FixPos"
+                        bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                        bp.P = 10000
+                        bp.Parent = charHRP
+                    end
+                    bp.Position = plr.Character.HumanoidRootPart.Position + Vector3.new(0, 25, 0)
+                    
                     -- [극대화] 강제 고정력
                     charHRP.AssemblyLinearVelocity = Vector3.zero
                     charHUM.PlatformStand = true
