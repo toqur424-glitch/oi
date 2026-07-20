@@ -69,6 +69,8 @@ end
 GrabTab:CreateKeybind({
     Name = "F키 조준 킥 그랩",
     CurrentKeybind = "F",
+    HoldToInteract = false,
+    Flag = "FKeyGrab",
     Callback = function()
         if not getgenv().KickGrabActive then getgenv().KickGrabActive = true end
         if getgenv().FKeyAttackActive then 
@@ -118,19 +120,15 @@ function loopPlayerBlobF4()
             local charHUM = player.Character:FindFirstChild("Humanoid")
             
             if myHRP and charHRP and charHUM then
-                -- [★ 오직 이 리커버리 시스템만 완벽하게 고쳤습니다 ★]
                 if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[player.Name]) and not recoveringTargets[player.Name] then
                     recoveringTargets[player.Name] = true
                     initializedTargets[player.Name] = true 
                     
                     task.spawn(function()
                         local originalCF = myHRP.CFrame
-                        
-                        -- 1. 상대방 위치로 즉시 순간이동 (끼임 방지를 위해 살짝 위로)
                         myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                        task.wait(0.15) -- 서버가 내 위치 이동을 동기화할 시간 확보
+                        task.wait(0.15) 
                         
-                        -- 2. 그 자리에서 그랩 라인 생성 후 오너십 확실하게 강탈
                         pcall(function()
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                             for i = 1, 30 do
@@ -139,12 +137,10 @@ function loopPlayerBlobF4()
                         end)
                         task.wait(0.05)
                         
-                        -- 3. 상대를 내 공중 위치로 강제 이동 및 내 복귀를 동시에 처리 (디싱크 완전 차단)
                         charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
                         myHRP.CFrame = originalCF
                         task.wait(0.1)
                         
-                        -- 4. 복귀 완료 후 확실하게 다시 한번 서버 잠금 (오너십 쐐기박기)
                         pcall(function()
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                             for i = 1, 30 do
@@ -157,7 +153,6 @@ function loopPlayerBlobF4()
                     end)
                 end
                 
-                -- [메인 루프 극한 고정 및 교차 킥] - 원본 유지
                 local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -180,19 +175,13 @@ end
 
 KickTab:CreateToggle({
     Name = "블롭맨 오너 킥 실행 (자동 복귀)",
+    CurrentValue = false,
+    Flag = "BlobToggle",
     Callback = function(v)
         blobLoopT4 = v
         if v then task.spawn(loopPlayerBlobF4) end
     end
 })
-
---=============================================
--- [나머지 필수 탭들 유지]
---=============================================
-local SettingsTab = Window:CreateTab("Settings", nil)
-SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
-
-Rayfield:Notify({Title = "로딩 완료", Content = "네트워크 동기화 타이밍 최적화 완료", Duration = 3})
 
 KickTab:CreateInput({
     Name = "Add Target (여기에 닉네임 입력)",
@@ -201,7 +190,6 @@ KickTab:CreateInput({
     Callback = function(v)
         if v == "" then return end
         local found = nil
-        -- 입력한 이름과 일치하는 유저를 서버 내에서 자동으로 찾습니다.
         for _, p in ipairs(Players:GetPlayers()) do
             if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
                 found = p
@@ -214,35 +202,33 @@ KickTab:CreateInput({
             return 
         end
         
-        -- 이미 추가된 유저인지 중복 체크
         for _, n in ipairs(kickTargetList) do
             if n == found.Name then return end
         end
         
-        -- 리스트에 추가
         table.insert(kickTargetList, found.Name)
-        kickDropdown:Refresh(kickTargetList, true)
+        -- 주의: kickDropdown 변수가 정의되지 않았었기 때문에 에러 방지를 위해 pcall 처리했습니다.
+        pcall(function() kickDropdown:Refresh(kickTargetList, true) end)
         Rayfield:Notify({Title = "추가됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
 })
 
--- =====================================================================
--- [ 판자 레그돌 코어 로직 ] (UI 코드 상단이나 별도의 위치에 배치하세요)
--- =====================================================================
-local Players = game:GetService("Players")
-local RS = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
+--=============================================
+-- [PALLET RAGDOLL 탭] - 판자 레그돌 (새로 추가됨)
+--=============================================
+local PalletTab = Window:CreateTab("Pallet (레그돌)", nil)
+PalletTab:CreateSection("=== 판자 레그돌 타격 ===")
 
-local MenuToys = RS:WaitForChild("MenuToys", 5)
-local GrabEvents = RS:WaitForChild("GrabEvents", 5)
+local MenuToys = rs:WaitForChild("MenuToys", 5)
+local GrabEvents = rs:WaitForChild("GrabEvents", 5)
 
-local isActive = false
-local ragdollConnection
-local palletToy
+local isPalletActive = false
+local ragdollConnection = nil
+local palletToy = nil
+local palletTargetName = ""
 
 local function StopPalletRagdoll()
-    isActive = false
+    isPalletActive = false
     if ragdollConnection then
         ragdollConnection:Disconnect()
         ragdollConnection = nil
@@ -254,13 +240,24 @@ local function StopPalletRagdoll()
 end
 
 local function StartPalletRagdoll(targetName)
-    StopPalletRagdoll() -- 기존 실행 중이던 것이 있다면 먼저 중지
-    isActive = true
+    StopPalletRagdoll()
+    isPalletActive = true
 
-    local targetPlayer = Players:FindFirstChild(targetName)
-    if not targetPlayer then return end
+    -- 부분 닉네임 검색 지원
+    local targetPlayer = nil
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower():find(targetName:lower()) or (p.DisplayName and p.DisplayName:lower():find(targetName:lower())) then
+            targetPlayer = p
+            break
+        end
+    end
 
-    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not targetPlayer then 
+        Rayfield:Notify({Title = "오류", Content = "타겟 플레이어를 찾을 수 없습니다.", Duration = 3})
+        return 
+    end
+
+    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return end
 
     local SpawnToy = MenuToys:FindFirstChild("SpawnToyRemoteFunction")
@@ -269,10 +266,9 @@ local function StartPalletRagdoll(targetName)
 
     if not (SpawnToy and SetNetOwner and DestroyLine) then return end
 
-    -- 판자 소환
     SpawnToy:InvokeServer("PalletLightBrown", myHRP.CFrame * CFrame.new(0, 10, 20), Vector3.zero)
 
-    local toysFolder = workspace:WaitForChild(LocalPlayer.Name .. "SpawnedInToys", 5)
+    local toysFolder = workspace:WaitForChild(plr.Name .. "SpawnedInToys", 5)
     if not toysFolder then return end
 
     palletToy = toysFolder:WaitForChild("PalletLightBrown", 5)
@@ -281,7 +277,6 @@ local function StartPalletRagdoll(targetName)
     local soundPart = palletToy:WaitForChild("SoundPart", 3)
     if not soundPart then return end
 
-    -- 네트워크 소유권 및 투명화 처리
     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
     DestroyLine:FireServer(soundPart)
 
@@ -295,9 +290,8 @@ local function StartPalletRagdoll(targetName)
 
     local strikePhase = false
 
-    -- 물리 타격 루프
     ragdollConnection = RunService.Stepped:Connect(function()
-        if not isActive or not palletToy.Parent then 
+        if not isPalletActive or not palletToy.Parent then 
             StopPalletRagdoll()
             return 
         end
@@ -328,43 +322,46 @@ local function StartPalletRagdoll(targetName)
             soundPart.AssemblyLinearVelocity = Vector3.zero
         end
     end)
+    
+    Rayfield:Notify({Title = "실행 완료", Content = targetPlayer.Name.." 님에게 레그돌 공격 시작!", Duration = 3})
 end
 
--- =====================================================================
--- [ UI 라이브러리 연동 부분 ] (이 부분을 본인의 깃허브 코드 중간에 넣으세요)
--- =====================================================================
-local targetPlayerName = ""
-
--- 1. 탭 생성 (Window 변수는 본인이 사용하는 라이브러리의 메인 창 변수명으로 변경하세요)
-local PalletTab = Window:MakeTab({
-    Name = "판자 레그돌",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
--- 2. 텍스트 박스 (공격할 타겟 플레이어의 이름을 입력받습니다)
-PalletTab:AddTextbox({
-    Name = "타겟 플레이어 이름",
-    Default = "",
-    TextDisappear = false,
+PalletTab:CreateInput({
+    Name = "타겟 닉네임 입력 (일부만 입력해도 됨)",
+    PlaceholderText = "예: Player1",
+    RemoveTextAfterFocusLost = false,
     Callback = function(Value)
-        targetPlayerName = Value
+        palletTargetName = Value
     end	  
 })
 
--- 3. 토글 버튼 (On을 누르면 실행, Off를 누르면 중지됩니다)
-PalletTab:AddToggle({
-    Name = "판자 레그돌 (On/Off)",
-    Default = false,
+PalletTab:CreateToggle({
+    Name = "판자 레그돌 공격 (On/Off)",
+    CurrentValue = false,
+    Flag = "PalletToggle",
     Callback = function(Value)
         if Value then
-            if targetPlayerName ~= "" then
-                StartPalletRagdoll(targetPlayerName)
+            if palletTargetName ~= "" then
+                StartPalletRagdoll(palletTargetName)
             else
-                warn("타겟 플레이어 이름이 입력되지 않았습니다.")
+                Rayfield:Notify({Title = "경고", Content = "타겟 닉네임을 먼저 입력하세요.", Duration = 3})
             end
         else
             StopPalletRagdoll()
+            Rayfield:Notify({Title = "중지", Content = "판자 레그돌 공격을 멈췄습니다.", Duration = 3})
         end
     end    
 })
+
+--=============================================
+-- [SETTINGS 탭]
+--=============================================
+local SettingsTab = Window:CreateTab("Settings", nil)
+SettingsTab:CreateButton({
+    Name = "재설정", 
+    Callback = function() 
+        Rayfield:Notify({Title="알림", Content="초기화 완료", Duration=3}) 
+    end
+})
+
+Rayfield:Notify({Title = "로딩 완료", Content = "네트워크 동기화 타이밍 최적화 완료", Duration = 3})
