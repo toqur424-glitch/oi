@@ -122,8 +122,8 @@ function loopPlayerBlobF4()
                 if not initializedTargets[player.Name] then
                     local originalCF = myHRP.CFrame
                     myHRP.CFrame = charHRP.CFrame
-                    task.wait(0.2) 
-                    for i = 1, 10 do
+                    task.wait(0.1) 
+                    for i = 1, 20 do
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end
                     myHRP.CFrame = originalCF
@@ -136,13 +136,13 @@ function loopPlayerBlobF4()
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 
-                -- [유지] 리모트 연사
-                for i = 1, 3 do
+                -- [유지] 리모트 연사 속도 극대화
+                for i = 1, 10 do
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 end
             end
         end
-        task.wait(0.001)
+        task.wait(0.0001)
     end
 end
 
