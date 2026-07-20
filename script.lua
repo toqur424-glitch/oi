@@ -97,12 +97,13 @@ local kickTargetList = {}
 -- [극대화] 오너 킥 루프
 function loopPlayerBlobF4()
     local initializedTargets = {}
+    local frameToggle = false
     
     while blobLoopT4 do
         for _, name in pairs(kickTargetList) do
             local player = Players:FindFirstChild(name)
             
-            -- [감지] 리셋/탈주/사망 시 상태 초기화
+            -- [감지] 리셋/탈주/사망 시 초기화
             if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
                 initializedTargets[name] = nil
                 continue
@@ -123,25 +124,26 @@ function loopPlayerBlobF4()
                     local originalCF = myHRP.CFrame
                     myHRP.CFrame = charHRP.CFrame
                     task.wait(0.1) 
-                    for i = 1, 25 do -- 권한 탈취 강화
+                    for i = 1, 20 do
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end
                     myHRP.CFrame = originalCF
                     initializedTargets[player.Name] = true
                 end
                 
-                -- [강제 고정] 캐릭터 물리 상태 강제 유지
+                -- [강제 고정] 위치 및 상태
                 charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
-                
-                -- [강제 물리 고정] 땅에 붙는 현상 방지
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [제어권 유지] 리모트 연사 속도 극대화
-                for i = 1, 20 do
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                -- [교차 프레임 로직] 셋오너 & 디스트로이 교차 실행
+                frameToggle = not frameToggle
+                if frameToggle then
+                    for i = 1, 10 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                else
+                    for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
                 end
             end
         end
