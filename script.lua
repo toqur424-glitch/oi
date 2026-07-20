@@ -109,7 +109,6 @@ function loopPlayerBlobF4()
             local player = Players:FindFirstChild(name)
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
-            -- 상대방 사망 및 리스폰 감지 시 상태 초기화
             if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
                 initializedTargets[name] = nil
                 continue
@@ -119,37 +118,38 @@ function loopPlayerBlobF4()
             local charHUM = player.Character:FindFirstChild("Humanoid")
             
             if myHRP and charHRP and charHUM then
-                -- [수정된 자동 리커버리: 가져오고 셋오너 거는 방식]
+                -- [동기화 딜레이가 수정된 리커버리 시스템]
                 if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[player.Name]) and not recoveringTargets[player.Name] then
                     recoveringTargets[player.Name] = true
-                    initializedTargets[player.Name] = true -- 중복 진입 즉시 차단
+                    initializedTargets[player.Name] = true 
                     
                     task.spawn(function()
                         local originalCF = myHRP.CFrame
                         
                         -- 1. 상대방 위치로 즉시 순간이동
                         myHRP.CFrame = charHRP.CFrame
-                        task.wait(0.03)
+                        task.wait(0.12) -- 서버가 내 위치 변경을 인지할 충분한 시간 확보
                         
-                        -- 2. 그 자리에서 오너십을 먼저 강탈하여 내 클라이언트에 종속시킴
+                        -- 2. 그 자리에서 오너십 강탈
                         for i = 1, 40 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
+                        task.wait(0.05) -- 패킷 서버 도달 대기
                         
-                        -- 3. 상대를 내 위치(공중 타겟 좌표)로 강제로 잡아 끌어옴 (가져오기)
+                        -- 3. 상대를 내 위치(공중)로 강제 이동 (가져오기)
                         charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
-                        task.wait(0.02)
+                        task.wait(0.1) -- 물리적 당겨오기가 네트워크에 반영될 시간 확보
                         
                         -- 4. 원래 내 위치로 복귀
                         myHRP.CFrame = originalCF
-                        task.wait(0.03)
+                        task.wait(0.1) -- 내 복귀 동기화 대기
                         
-                        -- 5. 복귀 완료 후 다시 한 번 셋오너를 연사하여 락(Lock)을 걸어버림
+                        -- 5. 복귀 완료 후 확실하게 다시 한번 락(Lock)
                         for i = 1, 40 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                         
-                        task.wait(0.2) -- 완전 안정화 대기
+                        task.wait(0.3) -- 완벽한 안정화 유예 (거리 체크 오작동 방지)
                         recoveringTargets[player.Name] = nil
                     end)
                 end
@@ -189,7 +189,7 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "리커버리 순서 재정렬 및 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "네트워크 동기화 타이밍 최적화 완료", Duration = 3})
 
 KickTab:CreateInput({
     Name = "Add Target (여기에 닉네임 입력)",
