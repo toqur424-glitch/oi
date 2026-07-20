@@ -29,6 +29,23 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
+-- [TARGET 탭] - 추가된 타겟 설정 기능
+--=============================================
+local TargetTab = Window:CreateTab("Target (대상)", nil)
+TargetTab:CreateSection("=== 특정 타겟 지정 ===")
+
+getgenv().TargetPlayerName = ""
+
+TargetTab:CreateInput({
+    Name = "타겟 닉네임 입력",
+    PlaceholderText = "닉네임 입력 (빈칸 시 전체/기본 대상)",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        getgenv().TargetPlayerName = Text
+    end,
+})
+
+--=============================================
 -- [GRAB 탭] - 극대화된 킥 그랩 (F키)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
@@ -76,11 +93,30 @@ GrabTab:CreateKeybind({
             if fAttackConnection then fAttackConnection:Disconnect() end
             return 
         end
+        
         local target = nil 
-        for _, p in pairs(Players:GetPlayers()) do 
-            if p ~= plr and p.Character then target = p break end 
+        local searchName = getgenv().TargetPlayerName or ""
+        
+        if searchName ~= "" then
+            -- 닉네임 입력 시 해당 유저 탐색 (대소문자 구분 없음, 디스플레이 네임 포함)
+            for _, p in pairs(Players:GetPlayers()) do 
+                if p ~= plr and p.Character and (string.find(string.lower(p.Name), string.lower(searchName)) or string.find(string.lower(p.DisplayName), string.lower(searchName))) then 
+                    target = p 
+                    break 
+                end 
+            end
+        else
+            -- 입력창이 빌 경우 기존 코드 동작 (첫 번째 플레이어 타겟)
+            for _, p in pairs(Players:GetPlayers()) do 
+                if p ~= plr and p.Character then target = p break end 
+            end
         end
-        if target then startFKeyAttack(target) end
+        
+        if target then 
+            startFKeyAttack(target) 
+        else
+            Rayfield:Notify({Title = "Error", Content = " 대상을 찾을 수 없습니다.", Duration = 3})
+        end
     end
 })
 
@@ -94,8 +130,20 @@ local recoveringTargets = {}
 
 local function updateTargetList()
     kickTargetList = {}
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= plr then table.insert(kickTargetList, p.Name) end
+    local searchName = getgenv().TargetPlayerName or ""
+    
+    if searchName ~= "" then
+        -- 닉네임이 입력된 경우 타겟 필터링
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= plr and (string.find(string.lower(p.Name), string.lower(searchName)) or string.find(string.lower(p.DisplayName), string.lower(searchName))) then 
+                table.insert(kickTargetList, p.Name) 
+            end
+        end
+    else
+        -- 입력창이 빌 경우 기존 원본 코드 동작 (전체 유저 타겟)
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= plr then table.insert(kickTargetList, p.Name) end
+        end
     end
 end
 
