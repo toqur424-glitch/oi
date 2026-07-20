@@ -102,7 +102,6 @@ function loopPlayerBlobF4()
     while blobLoopT4 do
         for _, name in pairs(kickTargetList) do
             local player = Players:FindFirstChild(name)
-            
             if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
                 initializedTargets[name] = nil
                 continue
@@ -113,14 +112,22 @@ function loopPlayerBlobF4()
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
             if myHRP and charHRP and charHUM then
-                -- [위치 고정 강화] 매 프레임 좌표 주입 (가장 확실한 고정 방식)
-                charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
+                -- [핸드셰이크 강화] 초기 진입 시 물리 소유권 독점 강화
+                if not initializedTargets[player.Name] then
+                    for i = 1, 40 do
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    end
+                    initializedTargets[player.Name] = true
+                end
+                
+                -- [물리 상태 선제 제압]
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 25, 0)
                 
-                -- [핑 안정화] 빈도를 줄이고 1회씩만 호출하여 패킷 부하 대폭 감소
+                -- [교차 프레임]
                 frameToggle = not frameToggle
                 if frameToggle then
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
