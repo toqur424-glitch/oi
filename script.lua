@@ -101,7 +101,6 @@ end
 
 function loopPlayerBlobF4()
     local initializedTargets = {}
-    local frameToggle = false
     
     while blobLoopT4 do
         updateTargetList()
@@ -118,74 +117,94 @@ function loopPlayerBlobF4()
             local charHUM = player.Character:FindFirstChild("Humanoid")
             
             if myHRP and charHRP and charHUM then
-                -- [정확도가 대폭 수정된 리커버리 판정 시스템]
-                -- 지정된 하늘 격리 좌표에서 35스터드 이상 벗어나면 즉시 탈출로 인식하고 가져옴
-                local targetAirPos = myHRP.Position + Vector3.new(0, 25, 0)
-                if ((charHRP.Position - targetAirPos).Magnitude > 35 or not initializedTargets[player.Name]) and not recoveringTargets[player.Name] then
+                -- 실시간 하늘 고정 목표 위치 지정
+                local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+                
+                -- [정확도 대폭 상향된 리커버리 감지]
+                -- 지정된 하늘 격리구역에서 35스터드 이상 벗어나면 탈출로 간주하고 즉시 낚아챔
+                local currentDist = (charHRP.Position - targetCF.Position).Magnitude
+                if (currentDist > 35 or not initializedTargets[player.Name]) and not recoveringTargets[player.Name] then
                     recoveringTargets[player.Name] = true
                     initializedTargets[player.Name] = true 
                     
                     task.spawn(function()
                         local originalCF = myHRP.CFrame
                         
-                        -- 1. 상대방 위치로 즉시 순간이동
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                        task.wait(0.12) -- 서버가 내 위치 변경을 인지할 충분한 시간 확보
+                        -- 1. 상대방 위치로 즉시 이동 후 물리 속도 완전 무력화 (가져오는 정확도 향상)
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2.5, 0)
+                        charHRP.AssemblyLinearVelocity = Vector3.zero
+                        charHRP.AssemblyAngularVelocity = Vector3.zero
+                        task.wait(0.08)
                         
-                        -- 2. 그 자리에서 오너십 강탈 (그랩 라인 생성을 추가하여 가져오기 정확도 극대화)
+                        -- 2. 그 자리에서 즉시 그랩라인 활성화 및 강력한 오너십 탈취 (반복 횟수 상향으로 정확도 고정)
                         pcall(function()
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                            for i = 1, 40 do
+                            for i = 1, 45 do
                                 rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                             end
                         end)
-                        task.wait(0.05) -- 패킷 서버 도달 대기
+                        task.wait(0.04)
                         
-                        -- 3. 상대를 내 위치(공중)로 강제 이동 (가져오기)
+                        -- 3. 상대를 내 공중 감옥으로 정밀 텔레포트 시키면서 본체 동시 복귀
                         charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
-                        task.wait(0.1) -- 물리적 당겨오기가 네트워크에 반영될 시간 확보
-                        
-                        -- 4. 원래 내 위치로 복귀
+                        charHRP.AssemblyLinearVelocity = Vector3.zero
                         myHRP.CFrame = originalCF
-                        task.wait(0.1) -- 내 복귀 동기화 대기
+                        task.wait(0.06)
                         
-                        -- 5. 복귀 완료 후 확실하게 다시 한번 락(Lock)
+                        -- 4. 복귀 후 락(Lock)을 완전히 굳히기 위한 쐐기 작업 (네트워크 소유권 강제 결속)
                         pcall(function()
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                            for i = 1, 40 do
-                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            for i = 1, 30 do
+                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.CFrame.Position))
                             end
                         end)
                         
-                        task.wait(0.3) -- 완벽한 안정화 유예 (거리 체크 오작동 방지)
+                        task.wait(0.15) -- 반응 속도 극대화를 위해 리커버리 쿨타임 최적화 단축
                         recoveringTargets[player.Name] = nil
                     end)
                 end
                 
-                -- [메인 루프 극한 고정 및 교차 킥] - 원본 틀 유지 및 고정력 최상 상향
-                local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+                -- [메인 루프 - 극대화된 강력 고정 락킹]
+                -- 물리 저항을 차단하기 위해 임시 벨로시티 효과 추가 적용 및 좌표 강제 고정
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHUM.PlatformStand = true
+                
+                -- 물리 저항 원천 차단을 위한 임시 BodyVelocity 강제 주입 (고정력 최상)
+                if not charHRP:FindFirstChild("ExtremeLockBV") then
+                    local bv = Instance.new("BodyVelocity")
+                    bv.Name = "ExtremeLockBV"
+                    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    bv.Velocity = Vector3.zero
+                    bv.Parent = charHRP
+                end
+                
+                -- 인간형 상태 강제 캔슬
+                if charHUM.PlatformStand ~= true then charHUM.PlatformStand = true end
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                frameToggle = not frameToggle
-                if frameToggle then
-                    -- 그랩라인 결속과 함께 락 주입 횟수를 늘려 뜀박질/탈출 완전 봉쇄
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 35 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
-                    end)
-                else
-                    charHRP.CFrame = targetCF 
-                    pcall(function()
-                        for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
-                    end)
+                -- 락 풀림 방지를 위해 매 프레임 서버에 락 상태를 더욱 촘촘하게 갱신 및 주입
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                    for i = 1, 25 do 
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) 
+                    end
+                end)
+            else
+                -- 대상이 범위를 벗어나거나 사라졌을 때 오브젝트 정리
+                if charHRP and charHRP:FindFirstChild("ExtremeLockBV") then
+                    charHRP.ExtremeLockBV:Destroy()
                 end
             end
         end
         RunService.RenderStepped:Wait()
+    end
+    
+    -- 루프가 종료되면 모든 플레이어의 고정 오브젝트 해제
+    for _, p in pairs(Players:GetPlayers()) do
+        if p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character.HumanoidRootPart:FindFirstChild("ExtremeLockBV") then
+            p.Character.HumanoidRootPart.ExtremeLockBV:Destroy()
+        end
     end
 end
 
