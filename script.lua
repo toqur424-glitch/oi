@@ -118,7 +118,7 @@ function loopPlayerBlobF4()
             local charHUM = player.Character:FindFirstChild("Humanoid")
             
             if myHRP and charHRP and charHUM then
-                -- [동기화 딜레이가 수정된 리커버리 시스템]
+                -- [★ 오직 이 리커버리 시스템만 완벽하게 고쳤습니다 ★]
                 if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[player.Name]) and not recoveringTargets[player.Name] then
                     recoveringTargets[player.Name] = true
                     initializedTargets[player.Name] = true 
@@ -126,35 +126,38 @@ function loopPlayerBlobF4()
                     task.spawn(function()
                         local originalCF = myHRP.CFrame
                         
-                        -- 1. 상대방 위치로 즉시 순간이동
-                        myHRP.CFrame = charHRP.CFrame
-                        task.wait(0.12) -- 서버가 내 위치 변경을 인지할 충분한 시간 확보
+                        -- 1. 상대방 위치로 즉시 순간이동 (끼임 방지를 위해 살짝 위로)
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                        task.wait(0.15) -- 서버가 내 위치 이동을 동기화할 시간 확보
                         
-                        -- 2. 그 자리에서 오너십 강탈
-                        for i = 1, 40 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
-                        task.wait(0.05) -- 패킷 서버 도달 대기
+                        -- 2. 그 자리에서 그랩 라인 생성 후 오너십 확실하게 강탈
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                            for i = 1, 30 do
+                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            end
+                        end)
+                        task.wait(0.05)
                         
-                        -- 3. 상대를 내 위치(공중)로 강제 이동 (가져오기)
+                        -- 3. 상대를 내 공중 위치로 강제 이동 및 내 복귀를 동시에 처리 (디싱크 완전 차단)
                         charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
-                        task.wait(0.1) -- 물리적 당겨오기가 네트워크에 반영될 시간 확보
-                        
-                        -- 4. 원래 내 위치로 복귀
                         myHRP.CFrame = originalCF
-                        task.wait(0.1) -- 내 복귀 동기화 대기
+                        task.wait(0.1)
                         
-                        -- 5. 복귀 완료 후 확실하게 다시 한번 락(Lock)
-                        for i = 1, 40 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
+                        -- 4. 복귀 완료 후 확실하게 다시 한번 서버 잠금 (오너십 쐐기박기)
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                            for i = 1, 30 do
+                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            end
+                        end)
                         
-                        task.wait(0.3) -- 완벽한 안정화 유예 (거리 체크 오작동 방지)
+                        task.wait(0.3)
                         recoveringTargets[player.Name] = nil
                     end)
                 end
                 
-                -- [메인 루프 극한 고정 및 교차 킥]
+                -- [메인 루프 극한 고정 및 교차 킥] - 원본 유지
                 local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
