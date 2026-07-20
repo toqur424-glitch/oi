@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [TARGET 탭] - 추가된 타겟 설정 기능
+-- [TARGET 탭] - 타겟 설정 기능
 --=============================================
 local TargetTab = Window:CreateTab("Target (대상)", nil)
 TargetTab:CreateSection("=== 특정 타겟 지정 ===")
@@ -96,17 +96,17 @@ GrabTab:CreateKeybind({
         
         local target = nil 
         local searchName = getgenv().TargetPlayerName or ""
+        searchName = string.match(searchName, "^%s*(.-)%s*$") -- 앞뒤 공백 제거
         
         if searchName ~= "" then
-            -- 닉네임 입력 시 해당 유저 탐색 (대소문자 구분 없음, 디스플레이 네임 포함)
+            -- [수정] 평문 매칭(Plain Match) 적용으로 타겟팅 오작동 원천 차단
             for _, p in pairs(Players:GetPlayers()) do 
-                if p ~= plr and p.Character and (string.find(string.lower(p.Name), string.lower(searchName)) or string.find(string.lower(p.DisplayName), string.lower(searchName))) then 
+                if p ~= plr and p.Character and (string.find(string.lower(p.Name), string.lower(searchName), 1, true) or string.find(string.lower(p.DisplayName), string.lower(searchName), 1, true)) then 
                     target = p 
                     break 
                 end 
             end
         else
-            -- 입력창이 빌 경우 기존 코드 동작 (첫 번째 플레이어 타겟)
             for _, p in pairs(Players:GetPlayers()) do 
                 if p ~= plr and p.Character then target = p break end 
             end
@@ -131,16 +131,22 @@ local recoveringTargets = {}
 local function updateTargetList()
     kickTargetList = {}
     local searchName = getgenv().TargetPlayerName or ""
+    searchName = string.match(searchName, "^%s*(.-)%s*$") -- 앞뒤 공백 제거
     
     if searchName ~= "" then
-        -- 닉네임이 입력된 경우 타겟 필터링
+        -- [수정] 닉네임이 입력된 경우 정규식 패턴 오작동을 차단하고 정확히 해당 유저만 리스트에 삽입
         for _, p in pairs(Players:GetPlayers()) do
-            if p ~= plr and (string.find(string.lower(p.Name), string.lower(searchName)) or string.find(string.lower(p.DisplayName), string.lower(searchName))) then 
-                table.insert(kickTargetList, p.Name) 
+            if p ~= plr then
+                local nameMatch = string.find(string.lower(p.Name), string.lower(searchName), 1, true)
+                local displayNameMatch = string.find(string.lower(p.DisplayName), string.lower(searchName), 1, true)
+                
+                if nameMatch or displayNameMatch then 
+                    table.insert(kickTargetList, p.Name) 
+                end
             end
         end
     else
-        -- 입력창이 빌 경우 기존 원본 코드 동작 (전체 유저 타겟)
+        -- 입력창이 완전히 비어있을 때만 기존 원본 코드대로 전체 유저를 타겟팅
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= plr then table.insert(kickTargetList, p.Name) end
         end
