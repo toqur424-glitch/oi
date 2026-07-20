@@ -90,6 +90,7 @@ GrabTab:CreateKeybind({
 local KickTab = Window:CreateTab("Kick (블롭맨)", nil)
 local blobLoopT4 = false
 local kickTargetList = {}
+local recoveringTargets = {} -- 무한 TP 꼬임 방지 테이블
 
 local function updateTargetList()
     kickTargetList = {}
@@ -108,8 +109,8 @@ function loopPlayerBlobF4()
             local player = Players:FindFirstChild(name)
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             
-            -- [상태 감지 및 자동 복귀 루틴]
-            if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or player.Character.Humanoid.Health <= 0 then
+            -- [상태 감지] 사망했거나 캐릭터가 없으면 초기화 상태로 돌림 (리스폰 추적용)
+            if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
                 initializedTargets[name] = nil
                 continue
             end
@@ -118,17 +119,32 @@ function loopPlayerBlobF4()
             local charHUM = player.Character:FindFirstChild("Humanoid")
             
             if myHRP and charHRP and charHUM then
-                -- [자동 리커버리 루프] 범위 이탈 시 즉시 TP 후 복귀
-                if (charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[player.Name] then
-                    local originalCF = myHRP.CFrame
-                    myHRP.CFrame = charHRP.CFrame
-                    task.wait(0.05)
-                    for i = 1, 150 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
-                    myHRP.CFrame = originalCF
+                -- [자동 리커버리 시스템] 범위 이탈 및 리스폰 시 즉시 추적 비동기 실행
+                if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[player.Name]) and not recoveringTargets[player.Name] then
+                    recoveringTargets[player.Name] = true
                     initializedTargets[player.Name] = true
+                    
+                    task.spawn(function()
+                        local originalCF = myHRP.CFrame
+                        -- 1. 타겟에게 즉시 이동
+                        myHRP.CFrame = charHRP.CFrame
+                        task.wait(0.05) -- 위치 동기화 딜레이
+                        
+                        -- 2. 강제 셋오너 주입 (소유권 강탈)
+                        for i = 1, 60 do
+                            if charHRP and myHRP then
+                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            end
+                        end
+                        
+                        -- 3. 원래 내 위치로 복귀
+                        myHRP.CFrame = originalCF
+                        task.wait(0.4) -- 타겟이 내 공중 좌표로 완전히 끌려올 때까지 거리 체크 유예 (무한 TP 방지)
+                        recoveringTargets[player.Name] = nil
+                    end)
                 end
                 
-                -- [극한 고정]
+                -- [극한 고정 좌표 제어] 복귀 중에도 실시간으로 타겟을 내 머리 위로 강제 고정
                 local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -136,11 +152,12 @@ function loopPlayerBlobF4()
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
+                -- [교차 셋오너/디스트로이]
                 frameToggle = not frameToggle
                 if frameToggle then
                     for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
                 else
-                    charHRP.CFrame = targetCF
+                    charHRP.CFrame = targetCF 
                     for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
                 end
             end
@@ -157,10 +174,13 @@ KickTab:CreateToggle({
     end
 })
 
+--=============================================
+-- [나머지 필수 탭들 유지]
+--=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "자동 리커버리 및 극한 고정 적용됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "리커버리 수정 및 극한 고정 적용 완료", Duration = 3})
 
 KickTab:CreateInput({
     Name = "Add Target (여기에 닉네임 입력)",
