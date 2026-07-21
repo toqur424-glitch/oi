@@ -136,19 +136,12 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- 범위 이탈 감지 기준을 30으로 세밀하게 조정하여 탈출 시 즉시 룹티피 작동
             local currentDist = (charHRP.Position - myHRP.Position).Magnitude
             if (currentDist > 30 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
                 task.spawn(function()
-                    local originalCF = myHRP.CFrame
-                    pcall(function()
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    end)
-                    task.wait(0.15)
-                    
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
@@ -156,12 +149,6 @@ function loopPlayerBlobF4()
                         end
                     end)
                     task.wait(0.05)
-                    
-                    pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
-                        myHRP.CFrame = originalCF
-                    end)
-                    task.wait(0.1)
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
@@ -172,7 +159,7 @@ function loopPlayerBlobF4()
                     
                     task.wait(0.3)
                     recoveringTargets[name] = nil
-                    initialized = false -- 이탈 후 재포획을 위해 초기화 상태 해제
+                    initialized = false
                 end)
             end
             
@@ -287,7 +274,7 @@ KickTab:CreateToggle({
 
                         local tChar = selectedKickPlayer and selectedKickPlayer.Character
                         local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                        local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+                        local tHum = tChar and tChar:FindFirstChild("HumanoidOfClass") or tChar and tChar:FindFirstChildOfClass("Humanoid")
 
                         if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
                             local ragdolledVal = tHum:FindFirstChild("Ragdolled")
