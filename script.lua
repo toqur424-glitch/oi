@@ -91,17 +91,9 @@ local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local kickTargetList = {}
 local recoveringTargets = {} 
+local selectedKickPlayer = nil -- 판자 및 블롭맨 공용 타겟 변수
 
-local function updateTargetList()
-    kickTargetList = {}
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= plr then table.insert(kickTargetList, p.Name) end
-    end
-end
-
--- 타겟 선택 변수 선언
-local selectedKickPlayer = nil
-
+-- [수정됨] 맵 전체 자동 추가 기능을 없애고, 입력한 유저만 정확히 타겟팅하도록 변경
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
     PlaceholderText = "예: Player1",
@@ -121,8 +113,26 @@ KickTab:CreateInput({
             return 
         end
         
+        -- 중복 추가 방지
+        for _, name in ipairs(kickTargetList) do
+            if name == found.Name then 
+                Rayfield:Notify({Title = "알림", Content = "이미 타겟 목록에 있습니다.", Duration = 2})
+                return 
+            end
+        end
+        
+        table.insert(kickTargetList, found.Name)
         selectedKickPlayer = found
-        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
+        Rayfield:Notify({Title = "타겟 추가됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
+    end
+})
+
+KickTab:CreateButton({
+    Name = "타겟 리스트 초기화 (비우기)",
+    Callback = function()
+        kickTargetList = {}
+        selectedKickPlayer = nil
+        Rayfield:Notify({Title = "초기화", Content = "타겟 리스트가 초기화되었습니다.", Duration = 2})
     end
 })
 
@@ -131,7 +141,7 @@ function loopPlayerBlobF4()
     local frameToggle = false
     
     while blobLoopT4 do
-        updateTargetList()
+        -- 맵 전체를 불러오던 updateTargetList() 제거 완료 (입력된 타겟만 순회)
         for _, name in pairs(kickTargetList) do
             local player = Players:FindFirstChild(name)
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
@@ -207,7 +217,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합]
+-- [Pallet Ragdoll (Invis) 통합]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
@@ -367,4 +377,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "네트워크 동기화 타이밍 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "타겟팅 시스템 수정 완료", Duration = 3})
