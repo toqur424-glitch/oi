@@ -140,7 +140,7 @@ function loopPlayerBlobF4()
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
+            if (currentDist > 25 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
@@ -184,10 +184,9 @@ function loopPlayerBlobF4()
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- 셋오너와 디트로이트(그랩라인 생성/제거) 교차 반복 확실하게 수행
                 frameToggle = not frameToggle
                 if frameToggle then
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, targetCF)
                 else
                     rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
@@ -378,4 +377,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 및 디트로이트 교차 반복 킥 로직 수정 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "머리 위 좌표 고정 로직 완벽 적용 완료", Duration = 3})
