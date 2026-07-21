@@ -83,12 +83,14 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 핑 최적화된 단일 타겟 블롭맨 오너 킥 & 판자 레그돌
+-- [KICK 탭] - 고정력 강화 및 핑 최적화된 블롭맨 오너 킥 & 판자 레그돌
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local selectedKickPlayer = nil
 local recoveringTargets = {} 
+local blobConnection = nil
+local lastNetworkUpdate = 0
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -117,13 +119,18 @@ KickTab:CreateInput({
 function loopPlayerBlobF4()
     local initialized = false
     
-    while blobLoopT4 do
-        local player = selectedKickPlayer
+    if blobConnection then blobConnection:Disconnect() end
+    
+    blobConnection = RunService.RenderStepped:Connect(function()
+        if not blobLoopT4 then 
+            if blobConnection then blobConnection:Disconnect() end
+            return 
+        end
         
+        local player = selectedKickPlayer
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            task.wait(0.1)
-            continue
+            return
         end
 
         local name = player.Name
@@ -161,6 +168,7 @@ function loopPlayerBlobF4()
                 end)
             end
             
+            -- 매 프레임 위치 및 속도를 완벽히 고정하여 떨어짐 현상(떨림) 방지
             local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
             charHRP.CFrame = targetCF
             charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -168,17 +176,19 @@ function loopPlayerBlobF4()
             charHUM.PlatformStand = true
             charHUM:ChangeState(Enum.HumanoidStateType.Physics)
             
-            -- 핑 폭발 원인이었던 무한 난사를 1회성 최적화 호출로 변경
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-            end)
+            -- 핑 폭발 방지를 위해 SetNetworkOwner 요청은 0.3초마다 한 번씩만 스로틀링 실행
+            if tick() - lastNetworkUpdate > 0.3 then
+                lastNetworkUpdate = tick()
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                end)
+            end
         end
-        task.wait(0.05) -- 매 프레임 폭주 방지용 딜레이
-    end
+    end)
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (핑 최적화 버전)",
+    Name = "블롭맨 오너 킥 실행 (고정력 강화 버전)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -186,12 +196,16 @@ KickTab:CreateToggle({
             return
         end
         blobLoopT4 = v
-        if v then task.spawn(loopPlayerBlobF4) end
+        if v then 
+            task.spawn(loopPlayerBlobF4) 
+        else
+            if blobConnection then blobConnection:Disconnect() end
+        end
     end
 })
 
 --=============================================
--- [Pallet Ragdoll (Invis) - 핑 최적화 연동]
+-- [Pallet Ragdoll (Invis) - 고정력 연동]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (단일 타겟 Invis)",
@@ -351,4 +365,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "핑 폭발 방지 및 네트워크 최적화 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "고정력 강화 및 핑 최적화 적용 완료", Duration = 3})
