@@ -136,16 +136,16 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- [수정됨] 타겟이 있어야 할 '정확한 고정 목표 위치'를 먼저 계산
-            local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
+            local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             
-            -- [핵심 수정] 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산 (기본 거리 = 0)
+            -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
             -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
-                initialized = true 
+                initialized = true -- [수정 핵심] 포획 성공 처리 후 다시 false로 풀리지 않도록 함
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
@@ -163,7 +163,7 @@ function loopPlayerBlobF4()
                     task.wait(0.05)
                     
                     pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
+                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
                         myHRP.CFrame = originalCF
                     end)
                     task.wait(0.1)
@@ -177,7 +177,7 @@ function loopPlayerBlobF4()
                     
                     task.wait(0.3)
                     recoveringTargets[name] = nil
-                    initialized = false -- 이탈 후 재포획을 위해 초기화 상태 해제
+                    -- [수정됨] 무한 반복 버그의 원인인 initialized = false 삭제
                 end)
             end
             
@@ -381,4 +381,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "이탈 거리 기준점 수정 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "무한 룹티피 버그 수정 및 Y=20 고정 완료", Duration = 3})
