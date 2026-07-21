@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Optimized)",
+    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - 핑 최적화된 F키 킥 그랩
+-- [GRAB 탭] - 극대화된 킥 그랩 (F키)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -56,12 +56,13 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- [최적화] 불필요한 반복문 제거 및 단일 호출로 핑 폭발 방지
-        pcall(function()
-            rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-            rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-        end)
+        for i = 1, 4 do
+            pcall(function()
+                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+            end)
+        end
     end)
 end
 
@@ -84,14 +85,23 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 고정 및 핑 최적화 블롭맨 & 판자
+-- [KICK 탭] - 극대화된 블롭맨 셋오너 킥 & 판자 레그돌 통합
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
+local kickTargetList = {}
 local recoveringTargets = {} 
-local selectedKickPlayer = nil -- [핵심] 오직 이 변수에 지정된 단 한 명의 유저만 타겟팅됩니다.
 
--- [단일 타겟 설정 닉네임 입력]
+local function updateTargetList()
+    kickTargetList = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= plr then table.insert(kickTargetList, p.Name) end
+    end
+end
+
+-- 타겟 선택 변수 선언
+local selectedKickPlayer = nil
+
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
     PlaceholderText = "예: Player1",
@@ -112,78 +122,76 @@ KickTab:CreateInput({
         end
         
         selectedKickPlayer = found
-        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 유일한 타겟으로 설정되었습니다.", Duration = 2})
-    end
-})
-
-KickTab:CreateButton({
-    Name = "타겟 초기화 (해제)",
-    Callback = function()
-        selectedKickPlayer = nil
-        Rayfield:Notify({Title = "초기화", Content = "타겟이 해제되었습니다.", Duration = 2})
+        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
 })
 
 function loopPlayerBlobF4()
-    local isInitialized = false
+    local initializedTargets = {}
     local frameToggle = false
     
     while blobLoopT4 do
-        -- 맵 전체를 돌던 루프를 제거하고, 오직 지정된 selectedKickPlayer 단 한 명만 처리합니다.
-        if not selectedKickPlayer or not selectedKickPlayer.Character or not selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart") or not selectedKickPlayer.Character:FindFirstChild("Humanoid") or selectedKickPlayer.Character.Humanoid.Health <= 0 then
-            isInitialized = false
-            RunService.RenderStepped:Wait()
-            continue
-        end
-
-        local charHRP = selectedKickPlayer.Character.HumanoidRootPart
-        local charHUM = selectedKickPlayer.Character.Humanoid
-        local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-
-        if myHRP and charHRP and charHUM then
-            if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not isInitialized) and not recoveringTargets[selectedKickPlayer.Name] then
-                recoveringTargets[selectedKickPlayer.Name] = true
-                isInitialized = true 
-                
-                task.spawn(function()
-                    local originalCF = myHRP.CFrame
-                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    task.wait(0.15)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    end)
-                    task.wait(0.05)
-                    
-                    charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
-                    myHRP.CFrame = originalCF
-                    task.wait(0.1)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    end)
-                    
-                    task.wait(0.3)
-                    recoveringTargets[selectedKickPlayer.Name] = nil
-                end)
+        updateTargetList()
+        for _, name in pairs(kickTargetList) do
+            local player = Players:FindFirstChild(name)
+            local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+            
+            if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+                initializedTargets[name] = nil
+                continue
             end
+
+            local charHRP = player.Character.HumanoidRootPart
+            local charHUM = player.Character:FindFirstChild("Humanoid")
             
-            local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
-            charHRP.CFrame = targetCF
-            charHRP.AssemblyLinearVelocity = Vector3.zero
-            charHRP.AssemblyAngularVelocity = Vector3.zero
-            charHUM.PlatformStand = true
-            charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-            
-            -- [핑 최적화] 매 프레임마다 서버 이벤트를 20번씩 중복 폭발시키던 스팸 코드 제거 (1회씩 안전하게 호출)
-            frameToggle = not frameToggle
-            if frameToggle then
-                pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end)
-            else
-                charHRP.CFrame = targetCF 
-                pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end)
+            if myHRP and charHRP and charHUM then
+                if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[player.Name]) and not recoveringTargets[player.Name] then
+                    recoveringTargets[player.Name] = true
+                    initializedTargets[player.Name] = true 
+                    
+                    task.spawn(function()
+                        local originalCF = myHRP.CFrame
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                        task.wait(0.15)
+                        
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                            for i = 1, 30 do
+                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            end
+                        end)
+                        task.wait(0.05)
+                        
+                        charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
+                        myHRP.CFrame = originalCF
+                        task.wait(0.1)
+                        
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                            for i = 1, 30 do
+                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            end
+                        end)
+                        
+                        task.wait(0.3)
+                        recoveringTargets[player.Name] = nil
+                    end)
+                end
+                
+                local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+                charHRP.CFrame = targetCF
+                charHRP.AssemblyLinearVelocity = Vector3.zero
+                charHRP.AssemblyAngularVelocity = Vector3.zero
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                
+                frameToggle = not frameToggle
+                if frameToggle then
+                    for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+                else
+                    charHRP.CFrame = targetCF 
+                    for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
+                end
             end
         end
         RunService.RenderStepped:Wait()
@@ -199,7 +207,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [Pallet Ragdoll (Invis) 통합]
+-- [새로운 Pallet Ragdoll (Invis) 통합]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
@@ -223,7 +231,7 @@ KickTab:CreateToggle({
 
         if Value then
             if not selectedKickPlayer then
-                Rayfield:Notify({Title = "알림", Content = "타겟 플레이어를 먼저 입력해주세요!", Duration = 3})
+                Rayfield:Notify({Title = "알림", Content = "Select target first (타겟을 먼저 입력해주세요)", Duration = 3})
                 return
             end
 
@@ -359,4 +367,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "단일 타겟 고정 및 핑 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "네트워크 동기화 타이밍 최적화 완료", Duration = 3})
