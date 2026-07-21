@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
+    Name = "🔥 FSOF Extreme Kick Hub (Fixed & Optimized)",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -50,11 +50,19 @@ local function startFKeyAttack(targetPlayer)
         local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
         if not myRoot or not tgtRoot then return end
         
+        -- 물리 간섭 방지 및 고정력 극대화 (속도 완전 초기화)
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
+        tgtRoot.AssemblyAngularVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
         
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
+        
+        -- 셋오너와 그랩라인 동기화 제어 강화
+        pcall(function()
+            rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+        end)
         
         for i = 1, 4 do
             pcall(function()
@@ -85,7 +93,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 고정력 극대화 셋오너 킥
+-- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 및 범위 이탈 감지 룹티피
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -120,6 +128,7 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
+    local frameToggle = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -151,6 +160,7 @@ function loopPlayerBlobF4()
                     task.wait(0.15)
                     
                     pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
@@ -165,6 +175,7 @@ function loopPlayerBlobF4()
                     task.wait(0.1)
                     
                     pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
@@ -178,18 +189,19 @@ function loopPlayerBlobF4()
             
             pcall(function()
                 charHRP.CFrame = targetCF
+                -- 물리 속도 완전 제어로 떨림 현상 방지 및 고정력 극대화
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHRP.Velocity = Vector3.zero
-                charHRP.RotVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- F키 공격에서 검증된 고정력 극대화 방식(버스트 호출)을 적용하여 완벽하게 고정
-                for i = 1, 3 do
-                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                -- 셋오너와 디트로이트(그랩라인 생성/제거) 교차 반복 확실하게 수행
+                frameToggle = not frameToggle
+                if frameToggle then
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                else
                     rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                 end
             end)
         end
@@ -260,8 +272,8 @@ KickTab:CreateToggle({
                 if not soundPart then return end
 
                 pcall(function()
-                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
                     DestroyLine:FireServer(soundPart)
+                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
                 end)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
@@ -298,17 +310,21 @@ KickTab:CreateToggle({
                                 if strikePhase then
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
+                                    soundPart.AssemblyAngularVelocity = Vector3.zero
                                 else
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
+                                    soundPart.AssemblyAngularVelocity = Vector3.zero
                                 end
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
+                                soundPart.AssemblyAngularVelocity = Vector3.zero
                             end
                         else
                             soundPart.CFrame = CFrame.new(0, 9e9, 0)
                             soundPart.AssemblyLinearVelocity = Vector3.zero
+                            soundPart.AssemblyAngularVelocity = Vector3.zero
                         end
                     end)
 
@@ -377,4 +393,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥 고정력 극대화 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 및 디트로이트 교차 반복 킥 로직 고정력 극대화 완료", Duration = 3})
