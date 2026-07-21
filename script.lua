@@ -85,7 +85,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 극대화된 블롭맨 셋오너 킥 & 판자 레그돌 통합
+-- [KICK 탭] - 단일 타겟 전용 블롭맨 오너 킥 & 판자 레그돌
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -112,19 +112,19 @@ KickTab:CreateInput({
         end
         
         selectedKickPlayer = found
-        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
+        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 단일 타겟으로 설정되었습니다.", Duration = 2})
     end
 })
 
 function loopPlayerBlobF4()
-    local initializedTargets = {}
+    local initialized = false
     local frameToggle = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-            initializedTargets = {}
+            initialized = false
             RunService.RenderStepped:Wait()
             continue
         end
@@ -135,9 +135,9 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[name]) and not recoveringTargets[name] then
+            if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
-                initializedTargets[name] = true 
+                initialized = true 
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
@@ -188,10 +188,11 @@ function loopPlayerBlobF4()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (자동 복귀)",
+    Name = "블롭맨 오너 킥 실행 (단일 타겟 자동 복귀)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
+            blobLoopT4 = false
             return
         end
         blobLoopT4 = v
@@ -200,10 +201,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합]
+-- [Pallet Ragdoll (Invis) - 단일 타겟 연동]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis)",
+    Name = "Pallet Ragdoll (단일 타겟 Invis)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -355,9 +356,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭들 유지]
+-- [설정 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "네트워크 동기화 타이밍 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "단일 타겟 고정 시스템 적용 완료", Duration = 3})
