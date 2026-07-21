@@ -85,12 +85,14 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 전용 블롭맨 오너 킥 & 판자 레그돌
+-- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 킥
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
-local selectedKickPlayer = nil
 local recoveringTargets = {} 
+
+-- 타겟 선택 변수 선언
+local selectedKickPlayer = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -112,7 +114,7 @@ KickTab:CreateInput({
         end
         
         selectedKickPlayer = found
-        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 단일 타겟으로 설정되었습니다.", Duration = 2})
+        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
 })
 
@@ -146,7 +148,7 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
+                        for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
@@ -158,7 +160,7 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
+                        for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
@@ -175,20 +177,23 @@ function loopPlayerBlobF4()
             charHUM.PlatformStand = true
             charHUM:ChangeState(Enum.HumanoidStateType.Physics)
             
+            -- 셋오너와 디트로이트(라인 생성/파괴) 방식을 교차 적용하여 킥 성능 및 고정력 극대화
             frameToggle = not frameToggle
-            if frameToggle then
-                for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
-            else
-                charHRP.CFrame = targetCF 
-                for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
-            end
+            pcall(function()
+                if frameToggle then
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                else
+                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                end
+            end)
         end
         RunService.RenderStepped:Wait()
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (단일 타겟 자동 복귀)",
+    Name = "블롭맨 오너 킥 실행 (단일 타겟 교차 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -201,10 +206,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [Pallet Ragdoll (Invis) - 단일 타겟 연동]
+-- [새로운 Pallet Ragdoll (Invis) 통합]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (단일 타겟 Invis)",
+    Name = "Pallet Ragdoll (Invis)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -356,9 +361,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [설정 탭]
+-- [나머지 필수 탭들 유지]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "단일 타겟 고정 시스템 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "단일 타겟 교차 고정 및 킥 성능 최적화 완료", Duration = 3})
