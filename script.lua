@@ -119,12 +119,10 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
-    local frameToggle = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
-        -- [수정됨] 상대가 죽었을 때도 pcld를 잡을 수 있도록 Humanoid.Health <= 0 조건을 삭제했습니다.
         if not player or not player.Character then
             initialized = false
             RunService.RenderStepped:Wait()
@@ -134,7 +132,6 @@ function loopPlayerBlobF4()
         local name = player.Name
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         
-        -- [수정됨] pcld 파트를 우선적으로 찾고, 없으면 기존 HumanoidRootPart를 타겟으로 지정합니다.
         local pcldPart = player.Character:FindFirstChild("pcld") or player.Character:FindFirstChild("Pcld")
         local charHRP = player.Character:FindFirstChild("HumanoidRootPart")
         local charHUM = player.Character:FindFirstChild("Humanoid")
@@ -142,48 +139,43 @@ function loopPlayerBlobF4()
         local targetPart = pcldPart or charHRP
         
         if myHRP and targetPart then
-            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-            
-            -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산 (pcld 기준)
             local currentDist = (targetPart.Position - targetCF.Position).Magnitude
             
-            -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
+            -- 고정 위치에서 15스터드 이상 벗어났을 때 복귀 루틴 실행 (안정성 강화)
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
-                    pcall(function()
-                        -- [수정됨] pcld가 있는 곳으로 룹티피 이동
-                        myHRP.CFrame = targetPart.CFrame * CFrame.new(0, 2, 0)
-                    end)
-                    task.wait(0.15)
                     
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(targetPart, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
+                    -- [수정] 약 0.1초간 타겟 pcld 위치에 붙어서 셋오너를 확실히 강탈함
+                    for i = 1, 4 do
+                        if targetPart and targetPart.Parent then
+                            myHRP.CFrame = targetPart.CFrame * CFrame.new(0, 2, 0)
+                            rs.GrabEvents.CreateGrabLine:FireServer(targetPart, CFrame.new())
+                            for j = 1, 3 do
+                                rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
+                            end
                         end
-                    end)
-                    task.wait(0.05)
+                        task.wait(0.03)
+                    end
                     
-                    pcall(function()
-                        -- 끌고 다시 본래 위치로 돌아옴
+                    -- [수정] 원래 위치로 돌아오면서 타겟을 끌고 옴
+                    if targetPart and targetPart.Parent then
                         targetPart.CFrame = originalCF * CFrame.new(0, 20, 0)
                         myHRP.CFrame = originalCF
-                    end)
-                    task.wait(0.1)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(targetPart, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
+                        
+                        for i = 1, 4 do
+                            rs.GrabEvents.CreateGrabLine:FireServer(targetPart, CFrame.new())
+                            for j = 1, 3 do
+                                rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
+                            end
+                            task.wait(0.03)
                         end
-                    end)
+                    end
                     
-                    task.wait(0.3)
                     recoveringTargets[name] = nil
                 end)
             end
@@ -198,10 +190,9 @@ function loopPlayerBlobF4()
                     charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 end
                 
-                frameToggle = not frameToggle
-                if frameToggle then
+                -- [수정] 번갈아 쏘는 방식(토글) 삭제. 매 프레임 셋오너와 디트로이트를 3번씩 동시 연사하여 빈도 극대화
+                for i = 1, 3 do
                     rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
-                else
                     rs.GrabEvents.CreateGrabLine:FireServer(targetPart, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
                 end
@@ -391,4 +382,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "무한 룹티피 버그 수정 및 pcld 추적 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "추적 복귀 안정성 및 공격 빈도 증가 적용 완료", Duration = 3})
