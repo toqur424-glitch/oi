@@ -56,14 +56,13 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- 안정적인 셋오너 킥 방식을 F키 그랩 공격에도 동일하게 적용
-        local targetCF = myRoot.CFrame * CFrame.new(0, 20, 0)
-        pcall(function()
-            tgtRoot.CFrame = targetCF
-            rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-            rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-        end)
+        for i = 1, 4 do
+            pcall(function()
+                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+            end)
+        end
     end)
 end
 
@@ -172,6 +171,7 @@ function loopPlayerBlobF4()
             charHUM.PlatformStand = true
             charHUM:ChangeState(Enum.HumanoidStateType.Physics)
             
+            -- 잘 작동하는 검증된 단일 오너 호출 방식 적용
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
             end)
@@ -194,10 +194,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [Pallet Ragdoll (Invis) - 핑 최적화 연동]
+-- [새로운 Pallet Ragdoll (Invis) 통합]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (단일 타겟 Invis)",
+    Name = "Pallet Ragdoll (Invis)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -206,7 +206,6 @@ KickTab:CreateToggle({
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
         local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
-        local toysFolder = workspace:WaitForChild(plr.Name .. "SpawnedInToys")
         local lpName = plr.Name
 
         local function clearAttackLoop()
@@ -229,6 +228,12 @@ KickTab:CreateToggle({
                 getgenv().palletCacheConn:Disconnect()
             end
             clearAttackLoop()
+
+            local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
+            if not toysFolder then
+                Rayfield:Notify({Title = "오류", Content = "생성된 토이 폴더를 찾을 수 없습니다.", Duration = 3})
+                return
+            end
 
             getgenv().palletCacheConn = toysFolder.ChildAdded:Connect(function(child)
                 if not getgenv().palletRagdollActive then return end
@@ -267,7 +272,6 @@ KickTab:CreateToggle({
                         local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
                         local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
 
-                        -- 판자 레그돌 타격 방식에도 셋오너 킥 방식의 Y=20 머리 위 고정 로직을 응용 적용
                         if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
                             local ragdolledVal = tHum:FindFirstChild("Ragdolled")
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
@@ -275,16 +279,11 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 strikePhase = not strikePhase
                                 if strikePhase then
-                                    local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                                    if myRoot then
-                                        soundPart.CFrame = myRoot.CFrame * CFrame.new(0, 20, 0)
-                                    else
-                                        soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
-                                    end
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -50000, 0)
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
                                 else
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 50000, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
                                 end
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
@@ -347,7 +346,8 @@ KickTab:CreateToggle({
 
             getgenv().PalletForRagdoll = nil
 
-            if toysFolder:FindFirstChild("PalletForRagdoll") then
+            local toysFolder = workspace:FindFirstChild(lpName .. "SpawnedInToys")
+            if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
                 pcall(function() DestroyToy:FireServer(toysFolder.PalletForRagdoll) end)
             end
         end
@@ -355,9 +355,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [설정 탭]
+-- [나머지 필수 탭들 유지]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥 방식 융합 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "성공적인 셋오너 킥 방식 적용 완료", Duration = 3})
