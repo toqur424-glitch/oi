@@ -56,13 +56,11 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        for i = 1, 4 do
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
-        end
+        pcall(function()
+            rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+            rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+        end)
     end)
 end
 
@@ -85,7 +83,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 전용 블롭맨 오너 킥 & 판자 레그돌
+-- [KICK 탭] - 핑 최적화된 단일 타겟 블롭맨 오너 킥 & 판자 레그돌
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -118,14 +116,13 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
-    local frameToggle = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            RunService.RenderStepped:Wait()
+            task.wait(0.1)
             continue
         end
 
@@ -142,28 +139,24 @@ function loopPlayerBlobF4()
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
                     myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    task.wait(0.15)
+                    task.wait(0.1)
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end)
                     task.wait(0.05)
                     
                     charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
                     myHRP.CFrame = originalCF
-                    task.wait(0.1)
+                    task.wait(0.05)
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end)
                     
-                    task.wait(0.3)
+                    task.wait(0.2)
                     recoveringTargets[name] = nil
                 end)
             end
@@ -175,20 +168,17 @@ function loopPlayerBlobF4()
             charHUM.PlatformStand = true
             charHUM:ChangeState(Enum.HumanoidStateType.Physics)
             
-            frameToggle = not frameToggle
-            if frameToggle then
-                for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
-            else
-                charHRP.CFrame = targetCF 
-                for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
-            end
+            -- 핑 폭발 원인이었던 무한 난사를 1회성 최적화 호출로 변경
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+            end)
         end
-        RunService.RenderStepped:Wait()
+        task.wait(0.05) -- 매 프레임 폭주 방지용 딜레이
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (단일 타겟 자동 복귀)",
+    Name = "블롭맨 오너 킥 실행 (핑 최적화 버전)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -201,7 +191,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [Pallet Ragdoll (Invis) - 단일 타겟 연동]
+-- [Pallet Ragdoll (Invis) - 핑 최적화 연동]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (단일 타겟 Invis)",
@@ -282,10 +272,10 @@ KickTab:CreateToggle({
                                 strikePhase = not strikePhase
                                 if strikePhase then
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -50000, 0)
                                 else
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 50000, 0)
                                 end
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
@@ -361,4 +351,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "단일 타겟 고정 시스템 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "핑 폭발 방지 및 네트워크 최적화 적용", Duration = 3})
