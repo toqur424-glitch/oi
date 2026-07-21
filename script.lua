@@ -83,7 +83,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 셋오너와 디트로이트 번갈아 고정 강화된 블롭맨 오너 킥 & 판자 레그돌
+-- [KICK 탭] - 핑 최적화된 단일 타겟 블롭맨 오너 킥 & 판자 레그돌
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -116,7 +116,6 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
-    local toggleDetroit = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -169,23 +168,17 @@ function loopPlayerBlobF4()
             charHUM.PlatformStand = true
             charHUM:ChangeState(Enum.HumanoidStateType.Physics)
             
-            -- 핵심 개선: 셋오너와 디트로이트(라인 생성/파괴)를 번갈아가며 실행하여 상대 고정력 및 킥 성능 극대화
-            toggleDetroit = not toggleDetroit
+            -- 핑 폭발 원인이었던 무한 난사를 1회성 최적화 호출로 변경
             pcall(function()
-                if toggleDetroit then
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                else
-                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                end
+                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
             end)
         end
-        task.wait(0.05)
+        task.wait(0.05) -- 매 프레임 폭주 방지용 딜레이
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너 & 디트로이트 교차 고정)",
+    Name = "블롭맨 오너 킥 실행 (핑 최적화 버전)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -358,4 +351,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 및 디트로이트 교차 고정 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "핑 폭발 방지 및 네트워크 최적화 적용", Duration = 3})
