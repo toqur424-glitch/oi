@@ -85,7 +85,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 킥
+-- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 및 범위 이탈 감지 룹티피
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -137,7 +137,8 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initialized) and not recoveringTargets[name] then
+            -- 범위 이탈(거리 40 이상 벌어짐) 또는 초기화 상태일 때 자동으로 룹티피 타서 셋오너 걸고 가져오기
+            if ((charHRP.Position - myHRP.Position).Magnitude > 40 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
@@ -193,7 +194,7 @@ function loopPlayerBlobF4()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (단일 타겟 교차 고정)",
+    Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -366,4 +367,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "단일 타겟 교차 고정 및 킥 성능 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "범위 이탈 감지 및 자동 추적 최적화 완료", Duration = 3})
