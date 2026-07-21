@@ -85,12 +85,13 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 핑 최적화된 단일 타겟 블롭맨 오너 킥 & 판자 레그돌
+-- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 및 범위 이탈 감지 룹티피
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
-local selectedKickPlayer = nil
 local recoveringTargets = {} 
+
+local selectedKickPlayer = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -99,8 +100,9 @@ KickTab:CreateInput({
     Callback = function(v)
         if v == "" then return end
         local found = nil
+        local searchVal = v:lower()
         for _, p in ipairs(Players:GetPlayers()) do
-            if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
+            if p.Name:lower():find(searchVal) or (p.DisplayName and p.DisplayName:lower():find(searchVal)) then
                 found = p
                 break
             end
@@ -112,19 +114,20 @@ KickTab:CreateInput({
         end
         
         selectedKickPlayer = found
-        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 단일 타겟으로 설정되었습니다.", Duration = 2})
+        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
 })
 
 function loopPlayerBlobF4()
     local initialized = false
+    local frameToggle = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            task.wait(0.1)
+            RunService.RenderStepped:Wait()
             continue
         end
 
@@ -135,53 +138,68 @@ function loopPlayerBlobF4()
         
         if myHRP and charHRP and charHUM then
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
+            local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initialized) and not recoveringTargets[name] then
+            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
-                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    pcall(function()
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    end)
+                    task.wait(0.15)
+                    
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        for i = 1, 15 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        end
+                    end)
+                    task.wait(0.05)
+                    
+                    pcall(function()
+                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                        myHRP.CFrame = originalCF
+                    end)
                     task.wait(0.1)
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    end)
-                    task.wait(0.05)
-                    
-                    charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
-                    myHRP.CFrame = originalCF
-                    task.wait(0.05)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        for i = 1, 15 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        end
                     end)
                     
-                    task.wait(0.2)
+                    task.wait(0.3)
                     recoveringTargets[name] = nil
                 end)
             end
             
-            charHRP.CFrame = targetCF
-            charHRP.AssemblyLinearVelocity = Vector3.zero
-            charHRP.AssemblyAngularVelocity = Vector3.zero
-            charHUM.PlatformStand = true
-            charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-            
-            -- 잘 작동하는 검증된 단일 오너 호출 방식 적용
             pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                charHRP.CFrame = targetCF
+                charHRP.AssemblyLinearVelocity = Vector3.zero
+                charHRP.AssemblyAngularVelocity = Vector3.zero
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                
+                -- 셋오너와 디트로이트(그랩라인 생성/제거) 교차 반복 확실하게 수행
+                frameToggle = not frameToggle
+                if frameToggle then
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                else
+                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                end
             end)
         end
-        task.wait(0.05)
+        RunService.RenderStepped:Wait()
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (핑 최적화 버전)",
+    Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -360,4 +378,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "성공적인 셋오너 킥 방식 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 및 디트로이트 교차 반복 킥 로직 수정 완료", Duration = 3})
