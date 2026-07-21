@@ -136,15 +136,19 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
+            -- 범위 이탈 감지 기준을 50으로 늘려(Y좌표 포함 3D 반경) 탈출 시 즉시 룹티피 작동
             local currentDist = (charHRP.Position - myHRP.Position).Magnitude
-            local distY = math.abs(charHRP.Position.Y - myHRP.Position.Y) -- [추가됨] Y좌표 거리 계산
-            
-            -- [수정됨] 거리가 30을 넘거나 Y좌표 차이가 28 이상일 때 발동
-            if (currentDist > 30 or distY >= 28 or not initialized) and not recoveringTargets[name] then
+            if (currentDist > 50 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
                 task.spawn(function()
+                    local originalCF = myHRP.CFrame
+                    pcall(function()
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    end)
+                    task.wait(0.15)
+                    
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
@@ -152,6 +156,12 @@ function loopPlayerBlobF4()
                         end
                     end)
                     task.wait(0.05)
+                    
+                    pcall(function()
+                        charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
+                        myHRP.CFrame = originalCF
+                    end)
+                    task.wait(0.1)
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
@@ -162,7 +172,7 @@ function loopPlayerBlobF4()
                     
                     task.wait(0.3)
                     recoveringTargets[name] = nil
-                    initialized = false
+                    initialized = false -- 이탈 후 재포획을 위해 초기화 상태 해제
                 end)
             end
             
@@ -277,7 +287,7 @@ KickTab:CreateToggle({
 
                         local tChar = selectedKickPlayer and selectedKickPlayer.Character
                         local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                        local tHum = tChar and tChar:FindFirstChild("HumanoidOfClass") or tChar and tChar:FindFirstChildOfClass("Humanoid")
+                        local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
 
                         if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
                             local ragdolledVal = tHum:FindFirstChild("Ragdolled")
