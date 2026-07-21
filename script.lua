@@ -85,7 +85,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 고정력 극대화 단일 타겟 셋오너 킥
+-- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 반복 킥
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -120,6 +120,7 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
+    local frameToggle = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -177,16 +178,20 @@ function loopPlayerBlobF4()
             end
             
             pcall(function()
-                -- 고정력 극대화: 위치를 강제 고정하고 모든 물리 속도를 완전히 0으로 억제
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHRP.Velocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- 떨림 및 바운딩을 유발하던 파괴/생성 교차 방식을 제거하고 네트워크 오너 유지에 집중
-                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                -- 셋오너와 디트로이트(그랩라인 생성/제거) 교차 반복 적용
+                frameToggle = not frameToggle
+                if frameToggle then
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                else
+                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                end
             end)
         end
         RunService.RenderStepped:Wait()
@@ -373,4 +378,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥 고정력 극대화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 및 디트로이트 교차 반복 킥 로직 적용 완료", Duration = 3})
