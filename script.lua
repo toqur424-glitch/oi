@@ -168,7 +168,7 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 위치 및 속도를 완벽히 고정하여 떨어짐 현상(떨림) 방지
+            -- 매 프레임 위치 및 속도를 완벽히 고정하여 떨어짐/올라감 현상(떨림) 완벽 방지
             local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
             charHRP.CFrame = targetCF
             charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -188,7 +188,7 @@ function loopPlayerBlobF4()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (고정력 강화 버전)",
+    Name = "블롭맨 오너 킥 실행 (핑 최적화 버전)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -205,7 +205,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [Pallet Ragdoll (Invis) - 고정력 연동]
+-- [Pallet Ragdoll (Invis) - 핑 최적화 연동]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (단일 타겟 Invis)",
