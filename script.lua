@@ -136,7 +136,9 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            if ((charHRP.Position - myHRP.Position).Magnitude > 40 or not initialized) and not recoveringTargets[name] then
+            -- 범위 이탈 감지 기준을 30으로 세밀하게 조정하여 탈출 시 즉시 룹티피 작동
+            local currentDist = (charHRP.Position - myHRP.Position).Magnitude
+            if (currentDist > 30 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
@@ -170,6 +172,7 @@ function loopPlayerBlobF4()
                     
                     task.wait(0.3)
                     recoveringTargets[name] = nil
+                    initialized = false -- 이탈 후 재포획을 위해 초기화 상태 해제
                 end)
             end
             
@@ -208,7 +211,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [Pallet Ragdoll (Invis) 통합]
+-- [새로운 Pallet Ragdoll (Invis) 통합]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
@@ -369,9 +372,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [설정 탭]
+-- [나머지 필수 탭들 유지]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안정성 패치 및 에러 방지 처리 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "이탈 거리 감지 및 자동 추적 복구 기능 강화 완료", Duration = 3})
