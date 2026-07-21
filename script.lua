@@ -89,8 +89,6 @@ GrabTab:CreateKeybind({
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
-local recoveringTargets = {} 
-
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -121,17 +119,18 @@ KickTab:CreateInput({
 function loopPlayerBlobF4()
     local initialized = false
     local frameToggle = false
+    local isRecovering = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
+            isRecovering = false
             RunService.RenderStepped:Wait()
             continue
         end
 
-        local name = player.Name
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local charHRP = player.Character.HumanoidRootPart
         local charHUM = player.Character:FindFirstChild("Humanoid")
@@ -140,58 +139,62 @@ function loopPlayerBlobF4()
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            if (currentDist > 25 or not initialized) and not recoveringTargets[name] then
-                recoveringTargets[name] = true
-                initialized = true 
+            -- [개선된 범위 이탈 감지 및 강제 납치 로직]
+            if (currentDist > 25 or not initialized) and not isRecovering then
+                isRecovering = true
                 
-                task.spawn(function()
-                    local originalCF = myHRP.CFrame
-                    pcall(function()
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    end)
-                    task.wait(0.15)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
-                    end)
-                    task.wait(0.05)
-                    
-                    pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
-                        myHRP.CFrame = originalCF
-                    end)
-                    task.wait(0.1)
-                    
+                local originalCF = myHRP.CFrame
+                
+                -- 1. 내 캐릭터를 상대 근처로 순간이동
+                pcall(function()
+                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 3, 0)
+                end)
+                task.wait(0.08)
+                
+                -- 2. 근접 상태에서 셋오너 확실하게 탈취 (연속 픽스)
+                for i = 1, 20 do
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, myHRP.CFrame)
                     end)
+                end
+                task.wait(0.05)
+                
+                -- 3. 상대와 나를 원래 내 위치(머리 위)로 동시 당겨옴
+                pcall(function()
+                    myHRP.CFrame = originalCF
+                    charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                end)
+                task.wait(0.08)
+                
+                -- 4. 오너십 재확인 및 초기화 완료
+                for i = 1, 15 do
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, targetCF)
+                    end)
+                end
+                
+                initialized = true
+                isRecovering = false
+            elseif not isRecovering then
+                -- [정상 복구된 상태에서 머리 위 실시간 강제 고정]
+                pcall(function()
+                    charHRP.CFrame = targetCF
+                    charHRP.AssemblyLinearVelocity = Vector3.zero
+                    charHRP.AssemblyAngularVelocity = Vector3.zero
+                    charHUM.PlatformStand = true
+                    charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                     
-                    task.wait(0.3)
-                    recoveringTargets[name] = nil
+                    frameToggle = not frameToggle
+                    if frameToggle then
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, targetCF)
+                    else
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    end
                 end)
             end
-            
-            pcall(function()
-                charHRP.CFrame = targetCF
-                charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHUM.PlatformStand = true
-                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                
-                frameToggle = not frameToggle
-                if frameToggle then
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, targetCF)
-                else
-                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                end
-            end)
         end
         RunService.RenderStepped:Wait()
     end
@@ -377,4 +380,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "머리 위 좌표 고정 로직 완벽 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "범위 이탈 자동 추적 및 동기화 완벽 적용 완료", Duration = 3})
