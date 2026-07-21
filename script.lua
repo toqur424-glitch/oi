@@ -89,18 +89,8 @@ GrabTab:CreateKeybind({
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
-local kickTargetList = {}
-local recoveringTargets = {} 
-
-local function updateTargetList()
-    kickTargetList = {}
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= plr then table.insert(kickTargetList, p.Name) end
-    end
-end
-
--- 타겟 선택 변수 선언
 local selectedKickPlayer = nil
+local recoveringTargets = {} 
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -131,67 +121,66 @@ function loopPlayerBlobF4()
     local frameToggle = false
     
     while blobLoopT4 do
-        updateTargetList()
-        for _, name in pairs(kickTargetList) do
-            local player = Players:FindFirstChild(name)
-            local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-            
-            if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-                initializedTargets[name] = nil
-                continue
-            end
+        local player = selectedKickPlayer
+        
+        if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+            initializedTargets = {}
+            RunService.RenderStepped:Wait()
+            continue
+        end
 
-            local charHRP = player.Character.HumanoidRootPart
-            local charHUM = player.Character:FindFirstChild("Humanoid")
-            
-            if myHRP and charHRP and charHUM then
-                if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[player.Name]) and not recoveringTargets[player.Name] then
-                    recoveringTargets[player.Name] = true
-                    initializedTargets[player.Name] = true 
+        local name = player.Name
+        local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        local charHRP = player.Character.HumanoidRootPart
+        local charHUM = player.Character:FindFirstChild("Humanoid")
+        
+        if myHRP and charHRP and charHUM then
+            if ((charHRP.Position - myHRP.Position).Magnitude > 200 or not initializedTargets[name]) and not recoveringTargets[name] then
+                recoveringTargets[name] = true
+                initializedTargets[name] = true 
+                
+                task.spawn(function()
+                    local originalCF = myHRP.CFrame
+                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    task.wait(0.15)
                     
-                    task.spawn(function()
-                        local originalCF = myHRP.CFrame
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                        task.wait(0.15)
-                        
-                        pcall(function()
-                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                            for i = 1, 30 do
-                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            end
-                        end)
-                        task.wait(0.05)
-                        
-                        charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
-                        myHRP.CFrame = originalCF
-                        task.wait(0.1)
-                        
-                        pcall(function()
-                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                            for i = 1, 30 do
-                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            end
-                        end)
-                        
-                        task.wait(0.3)
-                        recoveringTargets[player.Name] = nil
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        for i = 1, 30 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        end
                     end)
-                end
-                
-                local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
-                charHRP.CFrame = targetCF
-                charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHUM.PlatformStand = true
-                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                
-                frameToggle = not frameToggle
-                if frameToggle then
-                    for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
-                else
-                    charHRP.CFrame = targetCF 
-                    for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
-                end
+                    task.wait(0.05)
+                    
+                    charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
+                    myHRP.CFrame = originalCF
+                    task.wait(0.1)
+                    
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        for i = 1, 30 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        end
+                    end)
+                    
+                    task.wait(0.3)
+                    recoveringTargets[name] = nil
+                end)
+            end
+            
+            local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+            charHRP.CFrame = targetCF
+            charHRP.AssemblyLinearVelocity = Vector3.zero
+            charHRP.AssemblyAngularVelocity = Vector3.zero
+            charHUM.PlatformStand = true
+            charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+            
+            frameToggle = not frameToggle
+            if frameToggle then
+                for i = 1, 20 do rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) end
+            else
+                charHRP.CFrame = targetCF 
+                for i = 1, 5 do rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) end
             end
         end
         RunService.RenderStepped:Wait()
@@ -201,6 +190,10 @@ end
 KickTab:CreateToggle({
     Name = "블롭맨 오너 킥 실행 (자동 복귀)",
     Callback = function(v)
+        if v and not selectedKickPlayer then
+            Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
+            return
+        end
         blobLoopT4 = v
         if v then task.spawn(loopPlayerBlobF4) end
     end
