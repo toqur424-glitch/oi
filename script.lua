@@ -91,7 +91,6 @@ local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local recoveringTargets = {} 
 
--- 타겟 선택 변수 선언
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -137,14 +136,15 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- 범위 이탈(거리 40 이상 벌어짐) 또는 초기화 상태일 때 자동으로 룹티피 타서 셋오너 걸고 가져오기
             if ((charHRP.Position - myHRP.Position).Magnitude > 40 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
-                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    pcall(function()
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    end)
                     task.wait(0.15)
                     
                     pcall(function()
@@ -155,8 +155,10 @@ function loopPlayerBlobF4()
                     end)
                     task.wait(0.05)
                     
-                    charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
-                    myHRP.CFrame = originalCF
+                    pcall(function()
+                        charHRP.CFrame = originalCF * CFrame.new(0, 25, 0)
+                        myHRP.CFrame = originalCF
+                    end)
                     task.wait(0.1)
                     
                     pcall(function()
@@ -171,16 +173,15 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
-            charHRP.CFrame = targetCF
-            charHRP.AssemblyLinearVelocity = Vector3.zero
-            charHRP.AssemblyAngularVelocity = Vector3.zero
-            charHUM.PlatformStand = true
-            charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-            
-            -- 셋오너와 디트로이트(라인 생성/파괴) 방식을 교차 적용하여 킥 성능 및 고정력 극대화
-            frameToggle = not frameToggle
             pcall(function()
+                local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+                charHRP.CFrame = targetCF
+                charHRP.AssemblyLinearVelocity = Vector3.zero
+                charHRP.AssemblyAngularVelocity = Vector3.zero
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                
+                frameToggle = not frameToggle
                 if frameToggle then
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 else
@@ -207,7 +208,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합]
+-- [Pallet Ragdoll (Invis) 통합]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
@@ -219,7 +220,6 @@ KickTab:CreateToggle({
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
         local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
-        local toysFolder = workspace:WaitForChild(plr.Name .. "SpawnedInToys")
         local lpName = plr.Name
 
         local function clearAttackLoop()
@@ -242,6 +242,12 @@ KickTab:CreateToggle({
                 getgenv().palletCacheConn:Disconnect()
             end
             clearAttackLoop()
+
+            local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
+            if not toysFolder then
+                Rayfield:Notify({Title = "오류", Content = "생성된 토이 폴더를 찾을 수 없습니다.", Duration = 3})
+                return
+            end
 
             getgenv().palletCacheConn = toysFolder.ChildAdded:Connect(function(child)
                 if not getgenv().palletRagdollActive then return end
@@ -354,7 +360,8 @@ KickTab:CreateToggle({
 
             getgenv().PalletForRagdoll = nil
 
-            if toysFolder:FindFirstChild("PalletForRagdoll") then
+            local toysFolder = workspace:FindFirstChild(lpName .. "SpawnedInToys")
+            if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
                 pcall(function() DestroyToy:FireServer(toysFolder.PalletForRagdoll) end)
             end
         end
@@ -362,9 +369,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭들 유지]
+-- [설정 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "범위 이탈 감지 및 자동 추적 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안정성 패치 및 에러 방지 처리 완료", Duration = 3})
