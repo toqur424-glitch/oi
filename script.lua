@@ -136,9 +136,14 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- 범위 이탈 감지 기준을 50으로 늘려(Y좌표 포함 3D 반경) 탈출 시 즉시 룹티피 작동
-            local currentDist = (charHRP.Position - myHRP.Position).Magnitude
-            if (currentDist > 50 or not initialized) and not recoveringTargets[name] then
+            -- [수정됨] 타겟이 있어야 할 '정확한 고정 목표 위치'를 먼저 계산
+            local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
+            
+            -- [핵심 수정] 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산 (기본 거리 = 0)
+            local currentDist = (charHRP.Position - targetCF.Position).Magnitude
+            
+            -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
+            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
@@ -177,7 +182,6 @@ function loopPlayerBlobF4()
             end
             
             pcall(function()
-                local targetCF = myHRP.CFrame * CFrame.new(0, 25, 0)
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
@@ -377,4 +381,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "이탈 거리 감지 및 자동 추적 복구 기능 강화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "이탈 거리 기준점 수정 완료", Duration = 3})
