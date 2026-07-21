@@ -137,23 +137,32 @@ function loopPlayerBlobF4()
         
         if myHRP and charHRP and charHUM then
             local currentDist = (charHRP.Position - myHRP.Position).Magnitude
-            if (currentDist > 30 or not initialized) and not recoveringTargets[name] then
+            local distY = math.abs(charHRP.Position.Y - myHRP.Position.Y) -- Y좌표 거리 계산 추가
+            
+            -- [수정됨] 거리가 30을 넘거나 Y좌표 차이가 28 이상일 때 룹티피 추적 발동
+            if (currentDist > 30 or distY >= 28 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
                 task.spawn(function()
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
-                    end)
-                    task.wait(0.05)
+                    local originalCF = myHRP.CFrame -- 내 캐릭터의 원래 위치 저장
                     
+                    -- 상대방에게 직접 룹티피를 타서 셋오너 확실히 뺏어오기
+                    for _ = 1, 3 do
+                        pcall(function()
+                            myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 0, 1) -- 상대 근처로 텔레포트
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                            for i = 1, 15 do
+                                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            end
+                        end)
+                        task.wait(0.04)
+                    end
+                    
+                    -- 내 캐릭터를 원래 자리로 복귀 (이때 상대방도 셋오너 판정에 의해 함께 끌려옴)
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        if myHRP then
+                            myHRP.CFrame = originalCF
                         end
                     end)
                     
