@@ -85,12 +85,10 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 안정적 고정력 셋오너 킥
+-- [KICK 탭] - 위치 고정을 제거하고 힛파트/네트워크 오너십 물리 킥 방식 적용
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
-local recoveringTargets = {} 
-
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -119,80 +117,35 @@ KickTab:CreateInput({
 })
 
 function loopPlayerBlobF4()
-    local initialized = false
-    
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-            initialized = false
-            RunService.RenderStepped:Wait()
+            task.wait(0.1)
             continue
         end
 
-        local name = player.Name
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local charHRP = player.Character.HumanoidRootPart
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-            local currentDist = (charHRP.Position - targetCF.Position).Magnitude
-            
-            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
-                recoveringTargets[name] = true
-                initialized = true 
-                
-                task.spawn(function()
-                    local originalCF = myHRP.CFrame
-                    pcall(function()
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    end)
-                    task.wait(0.15)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
-                    end)
-                    task.wait(0.05)
-                    
-                    pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
-                        myHRP.CFrame = originalCF
-                    end)
-                    task.wait(0.1)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
-                    end)
-                    
-                    task.wait(0.3)
-                    recoveringTargets[name] = nil
-                end)
-            end
-            
             pcall(function()
-                -- 떨림을 유발하던 교차 토글 방식을 제거하고, 강력한 단일 오너 유지 방식으로 안정화
-                charHRP.CFrame = targetCF
-                charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHRP.AssemblyAngularVelocity = Vector3.zero
+                -- CFrame 강제 고정을 완전히 빼고, 힛파트(RootPart)와 네트워크 오너십을 이용한 물리 힘 전달 방식 적용
+                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, myHRP.CFrame)
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                -- 위치를 고정하지 않고 타겟의 루트파트를 조준하여 전방으로 강력하게 날려버리는 물리 속도 부여
+                charHRP.AssemblyLinearVelocity = (myHRP.CFrame.LookVector * 100) + Vector3.new(0, 150, 0)
             end)
         end
-        RunService.RenderStepped:Wait()
+        task.wait(0.05)
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
+    Name = "블롭맨 오너 킥 실행 (고정 제거 및 힛파트 물리 킥)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -371,4 +324,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안정적인 단일 셋오너 고정 킥 로직 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "위치 고정 제거 및 힛파트 물리 킥 방식 적용 완료", Duration = 3})
