@@ -85,12 +85,10 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 및 범위 이탈 감지 룹티피
+-- [KICK 탭] - 빈도 폭발 타겟 셋오너 & 자동 복구
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
-local recoveringTargets = {} 
-
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -100,8 +98,9 @@ KickTab:CreateInput({
     Callback = function(v)
         if v == "" then return end
         local found = nil
+        local searchVal = v:lower()
         for _, p in ipairs(Players:GetPlayers()) do
-            if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
+            if p.Name:lower():find(searchVal) or (p.DisplayName and p.DisplayName:lower():find(searchVal)) then
                 found = p
                 break
             end
@@ -119,79 +118,78 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
+    local isRecovering = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
-        if not player or not player.Character then
+        if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
+            isRecovering = false
             RunService.RenderStepped:Wait()
             continue
         end
 
-        local name = player.Name
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        
-        -- pcld 우선 탐색, 없으면 HRP
-        local pcldPart = player.Character:FindFirstChild("pcld") or player.Character:FindFirstChild("Pcld")
-        local charHRP = player.Character:FindFirstChild("HumanoidRootPart")
+        local charHRP = player.Character.HumanoidRootPart
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
-        local targetPart = pcldPart or charHRP
-        
-        if myHRP and targetPart then
+        if myHRP and charHRP and charHUM then
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-            local currentDist = (targetPart.Position - targetCF.Position).Magnitude
+            local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 거리가 멀어지면 가져오기(Fetch) 실행
-            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
-                recoveringTargets[name] = true
-                initialized = true 
+            -- [범위 이탈 감지 시: 딜레이를 최소화하고 빈도를 대폭 올려서 무지성으로 끌고옴]
+            if (currentDist > 25 or not initialized) and not isRecovering then
+                isRecovering = true
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
                     
-                    -- 1. 상대방 위치로 이동 후 '서버 인식 대기' (핵심)
-                    pcall(function() myHRP.CFrame = targetPart.CFrame * CFrame.new(0, 0, 2) end)
-                    task.wait(0.15) 
+                    -- 1. 빠르게 상대에게 접근
+                    pcall(function() myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0) end)
+                    task.wait(0.03) 
                     
-                    -- 2. 확실하게 소유권 강탈
-                    for _ = 1, 4 do
-                        pcall(function()
-                            rs.GrabEvents.CreateGrabLine:FireServer(targetPart, CFrame.new())
-                            rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
-                        end)
-                        task.wait(0.05)
-                    end
-                    
-                    -- 3. 내 원래 자리로 타겟을 먼저 보내고 나도 복귀
+                    -- 2. 셋오너 빈도 폭발 (기존 15~20회 -> 30회)
                     pcall(function()
-                        targetPart.CFrame = originalCF * CFrame.new(0, 20, 0)
-                        targetPart.AssemblyLinearVelocity = Vector3.zero
-                        myHRP.CFrame = originalCF
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        for i = 1, 30 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, myHRP.CFrame)
+                        end
                     end)
-                    task.wait(0.1)
                     
-                    recoveringTargets[name] = false
+                    -- 3. 바로 내 원래 위치로 끌고 옴 (딜레이 없이)
+                    pcall(function()
+                        myHRP.CFrame = originalCF
+                        charHRP.CFrame = targetCF
+                    end)
+                    task.wait(0.03)
+                    
+                    -- 4. 도착 직후 다시 빈도 폭발로 락다운
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        for i = 1, 30 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, targetCF)
+                        end
+                    end)
+                    
+                    initialized = true
+                    isRecovering = false
                 end)
-            end
-            
-            -- 추적/복귀 중이 아닐 때만 룹티피(고정) 실행하여 충돌 방지
-            if not recoveringTargets[name] then
+            elseif not isRecovering then
+                -- [정상 복구된 상태: 매 프레임 교차 없이 바로 여러 번 쑤셔넣기]
                 pcall(function()
-                    targetPart.CFrame = targetCF
-                    targetPart.AssemblyLinearVelocity = Vector3.zero
-                    targetPart.AssemblyAngularVelocity = Vector3.zero
+                    charHRP.CFrame = targetCF
+                    charHRP.AssemblyLinearVelocity = Vector3.zero
+                    charHRP.AssemblyAngularVelocity = Vector3.zero
+                    charHUM.PlatformStand = true
+                    charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                     
-                    if charHUM then
-                        charHUM.PlatformStand = true
-                        charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                    -- 1프레임당 오너십과 디트로이트(스매시) 락을 3번씩 반복해서 절대 안 떨어지게 만듦
+                    for i = 1, 3 do
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, targetCF)
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                     end
-                    
-                    -- 무리한 연사(for i=1,3) 삭제. 이벤트 씹힘 현상을 막고 가장 강력한 F키 로직 그대로 적용
-                    rs.GrabEvents.CreateGrabLine:FireServer(targetPart, CFrame.new())
-                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
-                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
                 end)
             end
         end
@@ -200,7 +198,7 @@ function loopPlayerBlobF4()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
+    Name = "블롭맨 오너 킥 실행 (범위 이탈 쾌속 추적)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -373,342 +371,10 @@ KickTab:CreateToggle({
     end,
 })
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local LocalPlayer = Players.LocalPlayer
-
-local SpawnToyRemoteFunction = ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction")
-local GrabEvent = ReplicatedStorage:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-local DestroyToy = ReplicatedStorage:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
-
-local Character, HumanoidRootPart
-local folder
-
-local toys = 5
-local activePencils = {}
-
-local function GetHighestGrabbableHitbox(blob)
-    local highest = nil
-    local highestY = -math.huge
-
-    for _, v in ipairs(blob:GetDescendants()) do
-        if v.Name == "GrabbableHitbox" and v:IsA("BasePart") then
-            local y = v.Position.Y
-
-            if y > highestY then
-                highestY = y
-                highest = v
-            end
-        end
-    end
-
-    return highest
-end
-
-local function SetupCharacter(char)
-    Character = char
-    HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
-    folder = workspace:WaitForChild(LocalPlayer.Name .. "SpawnedInToys")
-end
-
-SetupCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
-LocalPlayer.CharacterAdded:Connect(SetupCharacter)
-
-local function SpawnPencil()
-    local pos = HumanoidRootPart.CFrame * CFrame.Angles(-0.605224, -0.321753, 0)
-
-    task.spawn(function()
-        SpawnToyRemoteFunction:InvokeServer(
-            "ToolPencil",
-            pos,
-            Vector3.new(0, 0, 0)
-        )
-    end)
-end
-
-local function WaitForNewPencil(timeout)
-    timeout = timeout or 6
-
-    local result = nil
-    local done = false
-
-    local connection
-    connection = folder.ChildAdded:Connect(function(child)
-        if child.Name == "ToolPencil" then
-            result = child
-            done = true
-        end
-    end)
-
-    local start = tick()
-
-    while not done and tick() - start < timeout do
-        task.wait()
-    end
-
-    connection:Disconnect()
-
-    return result
-end
-
-local function ApplyPermanentLift(pencil)
-    local soundPart = pencil:FindFirstChild("SoundPart")
-    if not soundPart then
-        return
-    end
-
-    for _, v in ipairs(soundPart:GetChildren()) do
-        if v:IsA("LinearVelocity") then
-            v:Destroy()
-        end
-    end
-
-    local att = Instance.new("Attachment")
-    att.Parent = soundPart
-end
-
-local function CreateOnePencil()
-    while true do
-        SpawnPencil()
-
-        local pencil = WaitForNewPencil()
-        if not pencil then
-            task.wait(0.2)
-            continue
-        end
-
-        task.wait(0.19)
-        pencil.StickyPart.CanTouch = false
-
-        local soundPart = pencil:FindFirstChild("SoundPart")
-        if not soundPart then
-            continue
-        end
-
-        GrabEvent:FireServer(soundPart, soundPart.CFrame)
-
-        task.wait(0.15)
-
-        local owner = soundPart:FindFirstChild("PartOwner")
-
-        if owner and owner.Value == LocalPlayer.Name then
-            table.insert(activePencils, pencil)
-
-            ApplyPermanentLift(pencil)
-
-            return true
-        else
-            DestroyToy:FireServer(pencil)
-        end
-
-        task.wait(0.2)
-    end
-end
-
-function KickPlayerOnBlob(blob)
-    local target = 1
-    local created = 0
-
-    while created < target do
-        if CreateOnePencil() then
-            created += 1
-        end
-
-        task.wait(0.4)
-    end
-
-    for _, pencil in ipairs(activePencils) do
-        if pencil and pencil.Parent then
-            game:GetService("ReplicatedStorage").GrabEvents.DestroyGrabLine:FireServer(pencil:FindFirstChildOfClass("BasePart"))
-
-            local args = {
-                [1] = pencil.StickyPart,
-                [2] = blob:GetChildren()[20],
-                [3] = CFrame.new(1e45, math.huge, 1e98)
-            }
-
-            game:GetService("ReplicatedStorage").PlayerEvents.StickyPartEvent:FireServer(unpack(args))
-        end
-    end
-end
-
-function KickPlayerOnBlob12Kunai(blob)
-    local target = 12
-    local created = 0
-
-    while created < target do
-        if CreateOnePencil() then
-            created += 1
-        end
-
-        task.wait(0.4)
-    end
-
-    for _, pencil in ipairs(activePencils) do
-        if pencil and pencil.Parent then
-            game:GetService("ReplicatedStorage").GrabEvents.DestroyGrabLine:FireServer(pencil:FindFirstChildOfClass("BasePart"))
-
-            local args = {
-                [1] = pencil.StickyPart,
-                [2] = blob:GetChildren()[20],
-                [3] = CFrame.new(1e45, math.huge, 1e98)
-            }
-
-            game:GetService("ReplicatedStorage").PlayerEvents.StickyPartEvent:FireServer(unpack(args))
-        end
-    end
-end
-
-function BreakMap()
-    local target = 1
-    local created = 0
-
-    while created < target do
-        if CreateOnePencil() then
-            created += 1
-        end
-
-        task.wait(0.4)
-    end
-
-    for _, pencil in ipairs(activePencils) do
-        if pencil and pencil.Parent then
-            game:GetService("ReplicatedStorage").GrabEvents.DestroyGrabLine:FireServer(pencil:FindFirstChildOfClass("BasePart"))
-
-            local args = {
-                [1] = pencil.StickyPart,
-                [2] = workspace.Map.BaseGround:GetChildren()[154],
-                [3] = CFrame.new(1e45, math.huge, 1e98)
-            }
-
-            game:GetService("ReplicatedStorage").PlayerEvents.StickyPartEvent:FireServer(unpack(args))
-        end
-    end
-end
-
-function BreakPlot(...)
-    local plots = { ... }
-    local target = #plots
-
-    local created = 0
-    local pencils = {}
-
-    while created < target do
-        if CreateOnePencil() then
-            created += 1
-
-            local pencil = activePencils[#activePencils]
-            table.insert(pencils, pencil)
-        end
-
-        task.wait(0.4)
-    end
-
-    for i, plot in ipairs(plots) do
-        local pencil = pencils[i]
-
-        if typeof(pencil) == "Instance" and pencil.Parent then
-            game:GetService("ReplicatedStorage").GrabEvents.DestroyGrabLine:FireServer(
-                pencil:FindFirstChildOfClass("BasePart")
-            )
-
-            game:GetService("ReplicatedStorage").PlayerEvents.StickyPartEvent:FireServer(
-                pencil.StickyPart,
-                plot.PlotArea,
-                CFrame.new(0 / 0, math.huge, 0 / 0)
-            )
-        end
-    end
-end
-
--- ========================================== --
--- ||           GUI BUTTON SETUP           || --
--- ========================================== --
-
-local CoreGui = game:GetService("CoreGui")
-
--- 기존에 켜져있는 UI가 있다면 삭제 (중복 실행 방지)
-if CoreGui:FindFirstChild("GitHubScriptUI") then
-    CoreGui.GitHubScriptUI:Destroy()
-end
-
--- ScreenGui 생성
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "GitHubScriptUI"
-ScreenGui.Parent = CoreGui
-
--- 메인 프레임 생성
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 200, 0, 150)
-MainFrame.Position = UDim2.new(0.5, -100, 0.5, -75)
-MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
-MainFrame.Parent = ScreenGui
-
--- 둥근 모서리 적용
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 8)
-UICorner.Parent = MainFrame
-
--- UI 제목
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.BackgroundTransparency = 1
-Title.Text = "Script Menu"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 18
-Title.Parent = MainFrame
-
--- Break Map 버튼
-local BreakMapBtn = Instance.new("TextButton")
-BreakMapBtn.Size = UDim2.new(1, -20, 0, 40)
-BreakMapBtn.Position = UDim2.new(0, 10, 0, 40)
-BreakMapBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-BreakMapBtn.Text = "Break Map"
-BreakMapBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-BreakMapBtn.Font = Enum.Font.SourceSansSemibold
-BreakMapBtn.TextSize = 16
-BreakMapBtn.Parent = MainFrame
-
-local BtnCorner1 = Instance.new("UICorner")
-BtnCorner1.CornerRadius = UDim.new(0, 6)
-BtnCorner1.Parent = BreakMapBtn
-
--- Break Map 버튼 클릭 이벤트
-BreakMapBtn.MouseButton1Click:Connect(function()
-    BreakMap()
-end)
-
--- Break Plot 3 버튼
-local BreakPlotBtn = Instance.new("TextButton")
-BreakPlotBtn.Size = UDim2.new(1, -20, 0, 40)
-BreakPlotBtn.Position = UDim2.new(0, 10, 0, 90)
-BreakPlotBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-BreakPlotBtn.Text = "Break Plot 3"
-BreakPlotBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-BreakPlotBtn.Font = Enum.Font.SourceSansSemibold
-BreakPlotBtn.TextSize = 16
-BreakPlotBtn.Parent = MainFrame
-
-local BtnCorner2 = Instance.new("UICorner")
-BtnCorner2.CornerRadius = UDim.new(0, 6)
-BtnCorner2.Parent = BreakPlotBtn
-
--- Break Plot 3 버튼 클릭 이벤트
-BreakPlotBtn.MouseButton1Click:Connect(function()
-    if workspace:FindFirstChild("Plots") and workspace.Plots:FindFirstChild("Plot3") then
-        BreakPlot(workspace.Plots.Plot3)
-    end
-end)
-
 --=============================================
 -- [나머지 필수 탭들 유지]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "서버 딜레이 안정화 및 고정 로직 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "빈도 대폭 증가 및 최적화 완료", Duration = 3})
