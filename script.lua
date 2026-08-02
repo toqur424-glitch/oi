@@ -12,6 +12,7 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ContextActionService = game:GetService("ContextActionService")
 local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
@@ -64,7 +65,7 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- [수정됨] 딜레이 없이 3대장(셋오너, 디트로이트, 레그돌) 즉발 연사
+        -- 딜레이 없이 3대장(셋오너, 디트로이트, 레그돌) 즉발 연사
         for i = 1, 4 do
             pcall(function()
                 SetNetOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
@@ -147,17 +148,13 @@ function loopPlayerBlobF4()
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- [범위 이탈 감지 시: 딜레이를 완전히 제거하고 무지성으로 끌고옴]
             if (currentDist > 25 or not initialized) and not isRecovering then
                 isRecovering = true
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
-                    
-                    -- 1. 빠르게 상대에게 접근
                     pcall(function() myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0) end)
                     
-                    -- 2. [수정됨] task.wait 제거 및 3대장 리모트 폭발적 연사
                     pcall(function()
                         for i = 1, 15 do
                             SetNetOwner:FireServer(charHRP, myHRP.CFrame)
@@ -166,7 +163,6 @@ function loopPlayerBlobF4()
                         end
                     end)
                     
-                    -- 3. 바로 내 원래 위치로 끌고 옴 (딜레이 없이 즉시)
                     pcall(function()
                         myHRP.CFrame = originalCF
                         charHRP.CFrame = targetCF
@@ -176,7 +172,6 @@ function loopPlayerBlobF4()
                     isRecovering = false
                 end)
             elseif not isRecovering then
-                -- [정상 복구된 상태: 매 프레임 교차 없이 바로 여러 번 쑤셔넣기]
                 pcall(function()
                     charHRP.CFrame = targetCF
                     charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -184,7 +179,6 @@ function loopPlayerBlobF4()
                     charHUM.PlatformStand = true
                     charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                     
-                    -- [수정됨] 1프레임당 오너십+디트로이트+레그돌 3번씩 꽂아넣어 절대 못 빠져나가게 함
                     for i = 1, 3 do
                         SetNetOwner:FireServer(charHRP, targetCF)
                         DestroyLine:FireServer(charHRP)
@@ -210,9 +204,6 @@ KickTab:CreateToggle({
     end
 })
 
---=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합]
---=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
     Flag = "Ragdoll Target",
@@ -257,7 +248,6 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                -- 판자 스폰 시 딜레이 없이 바로 셋오너 + 디트로이트
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
                     DestroyLine:FireServer(soundPart)
@@ -289,8 +279,6 @@ KickTab:CreateToggle({
                         local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
 
                         if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
-                            
-                            -- [수정됨] 물리적인 판자 타격과 함께 리모트 레그돌까지 즉발로 쏴서 무력화 100% 보장
                             pcall(function() RagdollRemote:FireServer(tRoot, 2) end)
 
                             local ragdolledVal = tHum:FindFirstChild("Ragdolled")
@@ -375,9 +363,80 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭들 유지]
+-- [FUN 탭] - 플립 기능 (Z = 앞구르기, X = 뒤구르기)
+--=============================================
+local FunTab = Window:CreateTab("Fun", nil)
+FunTab:CreateSection("=== FLIP (Z / X) ===")
+
+local FlipEnabled = false
+local h = 0.0174533
+
+local doFrontflip = function()
+    if not FlipEnabled then return end
+    local char = plr.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if hum and hrp and hum.Health > 0 then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        task.wait()
+        hum.Sit = true
+        for i = 1, 360 do 
+            task.delay(i/720, function()
+                if hum and hrp and hum.Parent then
+                    hum.Sit = true
+                    hrp.CFrame *= CFrame.Angles(-h, 0, 0)
+                end
+            end)
+        end
+        task.wait(0.55)
+        if hum and hum.Parent then hum.Sit = false end
+    end
+end
+
+local doBackflip = function()
+    if not FlipEnabled then return end
+    local char = plr.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if hum and hrp and hum.Health > 0 then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        task.wait()
+        hum.Sit = true
+        for i = 1, 360 do
+            task.delay(i/720, function()
+                if hum and hrp and hum.Parent then
+                    hum.Sit = true
+                    hrp.CFrame *= CFrame.Angles(h, 0, 0)
+                end
+            end)
+        end
+        task.wait(0.55)
+        if hum and hum.Parent then hum.Sit = false end
+    end
+end
+
+FunTab:CreateToggle({
+    Name = "Flip (Z = Front, X = Back)",
+    CurrentValue = false,
+    Callback = function(Value)
+        FlipEnabled = Value
+    end
+})
+
+ContextActionService:BindAction("Frontflip", function(_, state)
+    if state == Enum.UserInputState.Begin then doFrontflip() end
+end, false, Enum.KeyCode.Z)
+
+ContextActionService:BindAction("Backflip", function(_, state)
+    if state == Enum.UserInputState.Begin then doBackflip() end
+end, false, Enum.KeyCode.X)
+
+--=============================================
+-- [SETTINGS 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "빈도 대폭 증가 및 딜레이 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "빈도 대폭 증가 및 플립 기능 통합 완료", Duration = 3})
