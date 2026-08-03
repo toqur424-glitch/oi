@@ -56,7 +56,6 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- [수정됨] 셋오너 및 디트로이트 빈도 상향 (4 -> 8)
         for i = 1, 8 do
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
@@ -136,14 +135,14 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
-            local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
+            -- [수정] 고정 좌표 설정: X = 5, Y = 8
+            local targetCF = myHRP.CFrame * CFrame.new(5, 8, 0)
             
-            -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
+            -- 고정 위치와의 거리 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
-            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
+            -- [수정] 인식 감지 범위 확장 (15 -> 25스튜디오)
+            if (currentDist > 25 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true
                 
@@ -156,23 +155,22 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        -- [수정됨] 셋오너 빈도 상향 (15 -> 25)
-                        for i = 1, 25 do
+                        for i = 1, 30 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
                     task.wait(0.05)
                     
                     pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                        -- [수정] 재복구 위치 좌표 X = 5, Y = 8 적용
+                        charHRP.CFrame = originalCF * CFrame.new(5, 8, 0)
                         myHRP.CFrame = originalCF
                     end)
                     task.wait(0.1)
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        -- [수정됨] 셋오너 빈도 상향 (15 -> 25)
-                        for i = 1, 25 do
+                        for i = 1, 30 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
@@ -189,8 +187,8 @@ function loopPlayerBlobF4()
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [수정됨] 프레임 토글 삭제 후 매 프레임마다 셋오너와 디트로이트를 동시에 적당한 횟수로 발동
-                for i = 1, 2 do
+                -- [수정] 셋오너, 디트로이트 번갈아 발동하는 빈도 상향 (2회 -> 5회)
+                for i = 1, 5 do
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
@@ -396,7 +394,6 @@ KickTab:CreateToggle({
                             end
                         end)
                     end
-                    -- [수정됨] task.wait(0.1) 대신 RenderStepped 대기를 사용하여 매 프레임 고정 (강도 최고)
                     RunService.RenderStepped:Wait()
                 end
             end)
@@ -410,4 +407,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "고정 강도 및 셋오너 빈도 상향 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "X=5, Y=8 오프셋 / 인식범위 25 / 교차 연동 빈도 상향 완료", Duration = 3})
