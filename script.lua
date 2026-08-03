@@ -17,6 +17,17 @@ local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
 --=============================================
+-- [핵심 물리 함수 추가 (참조 로직 기반)]
+--=============================================
+-- [수정] 일반 CFrame.lookAt 대신 참조 코드의 fromMatrix 기반 커스텀 lookAt 함수 적용
+local function lookAt(startPosition, targetPosition)
+    local directionVector = (targetPosition - startPosition).Unit
+    local rightVector = directionVector:Cross(Vector3.new(0, 1, 0))
+    local upVector = rightVector:Cross(directionVector)
+    return CFrame.fromMatrix(startPosition, rightVector, upVector)
+end
+
+--=============================================
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
@@ -56,11 +67,11 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- [수정] 거리 체크 및 리모트 스팸 방지 (초당 60회로 고정, 한 프레임 다중 발송 제거)
+        -- [수정] 참조 코드의 30스터드 제한과 커스텀 lookAt, DestroyGrabLine 패턴 적용
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, lookAt(myRoot.Position, tgtRoot.Position))
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
         end
@@ -137,13 +148,9 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-            
-            -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
@@ -155,13 +162,14 @@ function loopPlayerBlobF4()
                     end)
                     task.wait(0.15)
                     
-                    -- [수정] 셋오너 스팸 시 프레임 대기 추가 (디트로이트 방지 핵심)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
+                            -- [수정] 커스텀 lookAt 적용
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, lookAt(myHRP.Position, charHRP.Position))
+                            RunService.Heartbeat:Wait()
                         end
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) -- 라인 초기화 방어
                     end)
                     task.wait(0.05)
                     
@@ -174,9 +182,10 @@ function loopPlayerBlobF4()
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, lookAt(myHRP.Position, charHRP.Position))
+                            RunService.Heartbeat:Wait()
                         end
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                     end)
                     
                     task.wait(0.3)
@@ -191,11 +200,11 @@ function loopPlayerBlobF4()
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [수정] 거리가 30을 넘어갈 때 강제 셋오너 억제
+                -- [수정] 커스텀 lookAt 적용 및 30스터드 이하 시에만 발동
                 if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
                     frameToggle = not frameToggle
                     if frameToggle then
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, lookAt(myHRP.Position, charHRP.Position))
                     else
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
