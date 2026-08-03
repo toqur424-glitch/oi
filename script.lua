@@ -376,6 +376,34 @@ KickTab:CreateToggle({
 })
 
 --=============================================
+-- [림브스 오프셋 고정 기능]
+--=============================================
+local limbsOffsetFixActive = false
+KickTab:CreateToggle({
+    Name = "림브스 오프셋 고정 (팔다리 늘어남 방지)",
+    Default = false,
+    Callback = function(Value)
+        limbsOffsetFixActive = Value
+        if Value then
+            task.spawn(function()
+                while limbsOffsetFixActive do
+                    if selectedKickPlayer and selectedKickPlayer.Character then
+                        pcall(function()
+                            for _, descendant in ipairs(selectedKickPlayer.Character:GetDescendants()) do
+                                if descendant:IsA("Motor6D") then
+                                    descendant.Transform = CFrame.new()
+                                end
+                            end
+                        end)
+                    end
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end
+})
+
+--=============================================
 -- [나머지 필수 탭들 유지]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
