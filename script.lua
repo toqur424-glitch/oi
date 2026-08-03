@@ -56,7 +56,7 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        for i = 1, 8 do
+        for i = 1, 4 do
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
@@ -135,64 +135,67 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- [수정] 고정 좌표 설정: X = 5, Y = 8
-            local targetCF = myHRP.CFrame * CFrame.new(5, 8, 0)
+            -- [수정] 오프셋 고정 좌표: X = 5, Y = 10
+            local targetCF = myHRP.CFrame * CFrame.new(5, 10, 0)
             
-            -- 고정 위치와의 거리 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
+            local playerDist = (charHRP.Position - myHRP.Position).Magnitude
             
-            -- [수정] 인식 감지 범위 확장 (15 -> 25스튜디오)
-            if (currentDist > 25 or not initialized) and not recoveringTargets[name] then
+            -- [수정] 오차 범위 5스터드 이탈 시 + 500스터드 대형 범주 내 즉시 자동 추적/포획 발동
+            if (currentDist > 5 or not initialized) and playerDist < 500 and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
+                    
+                    -- 초고속 순간이동 후 권한 탈취
                     pcall(function()
                         myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
                     end)
-                    task.wait(0.15)
+                    task.wait(0.03)
                     
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
+                        for i = 1, 8 do
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                         end
                     end)
-                    task.wait(0.05)
+                    task.wait(0.03)
                     
+                    -- 원위치 복귀 및 X=5, Y=10 위치로 상대를 강제 고정
                     pcall(function()
-                        -- [수정] 재복구 위치 좌표 X = 5, Y = 8 적용
-                        charHRP.CFrame = originalCF * CFrame.new(5, 8, 0)
                         myHRP.CFrame = originalCF
+                        charHRP.CFrame = originalCF * CFrame.new(5, 10, 0)
                     end)
-                    task.wait(0.1)
+                    task.wait(0.03)
                     
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
+                        for i = 1, 8 do
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                         end
                     end)
                     
-                    task.wait(0.3)
+                    task.wait(0.1)
                     recoveringTargets[name] = nil
                 end)
             end
             
             pcall(function()
+                -- 매 프레임 위치 및 물리학 강력 고정
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [수정] 셋오너, 디트로이트 번갈아 발동하는 빈도 상향 (2회 -> 5회)
-                for i = 1, 5 do
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                end
+                -- [수정] 리모트 차단 방지 및 교차 연동 (Create -> SetOwner -> Destroy)
+                rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
             end)
         end
         RunService.RenderStepped:Wait()
@@ -407,4 +410,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "X=5, Y=8 오프셋 / 인식범위 25 / 교차 연동 빈도 상향 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "X=5, Y=10 오프셋 적용 및 고정/감지 시스템 최적화 완료", Duration = 3})
