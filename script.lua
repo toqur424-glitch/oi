@@ -56,7 +56,8 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        for i = 1, 4 do
+        -- [수정] 거리 체크 및 리모트 스팸 방지 (초당 60회로 고정, 한 프레임 다중 발송 제거)
+        if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
@@ -117,24 +118,15 @@ KickTab:CreateInput({
     end
 })
 
--- =========================================================================
--- 🔥 [수정 적용된 핵심 루프] 완벽 고정, 강제 흡수, 프레임 교차 연타 엔진
--- =========================================================================
-local function cleanupAligns(tHRP)
-    if not tHRP then return end
-    if tHRP:FindFirstChild("FixedAlignPos") then tHRP.FixedAlignPos:Destroy() end
-    if tHRP:FindFirstChild("FixedAlignRot") then tHRP.FixedAlignRot:Destroy() end
-    if tHRP:FindFirstChild("FixedAtt0") then tHRP.FixedAtt0:Destroy() end
-end
-
 function loopPlayerBlobF4()
+    local initialized = false
+    local frameToggle = false
+    
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-            if player and player.Character then
-                cleanupAligns(player.Character:FindFirstChild("HumanoidRootPart"))
-            end
+            initialized = false
             RunService.RenderStepped:Wait()
             continue
         end
@@ -145,98 +137,73 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            local playerDist = (charHRP.Position - myHRP.Position).Magnitude
+            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
+            local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             
-            -- [1. 상대 가져오기 (Fetch)] : 30스터드 이상 멀어지면 순간이동하여 권한 강제 탈취 후 오프셋(X=6, Y=15)으로 흡수
-            if playerDist > 30 and not recoveringTargets[name] then
+            -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
+            local currentDist = (charHRP.Position - targetCF.Position).Magnitude
+            
+            -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
+            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
+                initialized = true 
                 
-                local savedPos = myHRP.CFrame
-                local fetchStart = tick()
-                
-                while (tick() - fetchStart < 0.25) and blobLoopT4 do
-                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 0, 3)
+                task.spawn(function()
+                    local originalCF = myHRP.CFrame
+                    pcall(function()
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    end)
+                    task.wait(0.15)
+                    
+                    -- [수정] 셋오너 스팸 시 프레임 대기 추가 (디트로이트 방지 핵심)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, charHRP.CFrame)
-                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        for i = 1, 15 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
+                        end
                     end)
-                    charHUM.PlatformStand = true
-                    task.wait(0.02)
-                end
-                
-                myHRP.CFrame = savedPos
-                charHRP.CFrame = savedPos * CFrame.new(6, 15, 0)
-                task.wait(0.05)
-                recoveringTargets[name] = nil
-                continue
+                    task.wait(0.05)
+                    
+                    pcall(function()
+                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                        myHRP.CFrame = originalCF
+                    end)
+                    task.wait(0.1)
+                    
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        for i = 1, 15 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
+                        end
+                    end)
+                    
+                    task.wait(0.3)
+                    recoveringTargets[name] = nil
+                end)
             end
-
-            -- [2. 완벽 고정 (Rigid Lock)] : 단순히 CFrame만 반복 주입하면 튕기므로 AlignPosition 객체로 고정력 극대화
-            if not charHRP:FindFirstChild("FixedAlignPos") then
-                cleanupAligns(charHRP)
-                
-                local oldBp = charHRP:FindFirstChildOfClass("BodyPosition")
-                if oldBp then oldBp:Destroy() end
-
-                local att0 = Instance.new("Attachment")
-                att0.Name = "FixedAtt0"
-                att0.Parent = charHRP
-
-                local att1 = Instance.new("Attachment")
-                att1.Name = "FixedAtt1"
-                att1.Parent = workspace.Terrain
-
-                local targetAlignPos = Instance.new("AlignPosition")
-                targetAlignPos.Name = "FixedAlignPos"
-                targetAlignPos.Attachment0 = att0
-                targetAlignPos.Attachment1 = att1
-                targetAlignPos.MaxForce = math.huge
-                targetAlignPos.Responsiveness = 200
-                targetAlignPos.Parent = charHRP
-
-                local targetAlignRot = Instance.new("AlignOrientation")
-                targetAlignRot.Name = "FixedAlignRot"
-                targetAlignRot.Attachment0 = att0
-                targetAlignRot.Mode = Enum.OrientationAlignmentMode.OneAttachment
-                targetAlignRot.CFrame = CFrame.new()
-                targetAlignRot.MaxTorque = math.huge
-                targetAlignRot.Responsiveness = 200
-                targetAlignRot.Parent = charHRP
-            end
-
-            -- X=6, Y=15 오프셋 위치 갱신
-            local alignPos = charHRP:FindFirstChild("FixedAlignPos")
-            if alignPos and alignPos.Attachment1 then
-                alignPos.Attachment1.WorldPosition = (myHRP.CFrame * CFrame.new(6, 15, 0)).Position
-            end
-
-            -- 물리 속도 초기화 및 무력화
-            charHRP.AssemblyLinearVelocity = Vector3.zero
-            charHRP.AssemblyAngularVelocity = Vector3.zero
-            charHUM.PlatformStand = true
-            charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-
-            -- [3. 셋오너 & 라인파괴 교차 연타 (Alternating Spam)] : 프레임을 분리하여 서버 딜레이로 씹히는 현상 방지
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                charHRP.AssemblyLinearVelocity = Vector3.new(0, -9999, 0)
-            end)
-            
-            RunService.RenderStepped:Wait() -- 1 프레임 지연
             
             pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
+                charHRP.AssemblyAngularVelocity = Vector3.zero
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                
+                -- [수정] 거리가 30을 넘어갈 때 강제 셋오너 억제
+                if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
+                    frameToggle = not frameToggle
+                    if frameToggle then
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    else
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    end
+                end
             end)
         end
         RunService.RenderStepped:Wait()
-    end
-
-    -- 토글 끌 때 대상 청소
-    if selectedKickPlayer and selectedKickPlayer.Character then
-        cleanupAligns(selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart"))
     end
 end
 
@@ -415,37 +382,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [림브스 오프셋 고정 기능]
---=============================================
-local limbsOffsetFixActive = false
-KickTab:CreateToggle({
-    Name = "림브스 오프셋 고정 (팔다리 늘어남 방지)",
-    Default = false,
-    Callback = function(Value)
-        limbsOffsetFixActive = Value
-        if Value then
-            task.spawn(function()
-                while limbsOffsetFixActive do
-                    if selectedKickPlayer and selectedKickPlayer.Character then
-                        pcall(function()
-                            for _, descendant in ipairs(selectedKickPlayer.Character:GetDescendants()) do
-                                if descendant:IsA("Motor6D") then
-                                    descendant.Transform = CFrame.new()
-                                end
-                            end
-                        end)
-                    end
-                    RunService.RenderStepped:Wait()
-                end
-            end)
-        end
-    end
-})
-
---=============================================
 -- [나머지 필수 탭들 유지]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "X=6, Y=15 오프셋, 상대 흡수 및 고정 수정 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 오너 룹 최적화 반영됨", Duration = 3})
