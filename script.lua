@@ -137,8 +137,8 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
-            local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
+            -- X좌표 3, Y좌표 9를 고정 목표 위치로 설정
+            local targetCF = myHRP.CFrame * CFrame.new(3, 9, 0)
             
             -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
@@ -166,7 +166,7 @@ function loopPlayerBlobF4()
                     task.wait(0.05)
                     
                     pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                        charHRP.CFrame = originalCF * CFrame.new(3, 9, 0)
                         myHRP.CFrame = originalCF
                     end)
                     task.wait(0.1)
