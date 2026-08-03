@@ -135,48 +135,36 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- [수정] 오프셋 고정 좌표: X = 5, Y = 10
-            local targetCF = myHRP.CFrame * CFrame.new(5, 10, 0)
-            
-            local currentDist = (charHRP.Position - targetCF.Position).Magnitude
+            -- [수정] 좌표 설정: X = 6, Y = 15
+            local targetCF = myHRP.CFrame * CFrame.new(6, 15, 0)
             local playerDist = (charHRP.Position - myHRP.Position).Magnitude
             
-            -- [수정] 오차 범위 5스터드 이탈 시 + 500스터드 대형 범주 내 즉시 자동 추적/포획 발동
-            if (currentDist > 5 or not initialized) and playerDist < 500 and not recoveringTargets[name] then
+            -- [수정] 미초기화 상태이거나 거리가 30스터드 이상 벌어졌을 때만 순간이동 권한 탈취 수행
+            if (not initialized or playerDist > 30) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
                     
-                    -- 초고속 순간이동 후 권한 탈취
-                    pcall(function()
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    end)
-                    task.wait(0.03)
+                    if playerDist > 15 then
+                        pcall(function()
+                            myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                        end)
+                        task.wait(0.05)
+                    end
                     
                     pcall(function()
-                        for i = 1, 8 do
+                        for i = 1, 10 do
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                             rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                         end
                     end)
-                    task.wait(0.03)
                     
-                    -- 원위치 복귀 및 X=5, Y=10 위치로 상대를 강제 고정
                     pcall(function()
                         myHRP.CFrame = originalCF
-                        charHRP.CFrame = originalCF * CFrame.new(5, 10, 0)
-                    end)
-                    task.wait(0.03)
-                    
-                    pcall(function()
-                        for i = 1, 8 do
-                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                        end
+                        charHRP.CFrame = originalCF * CFrame.new(6, 15, 0)
                     end)
                     
                     task.wait(0.1)
@@ -184,15 +172,15 @@ function loopPlayerBlobF4()
                 end)
             end
             
+            -- 매 프레임 고정 및 물리 속도 초기화 (낙하 완벽 방지)
             pcall(function()
-                -- 매 프레임 위치 및 물리학 강력 고정
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [수정] 리모트 차단 방지 및 교차 연동 (Create -> SetOwner -> Destroy)
+                -- 조종 권한(NetworkOwner) 교차 유지
                 rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
@@ -410,4 +398,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "X=5, Y=10 오프셋 적용 및 고정/감지 시스템 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "X=6, Y=15 오프셋 및 고정 낙하 문제 수정 완료", Duration = 3})
