@@ -12,18 +12,9 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ContextActionService = game:GetService("ContextActionService")
 local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
-
--- 리모트 이벤트 미리 캐싱 (딜레이 없는 연사를 위해 추가)
-local GrabEvents = rs:WaitForChild("GrabEvents")
-local CharEvents = rs:WaitForChild("CharacterEvents")
-local SetNetOwner = GrabEvents:WaitForChild("SetNetworkOwner")
-local DestroyLine = GrabEvents:WaitForChild("DestroyGrabLine")
-local CreateLine = GrabEvents:WaitForChild("CreateGrabLine")
-local RagdollRemote = CharEvents:WaitForChild("RagdollRemote")
 
 --=============================================
 -- [UI 생성]
@@ -65,12 +56,11 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- 딜레이 없이 3대장(셋오너, 디트로이트, 레그돌) 즉발 연사
         for i = 1, 4 do
             pcall(function()
-                SetNetOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                DestroyLine:FireServer(tgtRoot)
-                RagdollRemote:FireServer(tgtRoot, 2)
+                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
         end
     end)
@@ -95,10 +85,12 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 빈도 폭발 타겟 셋오너 & 자동 복구
+-- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 및 범위 이탈 감지 룹티피
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
+local recoveringTargets = {} 
+
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -108,9 +100,8 @@ KickTab:CreateInput({
     Callback = function(v)
         if v == "" then return end
         local found = nil
-        local searchVal = v:lower()
         for _, p in ipairs(Players:GetPlayers()) do
-            if p.Name:lower():find(searchVal) or (p.DisplayName and p.DisplayName:lower():find(searchVal)) then
+            if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
                 found = p
                 break
             end
@@ -128,71 +119,90 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
-    local isRecovering = false
+    local frameToggle = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            isRecovering = false
             RunService.RenderStepped:Wait()
             continue
         end
 
+        local name = player.Name
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local charHRP = player.Character.HumanoidRootPart
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
+            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
+            
+            -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            if (currentDist > 25 or not initialized) and not isRecovering then
-                isRecovering = true
+            -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
+            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
+                recoveringTargets[name] = true
+                initialized = true -- [수정 핵심] 포획 성공 처리 후 다시 false로 풀리지 않도록 함
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
-                    pcall(function() myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0) end)
+                    pcall(function()
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    end)
+                    task.wait(0.15)
                     
                     pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
-                            SetNetOwner:FireServer(charHRP, myHRP.CFrame)
-                            DestroyLine:FireServer(charHRP)
-                            RagdollRemote:FireServer(charHRP, 2)
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        end
+                    end)
+                    task.wait(0.05)
+                    
+                    pcall(function()
+                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                        myHRP.CFrame = originalCF
+                    end)
+                    task.wait(0.1)
+                    
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        for i = 1, 15 do
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
                     
-                    pcall(function()
-                        myHRP.CFrame = originalCF
-                        charHRP.CFrame = targetCF
-                    end)
-                    
-                    initialized = true
-                    isRecovering = false
-                end)
-            elseif not isRecovering then
-                pcall(function()
-                    charHRP.CFrame = targetCF
-                    charHRP.AssemblyLinearVelocity = Vector3.zero
-                    charHRP.AssemblyAngularVelocity = Vector3.zero
-                    charHUM.PlatformStand = true
-                    charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                    
-                    for i = 1, 3 do
-                        SetNetOwner:FireServer(charHRP, targetCF)
-                        DestroyLine:FireServer(charHRP)
-                        RagdollRemote:FireServer(charHRP, 2)
-                    end
+                    task.wait(0.3)
+                    recoveringTargets[name] = nil
+                    -- [수정됨] 무한 반복 버그의 원인인 initialized = false 삭제
                 end)
             end
+            
+            pcall(function()
+                charHRP.CFrame = targetCF
+                charHRP.AssemblyLinearVelocity = Vector3.zero
+                charHRP.AssemblyAngularVelocity = Vector3.zero
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                
+                frameToggle = not frameToggle
+                if frameToggle then
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                else
+                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                end
+            end)
         end
         RunService.RenderStepped:Wait()
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (범위 이탈 쾌속 추적)",
+    Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -204,6 +214,9 @@ KickTab:CreateToggle({
     end
 })
 
+--=============================================
+-- [새로운 Pallet Ragdoll (Invis) 통합]
+--=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
     Flag = "Ragdoll Target",
@@ -212,6 +225,8 @@ KickTab:CreateToggle({
         local RS = game:GetService("ReplicatedStorage")
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
+        local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
+        local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
         local lpName = plr.Name
 
         local function clearAttackLoop()
@@ -279,8 +294,6 @@ KickTab:CreateToggle({
                         local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
 
                         if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
-                            pcall(function() RagdollRemote:FireServer(tRoot, 2) end)
-
                             local ragdolledVal = tHum:FindFirstChild("Ragdolled")
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
@@ -363,80 +376,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [FUN 탭] - 플립 기능 (Z = 앞구르기, X = 뒤구르기)
---=============================================
-local FunTab = Window:CreateTab("Fun", nil)
-FunTab:CreateSection("=== FLIP (Z / X) ===")
-
-local FlipEnabled = false
-local h = 0.0174533
-
-local doFrontflip = function()
-    if not FlipEnabled then return end
-    local char = plr.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    
-    if hum and hrp and hum.Health > 0 then
-        hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        task.wait()
-        hum.Sit = true
-        for i = 1, 360 do 
-            task.delay(i/720, function()
-                if hum and hrp and hum.Parent then
-                    hum.Sit = true
-                    hrp.CFrame *= CFrame.Angles(-h, 0, 0)
-                end
-            end)
-        end
-        task.wait(0.55)
-        if hum and hum.Parent then hum.Sit = false end
-    end
-end
-
-local doBackflip = function()
-    if not FlipEnabled then return end
-    local char = plr.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    
-    if hum and hrp and hum.Health > 0 then
-        hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        task.wait()
-        hum.Sit = true
-        for i = 1, 360 do
-            task.delay(i/720, function()
-                if hum and hrp and hum.Parent then
-                    hum.Sit = true
-                    hrp.CFrame *= CFrame.Angles(h, 0, 0)
-                end
-            end)
-        end
-        task.wait(0.55)
-        if hum and hum.Parent then hum.Sit = false end
-    end
-end
-
-FunTab:CreateToggle({
-    Name = "Flip (Z = Front, X = Back)",
-    CurrentValue = false,
-    Callback = function(Value)
-        FlipEnabled = Value
-    end
-})
-
-ContextActionService:BindAction("Frontflip", function(_, state)
-    if state == Enum.UserInputState.Begin then doFrontflip() end
-end, false, Enum.KeyCode.Z)
-
-ContextActionService:BindAction("Backflip", function(_, state)
-    if state == Enum.UserInputState.Begin then doBackflip() end
-end, false, Enum.KeyCode.X)
-
---=============================================
--- [SETTINGS 탭]
+-- [나머지 필수 탭들 유지]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "빈도 대폭 증가 및 플립 기능 통합 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "무한 룹티피 버그 수정 및 Y=20 고정 완료", Duration = 3})
