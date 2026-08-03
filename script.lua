@@ -56,7 +56,8 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        for i = 1, 4 do
+        -- [수정됨] 셋오너 및 디트로이트 빈도 상향 (4 -> 8)
+        for i = 1, 8 do
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
@@ -119,7 +120,6 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
-    local frameToggle = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -145,7 +145,7 @@ function loopPlayerBlobF4()
             -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
-                initialized = true -- [수정 핵심] 포획 성공 처리 후 다시 false로 풀리지 않도록 함
+                initialized = true
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
@@ -156,7 +156,8 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
+                        -- [수정됨] 셋오너 빈도 상향 (15 -> 25)
+                        for i = 1, 25 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
@@ -170,14 +171,14 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
+                        -- [수정됨] 셋오너 빈도 상향 (15 -> 25)
+                        for i = 1, 25 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
                     
                     task.wait(0.3)
                     recoveringTargets[name] = nil
-                    -- [수정됨] 무한 반복 버그의 원인인 initialized = false 삭제
                 end)
             end
             
@@ -188,10 +189,9 @@ function loopPlayerBlobF4()
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                frameToggle = not frameToggle
-                if frameToggle then
+                -- [수정됨] 프레임 토글 삭제 후 매 프레임마다 셋오너와 디트로이트를 동시에 적당한 횟수로 발동
+                for i = 1, 2 do
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                else
                     rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                 end
@@ -396,7 +396,8 @@ KickTab:CreateToggle({
                             end
                         end)
                     end
-                    task.wait(0.1)
+                    -- [수정됨] task.wait(0.1) 대신 RenderStepped 대기를 사용하여 매 프레임 고정 (강도 최고)
+                    RunService.RenderStepped:Wait()
                 end
             end)
         end
@@ -409,4 +410,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "무한 룹티피 버그 수정 및 Y=20 고정 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "고정 강도 및 셋오너 빈도 상향 완료", Duration = 3})
