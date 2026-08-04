@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
+    Name = "🔥 FSOF Extreme Kick Hub (Fixed & Optimized)",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -36,34 +36,52 @@ GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
-local fAttackConnection = nil
+local fAttackPhysicsConn = nil
+local fAttackRemoteConn = nil
 local fAttackTarget = nil
 
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
-    fAttackConnection = RunService.RenderStepped:Connect(function()
+    local tickCounter = 0
+    
+    -- [최적화 1] 물리 고정: Stepped에서 물리 연산 이전에 실행하여 흔들림 방지
+    fAttackPhysicsConn = RunService.Stepped:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
-        local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local tgtChar = fAttackTarget.Character
         local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
         local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
+        
+        if tgtRoot then
+            tgtRoot.AssemblyLinearVelocity = Vector3.zero
+            tgtRoot.AssemblyAngularVelocity = Vector3.zero
+            if tgtHum then tgtHum.PlatformStand = true end
+            
+            local camCF = camera.CFrame
+            pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
+        end
+    end)
+
+    -- [최적화 2] 리모트 스팸: RenderStepped에서 3:1 비율로 전송 (소유권 탈취율 극대화)
+    fAttackRemoteConn = RunService.RenderStepped:Connect(function()
+        if not getgenv().FKeyAttackActive or not fAttackTarget then return end
+        local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        local tgtRoot = fAttackTarget.Character and fAttackTarget.Character:FindFirstChild("HumanoidRootPart")
+        
         if not myRoot or not tgtRoot then return end
+        if (myRoot.Position - tgtRoot.Position).Magnitude > 30 then return end
         
-        tgtRoot.AssemblyLinearVelocity = Vector3.zero
-        if tgtHum then tgtHum.PlatformStand = true end
-        
-        local camCF = camera.CFrame
-        pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
-        
-        -- [수정] 거리 체크 및 리모트 스팸 방지 (초당 60회로 고정, 한 프레임 다중 발송 제거)
-        if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            pcall(function()
+        tickCounter = tickCounter + 1
+        pcall(function()
+            if tickCounter % 4 ~= 0 then
+                -- 3 프레임: 확실한 셋오너 점유
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+            else
+                -- 1 프레임: 디트로이트 발생 (Destroy)
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
-        end
+            end
+        end)
     end)
 end
 
@@ -74,7 +92,8 @@ GrabTab:CreateKeybind({
         if not getgenv().KickGrabActive then getgenv().KickGrabActive = true end
         if getgenv().FKeyAttackActive then 
             getgenv().FKeyAttackActive = false
-            if fAttackConnection then fAttackConnection:Disconnect() end
+            if fAttackPhysicsConn then fAttackPhysicsConn:Disconnect() end
+            if fAttackRemoteConn then fAttackRemoteConn:Disconnect() end
             return 
         end
         local target = nil 
@@ -86,7 +105,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 및 범위 이탈 감지 룹티피
+-- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 고정 추적
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -120,7 +139,7 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
-    local frameToggle = false
+    local tickCounter = 0
     
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -137,30 +156,24 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-            
-            -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
+            -- 복구(리커버리) 로직
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
-                    pcall(function()
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    end)
+                    pcall(function() myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0) end)
                     task.wait(0.15)
                     
-                    -- [수정] 셋오너 스팸 시 프레임 대기 추가 (디트로이트 방지 핵심)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
+                        for i = 1, 10 do -- 서버 부하 완화를 위해 15 -> 10으로 조정
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
+                            RunService.Heartbeat:Wait()
                         end
                     end)
                     task.wait(0.05)
@@ -173,9 +186,9 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
+                        for i = 1, 10 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
+                            RunService.Heartbeat:Wait()
                         end
                     end)
                     
@@ -184,6 +197,7 @@ function loopPlayerBlobF4()
                 end)
             end
             
+            -- [최적화 3] 지속적인 락온 및 리모트 발송 
             pcall(function()
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -191,13 +205,13 @@ function loopPlayerBlobF4()
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                -- [수정] 거리가 30을 넘어갈 때 강제 셋오너 억제
                 if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
-                    frameToggle = not frameToggle
-                    if frameToggle then
+                    tickCounter = tickCounter + 1
+                    -- 디트로이트 및 셋오너 비율 3:1 통합
+                    if tickCounter % 4 ~= 0 then
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     else
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                     end
                 end
@@ -229,7 +243,6 @@ KickTab:CreateToggle({
     Default = false,
     Callback = function(Value)
         local RS = game:GetService("ReplicatedStorage")
-        local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
         local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
@@ -251,9 +264,7 @@ KickTab:CreateToggle({
             getgenv().palletRagdollActive = true
             getgenv().PalletForRagdoll = nil
             
-            if getgenv().palletCacheConn then
-                getgenv().palletCacheConn:Disconnect()
-            end
+            if getgenv().palletCacheConn then getgenv().palletCacheConn:Disconnect() end
             clearAttackLoop()
 
             local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
@@ -286,7 +297,6 @@ KickTab:CreateToggle({
 
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
-
                     local strikePhase = false
 
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
@@ -382,9 +392,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭들 유지]
+-- [Settings]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 오너 룹 최적화 반영됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 셋오너 비율(3:1) 최적화 반영됨", Duration = 3})
