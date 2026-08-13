@@ -231,7 +231,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [디트로이트 판자 (Detroit Plank) 통합]
+-- [디트로이트 판자 (Detroit Plank) 통합 - 셋오너 빈도 극대화 & 상대 몸 안 관통 레그돌]
 --=============================================
 local detroitActive = false
 local detroitHeartbeatConn = nil
@@ -287,7 +287,6 @@ KickTab:CreateToggle({
         if Value then
             if not selectedKickPlayer then
                 Rayfield:Notify({Title = "알림", Content = "타겟을 먼저 입력해주세요", Duration = 3})
-                -- UI 토글 상태 복구는 Rayfield 특성상 생략
                 return
             end
 
@@ -295,7 +294,6 @@ KickTab:CreateToggle({
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
 
-            -- 기존에 소환된 판자 정리
             local inv = workspace:FindFirstChild(plr.Name .. "SpawnedInToys")
             if inv then
                 for _, v in pairs(inv:GetChildren()) do
@@ -314,11 +312,12 @@ KickTab:CreateToggle({
             pallet.Name = "DetroitPlankToy"
             local soundPart = pallet:WaitForChild("SoundPart", 3) or pallet:FindFirstChildWhichIsA("BasePart")
             
-            -- [수정 핵심]: 물리 충돌을 강제로 활성화하여 뚫리지 않고 레그돌을 유도함
             if soundPart then
                 soundPart.CanCollide = true
                 soundPart.Massless = false
             end
+
+            local strikePhase = false
 
             if detroitHeartbeatConn then detroitHeartbeatConn:Disconnect() end
             detroitHeartbeatConn = RunService.Heartbeat:Connect(function()
@@ -332,19 +331,28 @@ KickTab:CreateToggle({
                 local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
 
                 if tRoot and tHum and soundPart and soundPart.Parent and tHum.Health > 0 then
-                    -- 1. 셋오너 빈도 극대화
+                    -- 1. 셋오너 빈도 극대화 (Heartbeat 매 프레임마다 강제 실행)
                     pcall(function()
                         SetNetOwner:FireServer(soundPart, soundPart.CFrame)
                         DestroyLine:FireServer(soundPart)
                     end)
 
-                    -- 2. 1.5초마다 바뀌는 높이를 타겟 머리 위에 실시간 적용
-                    local targetPos = tRoot.Position
-                    soundPart.CFrame = CFrame.new(targetPos + Vector3.new(0, currentPlankHeight, 0), targetPos)
+                    local ragdolledVal = tHum:FindFirstChild("Ragdolled")
+                    local isRagdolled = ragdolledVal and ragdolledVal.Value or false
+
+                    -- 2. 판자가 위에서부터 상대 몸 안까지 깊숙이 파고들도록 왕복 타격 궤적 구현
+                    strikePhase = not strikePhase
+                    if strikePhase then
+                        -- 1.5초마다 바뀌는 높이(20, 23, 25)의 상공에서부터 상대 몸 중심/안쪽으로 관통하며 내리꽂기
+                        soundPart.CFrame = tRoot.CFrame * CFrame.new(0, currentPlankHeight, 0)
+                        soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
+                    else
+                        -- 상대 몸 안쪽까지 파고들도록 아래쪽(-1) 위치에서 위로 솟구치게 밀어내기 왕복
+                        soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
+                        soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
+                    end
                     
-                    -- 3. 아래로 강하게 내리꽂는 물리 속도 부여 (레그돌 완벽 유도)
-                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -500, 0)
-                    soundPart.AssemblyAngularVelocity = Vector3.new(math.random(-100, 100), 0, math.random(-100, 100))
+                    soundPart.AssemblyAngularVelocity = Vector3.new(math.random(-150, 150), math.random(-150, 150), math.random(-150, 150))
                 else
                     if soundPart then
                         soundPart.CFrame = CFrame.new(0, 50000, 0)
@@ -359,7 +367,6 @@ KickTab:CreateToggle({
                 detroitHeartbeatConn = nil
             end
 
-            -- 토글 OFF 시 장난감 삭제
             local inv = workspace:FindFirstChild(plr.Name .. "SpawnedInToys")
             if inv then
                 for _, v in pairs(inv:GetChildren()) do
@@ -378,4 +385,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 오너 룹 최적화 반영됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 판자 (몸 안 관통 & 최대 셋오너) 반영됨", Duration = 3})
