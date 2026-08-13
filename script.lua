@@ -231,10 +231,26 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합] - 최적화 구조 적용
+-- [디트로이트 판자 (Detroit Plank) 통합]
 --=============================================
-local palletRagdollActive = false
-local palletHeartbeatConn = nil
+local detroitActive = false
+local detroitHeartbeatConn = nil
+
+-- 1.5초마다 높이(20, 23, 25)를 순환하는 전역 로직
+local plankHeights = {20, 23, 25}
+local heightIdx = 1
+local currentPlankHeight = plankHeights[heightIdx]
+
+task.spawn(function()
+    while true do
+        task.wait(1.5)
+        heightIdx = heightIdx + 1
+        if heightIdx > #plankHeights then 
+            heightIdx = 1 
+        end
+        currentPlankHeight = plankHeights[heightIdx]
+    end
+end)
 
 -- 스폰 대기 헬퍼 함수
 local function SpawnToyRobust(toyName, hrp)
@@ -259,11 +275,11 @@ local function SpawnToyRobust(toyName, hrp)
 end
 
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis)",
-    Flag = "Ragdoll Target",
+    Name = "Detroit Plank (디트로이트 판자 킥)",
+    Flag = "DetroitPlankTarget",
     Default = false,
     Callback = function(Value)
-        palletRagdollActive = Value
+        detroitActive = Value
         local DestroyToy = rs:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = rs:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
         local DestroyLine = rs:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
@@ -271,6 +287,7 @@ KickTab:CreateToggle({
         if Value then
             if not selectedKickPlayer then
                 Rayfield:Notify({Title = "알림", Content = "타겟을 먼저 입력해주세요", Duration = 3})
+                -- UI 토글 상태 복구는 Rayfield 특성상 생략
                 return
             end
 
@@ -278,10 +295,11 @@ KickTab:CreateToggle({
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
 
+            -- 기존에 소환된 판자 정리
             local inv = workspace:FindFirstChild(plr.Name .. "SpawnedInToys")
             if inv then
                 for _, v in pairs(inv:GetChildren()) do
-                    if v.Name == "PalletForRagdoll" or v.Name == "PalletLightBrown" then
+                    if v.Name == "DetroitPlankToy" or v.Name == "PalletLightBrown" then
                         pcall(function() DestroyToy:FireServer(v) end)
                     end
                 end
@@ -293,24 +311,19 @@ KickTab:CreateToggle({
                 return
             end
 
-            pallet.Name = "PalletForRagdoll"
-            local soundPart = pallet:WaitForChild("SoundPart", 3)
+            pallet.Name = "DetroitPlankToy"
+            local soundPart = pallet:WaitForChild("SoundPart", 3) or pallet:FindFirstChildWhichIsA("BasePart")
             
-            for _, obj in pairs(pallet:GetDescendants()) do
-                if obj:IsA("BasePart") then
-                    obj.CanCollide = false
-                    obj.CanTouch = false
-                    obj.CanQuery = false
-                    obj.Transparency = 1
-                end
+            -- [수정 핵심]: 물리 충돌을 강제로 활성화하여 뚫리지 않고 레그돌을 유도함
+            if soundPart then
+                soundPart.CanCollide = true
+                soundPart.Massless = false
             end
 
-            local strikePhase = false
-
-            if palletHeartbeatConn then palletHeartbeatConn:Disconnect() end
-            palletHeartbeatConn = RunService.Heartbeat:Connect(function()
-                if not palletRagdollActive or not pallet.Parent then 
-                    if palletHeartbeatConn then palletHeartbeatConn:Disconnect() end
+            if detroitHeartbeatConn then detroitHeartbeatConn:Disconnect() end
+            detroitHeartbeatConn = RunService.Heartbeat:Connect(function()
+                if not detroitActive or not pallet.Parent then 
+                    if detroitHeartbeatConn then detroitHeartbeatConn:Disconnect() end
                     return 
                 end
 
@@ -319,27 +332,19 @@ KickTab:CreateToggle({
                 local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
 
                 if tRoot and tHum and soundPart and soundPart.Parent and tHum.Health > 0 then
+                    -- 1. 셋오너 빈도 극대화
                     pcall(function()
                         SetNetOwner:FireServer(soundPart, soundPart.CFrame)
                         DestroyLine:FireServer(soundPart)
                     end)
 
-                    local ragdolledVal = tHum:FindFirstChild("Ragdolled")
-                    local isRagdolled = ragdolledVal and ragdolledVal.Value or false
-
-                    if not isRagdolled then
-                        strikePhase = not strikePhase
-                        if strikePhase then
-                            soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
-                            soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
-                        else
-                            soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
-                            soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
-                        end
-                    else
-                        soundPart.CFrame = CFrame.new(0, 50000, 0)
-                        soundPart.AssemblyLinearVelocity = Vector3.zero
-                    end
+                    -- 2. 1.5초마다 바뀌는 높이를 타겟 머리 위에 실시간 적용
+                    local targetPos = tRoot.Position
+                    soundPart.CFrame = CFrame.new(targetPos + Vector3.new(0, currentPlankHeight, 0), targetPos)
+                    
+                    -- 3. 아래로 강하게 내리꽂는 물리 속도 부여 (레그돌 완벽 유도)
+                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -500, 0)
+                    soundPart.AssemblyAngularVelocity = Vector3.new(math.random(-100, 100), 0, math.random(-100, 100))
                 else
                     if soundPart then
                         soundPart.CFrame = CFrame.new(0, 50000, 0)
@@ -349,15 +354,16 @@ KickTab:CreateToggle({
             end)
             
         else
-            if palletHeartbeatConn then
-                palletHeartbeatConn:Disconnect()
-                palletHeartbeatConn = nil
+            if detroitHeartbeatConn then
+                detroitHeartbeatConn:Disconnect()
+                detroitHeartbeatConn = nil
             end
 
+            -- 토글 OFF 시 장난감 삭제
             local inv = workspace:FindFirstChild(plr.Name .. "SpawnedInToys")
             if inv then
                 for _, v in pairs(inv:GetChildren()) do
-                    if v.Name == "PalletForRagdoll" or v.Name == "PalletLightBrown" then
+                    if v.Name == "DetroitPlankToy" or v.Name == "PalletLightBrown" then
                         pcall(function() DestroyToy:FireServer(v) end)
                     end
                 end
