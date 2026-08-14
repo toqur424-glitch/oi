@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 조준 킥 그랩 (초고속)
+-- [GRAB 탭] - F키 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (매 프레임 스팸) ===")
@@ -73,6 +73,8 @@ local function startFKeyAttack(targetPlayer)
         if tgtHum then
             tgtHum.PlatformStand = true
             tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
+            tgtHum.WalkSpeed = 0
+            tgtHum.JumpPower = 0
         end
 
         local camCF = camera.CFrame
@@ -89,7 +91,6 @@ local function startFKeyAttack(targetPlayer)
 
         -- 거리 내에서만 소유권 스팸 (서버 과부하 방지)
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            -- 매 프레임 10회씩 발사 (초고속)
             for i = 1, 10 do
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
@@ -127,7 +128,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (초고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (낙하 방지)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -182,7 +183,7 @@ local function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- 타겟에 BodyPosition/gyro 부착 (처음 한 번)
+            -- 타겟에 BodyPosition/gyro 부착
             if not bodyPos or bodyPos.Parent ~= charHRP then
                 if bodyPos then bodyPos:Destroy() end
                 if bodyGyro then bodyGyro:Destroy() end
@@ -208,13 +209,12 @@ local function loopPlayerBlobF4()
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
-                    -- 내가 타겟 위치로 순간이동 (그랩을 위해)
                     pcall(function()
                         myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
                     end)
                     RunService.RenderStepped:Wait()
 
-                    -- 소유권 스팸 (매 프레임 30회)
+                    -- 소유권 스팸
                     for i = 1, 30 do
                         pcall(function()
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
@@ -230,7 +230,6 @@ local function loopPlayerBlobF4()
                     end)
                     RunService.RenderStepped:Wait()
                     
-                    -- 다시 소유권 강화
                     for i = 1, 30 do
                         pcall(function()
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
@@ -245,18 +244,20 @@ local function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 강제 위치 고정 + 소유권 유지
+            -- 매 프레임 강제 위치 고정 + 속도 초기화
             pcall(function()
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                charHUM.WalkSpeed = 0
+                charHUM.JumpPower = 0
 
                 if bodyPos then bodyPos.Position = targetCF.Position end
                 if bodyGyro then bodyGyro.CFrame = targetCF end
 
-                -- 거리 30 이하에서만 소유권 교차 발사 (디트로이트 방지)
+                -- 거리 30 이하에서만 소유권 교차 발사
                 if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
                     frameToggle = not frameToggle
                     if frameToggle then
@@ -271,7 +272,6 @@ local function loopPlayerBlobF4()
         RunService.RenderStepped:Wait()
     end
 
-    -- 종료 시 정리
     if bodyPos then bodyPos:Destroy() end
     if bodyGyro then bodyGyro:Destroy() end
 end
@@ -290,10 +290,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [판자 레그돌 (Invis) - 몸속 강제 충돌 (최종)
+-- [판자 레그돌 (Invis) - 충돌 방지 + 속도 조절]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 몸속 강제 충돌",
+    Name = "Pallet Ragdoll (Invis) - 강제 레그돌",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -339,7 +339,7 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                -- 소유권 강제 획득 (매 프레임 5회)
+                -- 소유권 강제 획득
                 for i = 1, 5 do
                     pcall(function()
                         SetNetOwner:FireServer(soundPart, soundPart.CFrame)
@@ -350,13 +350,12 @@ KickTab:CreateToggle({
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
-                    -- 판자 투명화 (충돌은 true로 유지!)
+                    -- 판자 투명화 및 충돌 해제 (CanCollide = false!)
                     for _, v in pairs(child:GetChildren()) do
                         if v:IsA("BasePart") then
                             v.Transparency = 1 
                             v.CanQuery = false
-                            -- 충돌을 true로 설정하여 타겟과 물리 충돌 발생
-                            v.CanCollide = true
+                            v.CanCollide = false  -- 충돌 방지 → 양쪽 날아감 문제 해결
                         end
                     end
 
@@ -381,14 +380,14 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 판자를 타겟 몸속 정중앙에 배치하고 극도로 빠른 속도로 충격
+                                -- 판자를 타겟 위치에 배치하고 속도로 충격 (충돌 없음)
                                 strikePhase = not strikePhase
                                 if strikePhase then
                                     soundPart.CFrame = tRoot.CFrame
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -900000, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -50000, 0)  -- 속도 감소
                                 else
                                     soundPart.CFrame = tRoot.CFrame
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 900000, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 50000, 0)
                                 end
 
                                 -- 0.05초마다 RagdollRemote 추가 발사 (레그돌 강제)
@@ -476,4 +475,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥/판자 레그돌 초고속 최적화 완료 (몸속 충돌 적용)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥/판자 레그돌 최적화 완료 (충돌 및 낙하 수정)", Duration = 3})
