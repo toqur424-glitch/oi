@@ -20,8 +20,8 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Ultimate)",
-    LoadingTitle = "디트로이트 및 고정력 최적화 완료",
+    Name = "🔥 FSOF Extreme Kick Hub (Stable)",
+    LoadingTitle = "안정화 및 고정력 최적화",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
     Theme = "Dark",
@@ -33,7 +33,7 @@ local Window = Rayfield:CreateWindow({
 --=============================================
 local selectedKickPlayer = nil
 local blobLoopT4 = false
-local recoveringTargets = {} -- 블롭맨 루프 중복 실행 방지
+local recoveringTargets = {} -- 중복 실행 방지
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -41,13 +41,13 @@ local fAttackConn = nil
 local fAttackTarget = nil
 
 --=============================================
--- [GRAB 탭] - F키 극대화 조준 킥 그랩
+-- [GRAB 탭] - F키 스테이블 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== F키 극대화 킥 그랩 (고정력/스팸 최상) ===")
+GrabTab:CreateSection("=== F키 안정화 킥 그랩 (고정 유지) ===")
 
--- F키 실행 함수 (AlignPosition + AlignOrientation으로 완전 고정)
-local function startFKeyAttack_Enhanced(targetPlayer)
+-- F키 실행 함수 (AlignPosition 완전 고정 방식)
+local function startFKeyAttack_Stable(targetPlayer)
     if not targetPlayer or not targetPlayer.Character then return end
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
@@ -57,10 +57,8 @@ local function startFKeyAttack_Enhanced(targetPlayer)
         -- 기존 Align 제거
         local oldAlign = tRoot:FindFirstChild("KickAlignPos")
         if oldAlign then oldAlign:Destroy() end
-        local oldAttach = tRoot:FindFirstChild("KickAtt0")
-        if oldAttach then oldAttach:Destroy() end
 
-        -- 물리적 강제 고정 장치 부착
+        -- 물리적 강제 고정 장치 (부드럽게 당기기)
         local att0 = Instance.new("Attachment", tRoot)
         att0.Name = "KickAtt0"
         local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -71,17 +69,17 @@ local function startFKeyAttack_Enhanced(targetPlayer)
         alignPos.Attachment0 = att0
         alignPos.Attachment1 = att1
         alignPos.MaxForce = math.huge
-        alignPos.Responsiveness = 500 -- 고정력 극대화
+        alignPos.Responsiveness = 250
         alignPos.RigidityEnabled = true
 
         local alignRot = Instance.new("AlignOrientation", tRoot)
         alignRot.Name = "KickAlignRot"
         alignRot.Attachment0 = att0
         alignRot.MaxTorque = math.huge
-        alignRot.Responsiveness = 500
+        alignRot.Responsiveness = 250
     end
 
-    -- 메인 루프: 매 프레임 셋오너 스팸 및 위치 강제 고정
+    -- 메인 루프: 매 프레임 부드럽게 목표 위치로 당기기
     fAttackConn = RunService.RenderStepped:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
         
@@ -91,45 +89,43 @@ local function startFKeyAttack_Enhanced(targetPlayer)
         local tHum = tChar and tChar:FindFirstChild("Humanoid")
         if not myRoot or not tRoot then return end
 
-        -- 타겟 위치를 카메라 앞 20스터드로 설정 (AlignPosition이 강제로 당김)
+        -- 목표 위치를 카메라 앞 20스터드로 설정 (AlignPosition이 알아서 당김)
         local camCF = camera.CFrame
         local targetPos = camCF.Position + camCF.LookVector * 20
+        
+        -- AlignPosition 목표 업데이트 (부드럽게 유지)
+        local alignPos = tRoot:FindFirstChild("KickAlignPos")
         if alignPos and alignPos.Attachment1 then
             alignPos.Attachment1.WorldPosition = targetPos
         end
 
-        -- 셋오너 + 그랩라인 스팸 (매 프레임 2회씩 번갈아 호출 -> 디트로이트 유발)
+        -- 소유권 스팸 (매 프레임 3회, 지나치게 빠르지 않게)
         pcall(function()
-            rs.GrabEvents.CreateGrabLine:FireServer(tRoot, CFrame.new())
             rs.GrabEvents.SetNetworkOwner:FireServer(tRoot, CFrame.lookAt(myRoot.Position, tRoot.Position))
             rs.GrabEvents.DestroyGrabLine:FireServer(tRoot)
-
-            -- 추가로 한 번 더 쏴서 소유권 완전 장악
             rs.GrabEvents.SetNetworkOwner:FireServer(tRoot, CFrame.lookAt(myRoot.Position, tRoot.Position))
-            rs.GrabEvents.DestroyGrabLine:FireServer(tRoot)
         end)
 
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            tRoot.AssemblyLinearVelocity = Vector3.zero
         end
     end)
 end
 
 GrabTab:CreateKeybind({
-    Name = "F키 조준 킥 그랩 (고속 스팸/고정)",
+    Name = "F키 안정화 조준 킥 (고정 유지)",
     CurrentKeybind = "F",
     Callback = function()
         if not getgenv().KickGrabActive then getgenv().KickGrabActive = true end
         
-        -- 종료 로직
         if getgenv().FKeyAttackActive then
             getgenv().FKeyAttackActive = false
             if fAttackConn then fAttackConn:Disconnect(); fAttackConn = nil end
             return
         end
 
-        -- 가장 가까운 적 탐색
         local nearest = nil
         local minDist = math.huge
         for _, p in pairs(Players:GetPlayers()) do
@@ -147,8 +143,8 @@ GrabTab:CreateKeybind({
         end
 
         if nearest then
-            startFKeyAttack_Enhanced(nearest)
-            Rayfield:Notify({Title = "공격 시작", Content = nearest.Name .. " (F키 스팸 활성화)", Duration = 2})
+            startFKeyAttack_Stable(nearest)
+            Rayfield:Notify({Title = "공격 시작", Content = nearest.Name .. " (F키 안정화 모드)", Duration = 2})
         else
             Rayfield:Notify({Title = "알림", Content = "근처에 공격 가능한 타겟이 없습니다.", Duration = 2})
         end
@@ -185,104 +181,118 @@ KickTab:CreateInput({
     end
 })
 
--- [핵심] 블롭맨 오너 킥 루프 (디트로이트 & 고정력 극대화 버전)
-local function loopPlayerBlobF4_Enhanced()
+-- [핵심] 블롭맨 오너 킥 루프 (AlignPosition 기반 안정화)
+local function loopPlayerBlobF4_Stable()
     while blobLoopT4 do
         local player = selectedKickPlayer
-        if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+        if not player or not player.Character then
             RunService.RenderStepped:Wait()
             continue
         end
 
-        local name = player.Name
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        local charHRP = player.Character.HumanoidRootPart
+        local charHRP = player.Character:FindFirstChild("HumanoidRootPart")
         local charHUM = player.Character:FindFirstChild("Humanoid")
-        if not (myHRP and charHRP and charHUM) then
+        if not (myHRP and charHRP and charHUM) or charHUM.Health <= 0 then
             RunService.RenderStepped:Wait()
             continue
         end
 
-        -- 고정 목표 위치 (내 머리 위 20스터드)
+        -- 타겟에 AlignPosition 장착 (한 번만 실행)
+        if not charHRP:FindFirstChild("BlobAlignPos") then
+            local att0 = Instance.new("Attachment", charHRP)
+            att0.Name = "BlobAtt0"
+            local att1 = Instance.new("Attachment", workspace.Terrain)
+            att1.Name = "BlobAtt1"
+
+            local alignPos = Instance.new("AlignPosition", charHRP)
+            alignPos.Name = "BlobAlignPos"
+            alignPos.Attachment0 = att0
+            alignPos.Attachment1 = att1
+            alignPos.MaxForce = math.huge
+            alignPos.Responsiveness = 250
+            alignPos.RigidityEnabled = true
+
+            local alignRot = Instance.new("AlignOrientation", charHRP)
+            alignRot.Name = "BlobAlignRot"
+            alignRot.Attachment0 = att0
+            alignRot.MaxTorque = math.huge
+            alignRot.Responsiveness = 250
+        end
+
+        -- 목표 위치: 내 머리 위 20스터드
         local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
         local dist = (charHRP.Position - targetCF.Position).Magnitude
 
-        -- [스팸 트리거] 타겟이 고정 위치에서 15스터드 이상 벗어나면 강제로 셋오너 스팸 실행
-        if (dist > 15 or not recoveringTargets[name]) and not recoveringTargets[name] then
-            recoveringTargets[name] = true
+        -- 거리 유지: 너무 멀어지면 강제로 붙잡기
+        if dist > 25 and not recoveringTargets[player.Name] then
+            recoveringTargets[player.Name] = true
             task.spawn(function()
                 local origCF = myHRP.CFrame
-                -- 1) 타겟 근처로 순간이동하여 그랩 시작
+                -- 1) 내가 타겟 근처로 순간이동 (그랩 시작)
                 pcall(function() myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0) end)
                 RunService.Heartbeat:Wait()
 
-                -- 2) 디트로이트 유발용 셋오너 15회 연속 스팸
-                for i = 1, 15 do
+                -- 2) 셋오너 스팸 (10회)
+                for i = 1, 10 do
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                     end)
                     RunService.Heartbeat:Wait()
                 end
 
-                -- 3) 타겟을 고정 위치로 이동, 나는 원래 자리로 복귀
+                -- 3) 타겟을 목표 위치로 강제 이동 후, 나는 원래 자리로 복귀
                 pcall(function()
-                    charHRP.CFrame = origCF * CFrame.new(0, 20, 0)
+                    charHRP.CFrame = targetCF
                     myHRP.CFrame = origCF
                 end)
-                RunService.Heartbeat:Wait()
-
-                -- 4) 다시 한 번 셋오너 스팸 (소유권 재확보)
-                for i = 1, 15 do
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                    end)
-                    RunService.Heartbeat:Wait()
+                
+                -- AlignPosition이 목표 위치를 당기게 설정
+                local alignPos = charHRP:FindFirstChild("BlobAlignPos")
+                if alignPos and alignPos.Attachment1 then
+                    alignPos.Attachment1.WorldPosition = targetCF.Position
                 end
 
-                recoveringTargets[name] = nil
+                recoveringTargets[player.Name] = nil
             end)
         end
 
-        -- [메인 루프] 매 프레임 타겟을 강제 고정하고 셋오너를 번갈아 호출
-        pcall(function()
-            charHRP.CFrame = targetCF
-            charHRP.AssemblyLinearVelocity = Vector3.zero
-            charHRP.AssemblyAngularVelocity = Vector3.zero
-            charHUM.PlatformStand = true
-            charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+        -- [메인 루프] AlignPosition 목표 업데이트 + 소유권 유지
+        local alignPos = charHRP:FindFirstChild("BlobAlignPos")
+        if alignPos and alignPos.Attachment1 then
+            alignPos.Attachment1.WorldPosition = targetCF.Position
+        end
 
-            -- 거리 내에 있을 때만 번갈아 스팸 (Detroit 유지)
-            if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
-                if (tick() % 0.1 < 0.05) then
-                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                else
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                end
-            end
+        -- 매 프레임 셋오너 2회 호출 (지나치게 빠르지 않게)
+        pcall(function()
+            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
         end)
 
-        RunService.RenderStepped:Wait() -- 60FPS로 루프
+        charHRP.AssemblyLinearVelocity = Vector3.zero
+        charHRP.AssemblyAngularVelocity = Vector3.zero
+        charHUM.PlatformStand = true
+        charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+
+        RunService.RenderStepped:Wait()
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (디트로이트/고정력 극대화)",
+    Name = "블롭맨 오너 킥 실행 (안정화/사라짐 방지)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
             return
         end
         blobLoopT4 = v
-        if v then task.spawn(loopPlayerBlobF4_Enhanced) end
+        if v then task.spawn(loopPlayerBlobF4_Stable) end
     end
 })
 
--- [통합] 팔렛 래그돌 (Invis)
+-- [통합] 팔렛 래그돌 (Invis) - 기존 코드 유지
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
     Flag = "Ragdoll Target",
@@ -446,4 +456,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 디트로이트 및 고정력 최적화 반영됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "갔다 사라짐 현상 해결 (AlignPosition 기반 안정화)", Duration = 3})
