@@ -38,13 +38,11 @@ getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
-local fLastRemoteTime = 0
 
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
-    fLastRemoteTime = tick()
-    fAttackConnection = RunService.Heartbeat:Connect(function()
+    fAttackConnection = RunService.RenderStepped:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
         local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local tgtChar = fAttackTarget.Character
@@ -58,14 +56,13 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- [수정] 0.05초 간격으로 원격 호출 (서버 부하 감소)
-        if tick() - fLastRemoteTime > 0.05 and (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
+        -- [수정] 거리 체크 및 리모트 스팸 방지 (초당 60회로 고정, 한 프레임 다중 발송 제거)
+        if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
-            fLastRemoteTime = tick()
         end
     end)
 end
@@ -124,8 +121,6 @@ KickTab:CreateInput({
 function loopPlayerBlobF4()
     local initialized = false
     local frameToggle = false
-    local lastRemoteTime = 0
-    local randomDelay = 0.05 -- 기본 지연
     
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -148,16 +143,6 @@ function loopPlayerBlobF4()
             -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- [추가] BodyPosition을 사용하여 물리적으로 고정 (서버 동기화 강화)
-            if not charHRP:FindFirstChild("KickBodyPos") then
-                local bp = Instance.new("BodyPosition", charHRP)
-                bp.Name = "KickBodyPos"
-                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bp.P = 50000
-                bp.D = 200
-            end
-            charHRP.KickBodyPos.Position = targetCF.Position
-            
             -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
@@ -170,13 +155,12 @@ function loopPlayerBlobF4()
                     end)
                     task.wait(0.15)
                     
-                    -- [수정] SetNetworkOwner 호출 횟수 5회로 줄이고, 랜덤 지연 추가
+                    -- [수정] 셋오너 스팸 시 프레임 대기 추가 (디트로이트 방지 핵심)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 5 do
+                        for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            local waitTime = 0.03 + math.random() * 0.02
-                            task.wait(waitTime)
+                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
                         end
                     end)
                     task.wait(0.05)
@@ -187,12 +171,11 @@ function loopPlayerBlobF4()
                     end)
                     task.wait(0.1)
                     
-                    -- 두 번째 소유권 확보 (중복)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 5 do
+                        for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            task.wait(0.03 + math.random() * 0.02)
+                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
                         end
                     end)
                     
@@ -201,23 +184,24 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- [수정] 거리 30 이내일 때만 SetNetworkOwner 호출 (0.05초 간격)
-            if (myHRP.Position - charHRP.Position).Magnitude <= 30 and tick() - lastRemoteTime > 0.05 then
-                frameToggle = not frameToggle
-                if frameToggle then
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                else
-                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+            pcall(function()
+                charHRP.CFrame = targetCF
+                charHRP.AssemblyLinearVelocity = Vector3.zero
+                charHRP.AssemblyAngularVelocity = Vector3.zero
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                
+                -- [수정] 거리가 30을 넘어갈 때 강제 셋오너 억제
+                if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
+                    frameToggle = not frameToggle
+                    if frameToggle then
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    else
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    end
                 end
-                lastRemoteTime = tick()
-            end
-            
-            -- [추가] 소유권 확인 후 불필요한 재호출 방지
-            local partOwner = charHRP:FindFirstChild("PartOwner")
-            if partOwner and partOwner.Value == plr.Name then
-                -- 이미 소유권을 가졌다면 추가 작업 생략 가능
-            end
+            end)
         end
         RunService.RenderStepped:Wait()
     end
@@ -237,12 +221,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합]
+-- [새로운 Pallet Ragdoll (Invis) 통합 - Xocu 스타일]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis)",
-    Flag = "Ragdoll Target",
-    Default = false,
+    Name = "Pallet Ragdoll (Invis) - Xocu 스타일",
     Callback = function(Value)
         local RS = game:GetService("ReplicatedStorage")
         local RunService = game:GetService("RunService")
@@ -260,7 +242,7 @@ KickTab:CreateToggle({
 
         if Value then
             if not selectedKickPlayer then
-                Rayfield:Notify({Title = "알림", Content = "Select target first (타겟을 먼저 입력해주세요)", Duration = 3})
+                Rayfield:Notify({Title = "알림", Content = "타겟을 먼저 입력해주세요", Duration = 3})
                 return
             end
 
