@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
+    Name = "🔥 FSOF Extreme Kick Hub (Final)",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -79,7 +79,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 셋오너 디트로이트 룹 (초고빈도)
+-- [KICK 탭] - 셋오너 디트로이트 룹 (TP 버그 수정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -117,42 +117,38 @@ function loopPlayerBlobF4()
 
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local charHRP = player.Character.HumanoidRootPart
-        local charHUM = player.Character:FindFirstChild("Humanoid")
         
-        if myHRP and charHRP and charHUM then
+        if myHRP and charHRP then
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- [수정] 10스터드 이상 벗어나면 즉시 추적 및 강제 셋오너 스팸 (초고빈도)
+            -- [수정] 타겟이 내 머리 위에서 10스터드 이상 벗어나면 타겟만 내 위로 순간이동 (내 캐릭터는 이동 안 함)
             if currentDist > 10 then
                 pcall(function()
-                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    -- [핵심] RenderStepped로 프레임마다 셋오너 3회 스팸 (빈도수 3배 상향)
+                    charHRP.CFrame = targetCF
+                    charHRP.AssemblyLinearVelocity = Vector3.zero
+                    -- [핵심] 거리 벌어지면 즉시 셋오너 스팸 (프레임당 3회)
                     for i = 1, 3 do
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                         RunService.RenderStepped:Wait()
                     end
-                    charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 20, 0)
                 end)
             end
             
-            -- [수정] 30스터드 이내에서 프레임마다 교차로 셋오너 스팸 (디트로이트 유지)
+            -- [수정] 30스터드 이내에서 프레임마다 교차로 셋오너 스팸 (라인 시각적 감소)
             if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
                 frameToggle = not frameToggle
                 if frameToggle then
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new()) -- 2프레임에 1번만 생성
                 else
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP) -- 매 프레임 파괴
                 end
             end
             
             pcall(function()
-                charHRP.CFrame = targetCF
+                charHRP.CFrame = targetCF -- 항상 내 머리 위 20에 유지
                 charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHUM.PlatformStand = true
             end)
         end
         RunService.RenderStepped:Wait()
@@ -160,7 +156,7 @@ function loopPlayerBlobF4()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (초고빈도 디트로이트)",
+    Name = "블롭맨 오너 킥 실행 (TP 버그 수정 / 라인 최소화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟을 입력해주세요!", Duration = 3})
@@ -172,10 +168,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [Pallet Ragdoll (Invis) - 관통 공격 버전]
+-- [Pallet Ragdoll (Invis) - 관통 공격 안정화]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (관통/순간이동)",
+    Name = "Pallet Ragdoll (관통/안정화)",
     Callback = function(Value)
         local RS = game:GetService("ReplicatedStorage")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
@@ -221,7 +217,7 @@ KickTab:CreateToggle({
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
 
-                    getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
+                    getgenv().ragdollSteppedConn = RunService.RenderStepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
                             clearAttackLoop()
                             return 
@@ -232,10 +228,10 @@ KickTab:CreateToggle({
                         local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
 
                         if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
-                            -- [수정] 팔레트를 타겟 위치로 순간이동 (몸속 파고들기)
+                            -- [수정] 팔레트를 타겟 위치로 순간이동 후 1프레임 대기하고 하늘로 이동 (안정화)
                             soundPart.CFrame = tRoot.CFrame
                             soundPart.AssemblyLinearVelocity = Vector3.new(0, -1, 0) -- 관통 효과
-                            task.wait(0.01)
+                            task.wait(0.01) -- 1프레임 대기 (렉 방지)
                             soundPart.CFrame = CFrame.new(0, 9e9, 0) -- 즉시 하늘로 이동
                             soundPart.AssemblyLinearVelocity = Vector3.zero
                         else
@@ -278,4 +274,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "초고빈도 디트로이트 및 팔레트 관통 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 TP버그, 라인 최소화, 팔레트 레그돌 안정화 완료", Duration = 3})
