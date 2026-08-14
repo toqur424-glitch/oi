@@ -29,10 +29,10 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 조준 킥 그랩 (고정력 강화)
+-- [GRAB 탭] - F키 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (매 프레임 50회 스팸) ===")
+GrabTab:CreateSection("=== 킥 그랩 (매 프레임 스팸) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -45,17 +45,18 @@ local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
 
+    -- 타겟에 BodyPosition / BodyGyro 부착 (물리적 고정)
     local tRoot = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
     if tRoot then
         fAttackBodyPos = Instance.new("BodyPosition", tRoot)
         fAttackBodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         fAttackBodyPos.D = 500
-        fAttackBodyPos.P = 50000  -- 강도 강화
+        fAttackBodyPos.P = 20000
 
         fAttackBodyGyro = Instance.new("BodyGyro", tRoot)
         fAttackBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         fAttackBodyGyro.D = 500
-        fAttackBodyGyro.P = 50000
+        fAttackBodyGyro.P = 20000
     end
 
     fAttackConnection = RunService.RenderStepped:Connect(function()
@@ -66,6 +67,7 @@ local function startFKeyAttack(targetPlayer)
         local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
         if not myRoot or not tgtRoot then return end
 
+        -- 속도 초기화 및 타겟을 카메라 앞 20스터드로 고정
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
         tgtRoot.AssemblyAngularVelocity = Vector3.zero
         if tgtHum then
@@ -79,6 +81,7 @@ local function startFKeyAttack(targetPlayer)
         local targetPos = camCF.Position + camCF.LookVector * 20
         tgtRoot.CFrame = CFrame.new(targetPos)
 
+        -- BodyPosition/gyro 업데이트
         if fAttackBodyPos and fAttackBodyPos.Parent then
             fAttackBodyPos.Position = targetPos
         end
@@ -86,17 +89,17 @@ local function startFKeyAttack(targetPlayer)
             fAttackBodyGyro.CFrame = CFrame.lookAt(targetPos, myRoot.Position)
         end
 
-        -- 거리 관계없이 매 프레임 50회 스팸 (고정 유지)
-        for i = 1, 50 do
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
-        end
-
-        -- 멀어지면 자신을 타겟 근처로 순간이동
-        if (myRoot.Position - tgtRoot.Position).Magnitude > 30 then
+        -- 거리 내에서만 소유권 스팸 (서버 과부하 방지)
+        if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
+            for i = 1, 10 do
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                end)
+            end
+        else
+            -- 멀어지면 내가 타겟 쪽으로 순간이동
             pcall(function()
                 myRoot.CFrame = tgtRoot.CFrame * CFrame.new(0, 0, -3)
             end)
@@ -125,7 +128,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (완전 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (낙하 방지)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -158,6 +161,8 @@ KickTab:CreateInput({
 })
 
 local function loopPlayerBlobF4()
+    local initialized = false
+    local frameToggle = false
     local bodyPos = nil
     local bodyGyro = nil
     
@@ -165,51 +170,85 @@ local function loopPlayerBlobF4()
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+            initialized = false
             if bodyPos then bodyPos:Destroy() bodyPos = nil end
             if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
             RunService.RenderStepped:Wait()
             continue
         end
 
+        local name = player.Name
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local charHRP = player.Character.HumanoidRootPart
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- BodyPosition/gyro 갱신 (강도 강화)
+            -- 타겟에 BodyPosition/gyro 부착
             if not bodyPos or bodyPos.Parent ~= charHRP then
                 if bodyPos then bodyPos:Destroy() end
                 if bodyGyro then bodyGyro:Destroy() end
                 bodyPos = Instance.new("BodyPosition", charHRP)
                 bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                 bodyPos.D = 500
-                bodyPos.P = 50000
+                bodyPos.P = 20000
 
                 bodyGyro = Instance.new("BodyGyro", charHRP)
                 bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
                 bodyGyro.D = 500
-                bodyGyro.P = 50000
+                bodyGyro.P = 20000
             end
 
             -- 고정 위치 (내 머리 위 20스터드)
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
+            
+            -- 15스터드 이상 벗어나면 재소유 + 텔레포트
+            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
+                recoveringTargets[name] = true
+                initialized = true 
+                
+                task.spawn(function()
+                    local originalCF = myHRP.CFrame
+                    pcall(function()
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    end)
+                    RunService.RenderStepped:Wait()
 
-            -- 멀어지면 나를 타겟 근처로 순간이동
-            if currentDist > 30 then
-                pcall(function()
-                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    -- 소유권 스팸
+                    for i = 1, 30 do
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        end)
+                        RunService.RenderStepped:Wait()
+                    end
+                    
+                    pcall(function()
+                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                        myHRP.CFrame = originalCF
+                    end)
+                    RunService.RenderStepped:Wait()
+                    
+                    for i = 1, 30 do
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        end)
+                        RunService.RenderStepped:Wait()
+                    end
+                    
+                    task.wait(0.1)
+                    recoveringTargets[name] = nil
                 end)
-                RunService.RenderStepped:Wait()
             end
-
-            -- 매 프레임 강제 위치 + 속도 초기화 + 50회 스팸
+            
+            -- 매 프레임 강제 위치 고정 + 속도 초기화
             pcall(function()
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHRP.Velocity = Vector3.zero
-                charHRP.RotVelocity = Vector3.zero
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 charHUM.WalkSpeed = 0
@@ -218,12 +257,15 @@ local function loopPlayerBlobF4()
                 if bodyPos then bodyPos.Position = targetCF.Position end
                 if bodyGyro then bodyGyro.CFrame = targetCF end
 
-                for i = 1, 50 do
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                -- 거리 30 이하에서만 소유권 교차 발사
+                if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
+                    frameToggle = not frameToggle
+                    if frameToggle then
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    else
+                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                    end)
+                    end
                 end
             end)
         end
@@ -248,7 +290,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [판자 레그돌 (Invis) - 속도 제거, RagdollRemote 집중]
+-- [판자 레그돌 (Invis) - 충돌 방지 + 속도 조절]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 강제 레그돌",
@@ -308,18 +350,19 @@ KickTab:CreateToggle({
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
-                    -- 판자 투명화 및 충돌 해제
+                    -- 판자 투명화 및 충돌 해제 (CanCollide = false!)
                     for _, v in pairs(child:GetChildren()) do
                         if v:IsA("BasePart") then
                             v.Transparency = 1 
                             v.CanQuery = false
-                            v.CanCollide = false
+                            v.CanCollide = false  -- 충돌 방지 → 양쪽 날아감 문제 해결
                         end
                     end
 
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
 
+                    local strikePhase = false
                     local lastRagdollFire = 0
 
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
@@ -337,12 +380,17 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 판자 위치 고정 (속도 제거)
-                                soundPart.CFrame = tRoot.CFrame
-                                soundPart.AssemblyLinearVelocity = Vector3.zero
-                                soundPart.AssemblyAngularVelocity = Vector3.zero
+                                -- 판자를 타겟 위치에 배치하고 속도로 충격 (충돌 없음)
+                                strikePhase = not strikePhase
+                                if strikePhase then
+                                    soundPart.CFrame = tRoot.CFrame
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -50000, 0)  -- 속도 감소
+                                else
+                                    soundPart.CFrame = tRoot.CFrame
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 50000, 0)
+                                end
 
-                                -- 0.05초마다 RagdollRemote 발사
+                                -- 0.05초마다 RagdollRemote 추가 발사 (레그돌 강제)
                                 if tick() - lastRagdollFire > 0.05 then
                                     pcall(function()
                                         RagdollRemote:FireServer(tRoot, 1)
@@ -350,6 +398,7 @@ KickTab:CreateToggle({
                                     lastRagdollFire = tick()
                                 end
                             else
+                                -- 이미 레그돌이면 판자를 하늘로 치워서 렉 감소
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
                             end
@@ -426,4 +475,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥/판자 레그돌 최종 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥/판자 레그돌 최적화 완료 (충돌 및 낙하 수정)", Duration = 3})
