@@ -29,34 +29,27 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - 극대화된 킥 그랩 (F키)
+-- [GRAB 탭] - F키 1회용 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
+GrabTab:CreateSection("=== 킥 그랩 ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
-local fAttackTarget = nil
 
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
-    fAttackTarget = targetPlayer
     fAttackConnection = RunService.RenderStepped:Connect(function()
-        if not getgenv().FKeyAttackActive or not fAttackTarget then return end
+        if not getgenv().FKeyAttackActive or not targetPlayer then return end
         local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        local tgtChar = fAttackTarget.Character
+        local tgtChar = targetPlayer.Character
         local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
-        local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
         if not myRoot or not tgtRoot then return end
         
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
-        if tgtHum then tgtHum.PlatformStand = true end
+        pcall(function() tgtRoot.CFrame = CFrame.new(camera.CFrame.Position + camera.CFrame.LookVector * 20) end)
         
-        local camCF = camera.CFrame
-        pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
-        
-        -- [수정] 거리 체크 및 리모트 스팸 방지 (초당 60회로 고정, 한 프레임 다중 발송 제거)
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
@@ -86,12 +79,11 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 및 범위 이탈 감지 룹티피
+-- [KICK 탭] - 셋오너 디트로이트 룹 (빈도수 상향)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local recoveringTargets = {} 
-
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -107,100 +99,62 @@ KickTab:CreateInput({
                 break
             end
         end
-        
-        if not found then 
-            Rayfield:Notify({Title = "오류", Content = "해당 유저를 찾을 수 없습니다.", Duration = 2})
-            return 
+        if found then 
+            selectedKickPlayer = found
+            Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
         end
-        
-        selectedKickPlayer = found
-        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
 })
 
 function loopPlayerBlobF4()
-    local initialized = false
     local frameToggle = false
+    local checkTimer = 0
     
     while blobLoopT4 do
         local player = selectedKickPlayer
-        
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-            initialized = false
             RunService.RenderStepped:Wait()
             continue
         end
 
-        local name = player.Name
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local charHRP = player.Character.HumanoidRootPart
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-            
-            -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
-            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
-                recoveringTargets[name] = true
-                initialized = true 
-                
-                task.spawn(function()
-                    local originalCF = myHRP.CFrame
-                    pcall(function()
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    end)
-                    task.wait(0.15)
-                    
-                    -- [수정] 셋오너 스팸 시 프레임 대기 추가 (디트로이트 방지 핵심)
-                    pcall(function()
+            -- [수정] 10스터드 이상 벗어나면 즉시 추적 및 강제 셋오너 스팸
+            if currentDist > 10 then
+                pcall(function()
+                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                    -- [핵심] RenderStepped로 프레임마다 셋오너 스팸 (빈도수 극대화)
+                    for i = 1, 5 do
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
-                        end
-                    end)
-                    task.wait(0.05)
-                    
-                    pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
-                        myHRP.CFrame = originalCF
-                    end)
-                    task.wait(0.1)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
-                        end
-                    end)
-                    
-                    task.wait(0.3)
-                    recoveringTargets[name] = nil
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        RunService.RenderStepped:Wait()
+                    end
+                    charHRP.CFrame = myHRP.CFrame * CFrame.new(0, 20, 0)
                 end)
+            end
+            
+            -- [수정] 30스터드 이내에서 프레임마다 교차로 셋오너 스팸 (디트로이트 유지)
+            if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
+                frameToggle = not frameToggle
+                if frameToggle then
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                else
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                end
             end
             
             pcall(function()
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHRP.AssemblyAngularVelocity = Vector3.zero
                 charHUM.PlatformStand = true
-                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                
-                -- [수정] 거리가 30을 넘어갈 때 강제 셋오너 억제
-                if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
-                    frameToggle = not frameToggle
-                    if frameToggle then
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    else
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                    end
-                end
             end)
         end
         RunService.RenderStepped:Wait()
@@ -208,11 +162,10 @@ function loopPlayerBlobF4()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
+    Name = "블롭맨 오너 킥 실행 (디트로이트 고빈도)",
     Callback = function(v)
         if v and not selectedKickPlayer then
-            Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
-            blobLoopT4 = false
+            Rayfield:Notify({Title = "알림", Content = "먼저 타겟을 입력해주세요!", Duration = 3})
             return
         end
         blobLoopT4 = v
@@ -221,17 +174,18 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합 - Xocu 스타일]
+-- [Pallet Ragdoll (Invis) - 관통 공격 버전]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - Xocu 스타일",
+    Name = "Pallet Ragdoll (관통/순간이동)",
     Callback = function(Value)
         local RS = game:GetService("ReplicatedStorage")
-        local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
         local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
+        local SpawnToy = RS:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction")
         local lpName = plr.Name
+        local activeState = Value
 
         local function clearAttackLoop()
             if getgenv().ragdollSteppedConn then
@@ -240,7 +194,7 @@ KickTab:CreateToggle({
             end
         end
 
-        if Value then
+        if activeState then
             if not selectedKickPlayer then
                 Rayfield:Notify({Title = "알림", Content = "타겟을 먼저 입력해주세요", Duration = 3})
                 return
@@ -248,17 +202,10 @@ KickTab:CreateToggle({
 
             getgenv().palletRagdollActive = true
             getgenv().PalletForRagdoll = nil
-            
-            if getgenv().palletCacheConn then
-                getgenv().palletCacheConn:Disconnect()
-            end
             clearAttackLoop()
 
             local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
-            if not toysFolder then
-                Rayfield:Notify({Title = "오류", Content = "생성된 토이 폴더를 찾을 수 없습니다.", Duration = 3})
-                return
-            end
+            if not toysFolder then return end
 
             getgenv().palletCacheConn = toysFolder.ChildAdded:Connect(function(child)
                 if not getgenv().palletRagdollActive then return end
@@ -272,20 +219,9 @@ KickTab:CreateToggle({
                     DestroyLine:FireServer(soundPart)
                 end)
 
-                local partOwner = soundPart:WaitForChild("PartOwner", 1)
-                if partOwner and partOwner.Value == lpName then
-                    for _, v in pairs(child:GetChildren()) do
-                        if v:IsA("BasePart") then
-                            v.CanCollide = false
-                            v.CanQuery = false
-                            v.Transparency = 1 
-                        end
-                    end
-
+                if soundPart:WaitForChild("PartOwner", 1).Value == lpName then
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
-
-                    local strikePhase = false
 
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
@@ -298,83 +234,42 @@ KickTab:CreateToggle({
                         local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
 
                         if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
-                            local ragdolledVal = tHum:FindFirstChild("Ragdolled")
-                            local isRagdolled = ragdolledVal and ragdolledVal.Value or false
-
-                            if not isRagdolled then
-                                strikePhase = not strikePhase
-                                if strikePhase then
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
-                                else
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
-                                end
-                            else
-                                soundPart.CFrame = CFrame.new(0, 9e9, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.zero
-                            end
+                            -- [수정] 팔레트를 타겟 위치로 순간이동 (몸속 파고들기)
+                            soundPart.CFrame = tRoot.CFrame
+                            soundPart.AssemblyLinearVelocity = Vector3.new(0, -1, 0) -- 관통 효과
+                            task.wait(0.01)
+                            soundPart.CFrame = CFrame.new(0, 9e9, 0) -- 즉시 하늘로 이동
+                            soundPart.AssemblyLinearVelocity = Vector3.zero
                         else
                             soundPart.CFrame = CFrame.new(0, 9e9, 0)
-                            soundPart.AssemblyLinearVelocity = Vector3.zero
                         end
                     end)
 
                     child.AncestryChanged:Connect(function()
                         if not child.Parent then
                             clearAttackLoop()
-                            getgenv().PalletForRagdoll = nil
                             if getgenv().palletRagdollActive then
                                 task.wait(0.03)
                                 if getgenv().spawnNewPallet then getgenv().spawnNewPallet() end
                             end
                         end
                     end)
-                else
-                    pcall(function() DestroyToy:FireServer(child) end)
                 end
             end)
 
             getgenv().spawnNewPallet = function()
-                if not getgenv().palletRagdollActive then return end
                 if getgenv().PalletForRagdoll and getgenv().PalletForRagdoll.Parent then return end
-                
-                local c = plr.Character
-                local h = c and c:FindFirstChild("HumanoidRootPart")
+                local h = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if not h then return end
-
-                task.spawn(function()
-                    pcall(function()
-                        RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
-                            "PalletLightBrown",
-                            h.CFrame * CFrame.new(0, 10, 20),
-                            Vector3.zero
-                        )
-                    end)
-                end)
+                task.spawn(function() pcall(function() SpawnToy:InvokeServer("PalletLightBrown", h.CFrame * CFrame.new(0, 10, 20), Vector3.zero) end) end)
             end
-
             getgenv().spawnNewPallet()
         else
             getgenv().palletRagdollActive = false
             clearAttackLoop()
-
-            if getgenv().palletCacheConn then
-                getgenv().palletCacheConn:Disconnect()
-                getgenv().palletCacheConn = nil
-            end
-
             local pallet = getgenv().PalletForRagdoll
-            if pallet and pallet.Parent then
-                pcall(function() DestroyToy:FireServer(pallet) end)
-            end
-
+            if pallet and pallet.Parent then pcall(function() DestroyToy:FireServer(pallet) end) end
             getgenv().PalletForRagdoll = nil
-
-            local toysFolder = workspace:FindFirstChild(lpName .. "SpawnedInToys")
-            if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
-                pcall(function() DestroyToy:FireServer(toysFolder.PalletForRagdoll) end)
-            end
         end
     end,
 })
@@ -385,4 +280,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 오너 룹 최적화 반영됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 팔레트 관통 최적화 반영됨", Duration = 3})
