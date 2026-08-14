@@ -79,11 +79,10 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 셋오너 디트로이트 룹 (빈도수 상향)
+-- [KICK 탭] - 셋오너 디트로이트 룹 (초고빈도)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
-local recoveringTargets = {} 
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -108,7 +107,6 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local frameToggle = false
-    local checkTimer = 0
     
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -125,12 +123,12 @@ function loopPlayerBlobF4()
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- [수정] 10스터드 이상 벗어나면 즉시 추적 및 강제 셋오너 스팸
+            -- [수정] 10스터드 이상 벗어나면 즉시 추적 및 강제 셋오너 스팸 (초고빈도)
             if currentDist > 10 then
                 pcall(function()
                     myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    -- [핵심] RenderStepped로 프레임마다 셋오너 스팸 (빈도수 극대화)
-                    for i = 1, 5 do
+                    -- [핵심] RenderStepped로 프레임마다 셋오너 3회 스팸 (빈도수 3배 상향)
+                    for i = 1, 3 do
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
@@ -162,7 +160,7 @@ function loopPlayerBlobF4()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (디트로이트 고빈도)",
+    Name = "블롭맨 오너 킥 실행 (초고빈도 디트로이트)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟을 입력해주세요!", Duration = 3})
@@ -280,4 +278,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 팔레트 관통 최적화 반영됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "초고빈도 디트로이트 및 팔레트 관통 적용", Duration = 3})
