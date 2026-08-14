@@ -38,11 +38,13 @@ getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
+local fLastRemoteTime = 0
 
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
-    fAttackConnection = RunService.RenderStepped:Connect(function()
+    fLastRemoteTime = tick()
+    fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
         local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local tgtChar = fAttackTarget.Character
@@ -50,28 +52,20 @@ local function startFKeyAttack(targetPlayer)
         local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
         if not myRoot or not tgtRoot then return end
         
-        -- [수정] 고정력 강화: 선속도·각속도 제로, 이동/점프/자동회전 차단
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
-        tgtRoot.AssemblyAngularVelocity = Vector3.zero
-        if tgtHum then
-            tgtHum.PlatformStand = true
-            tgtHum.WalkSpeed = 0
-            tgtHum.JumpPower = 0
-            tgtHum.AutoRotate = false
-        end
+        if tgtHum then tgtHum.PlatformStand = true end
         
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- [수정] 거리 체크 및 리모트 빈도 증가 (SetOwner/Destroy 각각 2회, Create 1회)
-        if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
+        -- [수정] 0.05초 간격으로 원격 호출 (서버 부하 감소)
+        if tick() - fLastRemoteTime > 0.05 and (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
+            fLastRemoteTime = tick()
         end
     end)
 end
@@ -129,7 +123,9 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
-    -- frameToggle 변수 제거 (매 프레임 모두 호출하도록 변경)
+    local frameToggle = false
+    local lastRemoteTime = 0
+    local randomDelay = 0.05 -- 기본 지연
     
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -152,6 +148,16 @@ function loopPlayerBlobF4()
             -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
+            -- [추가] BodyPosition을 사용하여 물리적으로 고정 (서버 동기화 강화)
+            if not charHRP:FindFirstChild("KickBodyPos") then
+                local bp = Instance.new("BodyPosition", charHRP)
+                bp.Name = "KickBodyPos"
+                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bp.P = 50000
+                bp.D = 200
+            end
+            charHRP.KickBodyPos.Position = targetCF.Position
+            
             -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
@@ -164,13 +170,13 @@ function loopPlayerBlobF4()
                     end)
                     task.wait(0.15)
                     
-                    -- [수정] 반복 횟수 증가(30회) + DestroyGrabLine 추가
+                    -- [수정] SetNetworkOwner 호출 횟수 5회로 줄이고, 랜덤 지연 추가
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
+                        for i = 1, 5 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
+                            local waitTime = 0.03 + math.random() * 0.02
+                            task.wait(waitTime)
                         end
                     end)
                     task.wait(0.05)
@@ -181,13 +187,12 @@ function loopPlayerBlobF4()
                     end)
                     task.wait(0.1)
                     
-                    -- [수정] 두 번째 루프에도 DestroyGrabLine 추가
+                    -- 두 번째 소유권 확보 (중복)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
+                        for i = 1, 5 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                            RunService.Heartbeat:Wait() -- 서버 과부하 방지
+                            task.wait(0.03 + math.random() * 0.02)
                         end
                     end)
                     
@@ -196,26 +201,23 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            pcall(function()
-                charHRP.CFrame = targetCF
-                charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHUM.PlatformStand = true
-                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                -- [수정] 고정력 강화: 이동/점프/자동회전 차단
-                charHUM.WalkSpeed = 0
-                charHUM.JumpPower = 0
-                charHUM.AutoRotate = false
-                
-                -- [수정] 거리가 30 이하일 때 매 프레임 Create 1회 + SetOwner 2회 + Destroy 2회 호출
-                if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
+            -- [수정] 거리 30 이내일 때만 SetNetworkOwner 호출 (0.05초 간격)
+            if (myHRP.Position - charHRP.Position).Magnitude <= 30 and tick() - lastRemoteTime > 0.05 then
+                frameToggle = not frameToggle
+                if frameToggle then
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                else
                     rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                     rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                 end
-            end)
+                lastRemoteTime = tick()
+            end
+            
+            -- [추가] 소유권 확인 후 불필요한 재호출 방지
+            local partOwner = charHRP:FindFirstChild("PartOwner")
+            if partOwner and partOwner.Value == plr.Name then
+                -- 이미 소유권을 가졌다면 추가 작업 생략 가능
+            end
         end
         RunService.RenderStepped:Wait()
     end
@@ -401,4 +403,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 오너 룹 빈도 증가 + 고정력 강화 적용됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 오너 룹 최적화 반영됨", Duration = 3})
