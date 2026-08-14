@@ -290,10 +290,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [판자 레그돌 (Invis) - 레그돌 강제 유도 (최종)
+-- [판자 레그돌 (Invis) - 몸속 강제 충돌 (최종)
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 레그돌 강제 유도",
+    Name = "Pallet Ragdoll (Invis) - 몸속 강제 충돌",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -350,12 +350,13 @@ KickTab:CreateToggle({
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
-                    -- 판자 투명화 및 충돌 해제
+                    -- 판자 투명화 (충돌은 true로 유지!)
                     for _, v in pairs(child:GetChildren()) do
                         if v:IsA("BasePart") then
-                            v.CanCollide = false
-                            v.CanQuery = false
                             v.Transparency = 1 
+                            v.CanQuery = false
+                            -- 충돌을 true로 설정하여 타겟과 물리 충돌 발생
+                            v.CanCollide = true
                         end
                     end
 
@@ -379,14 +380,14 @@ KickTab:CreateToggle({
                             local ragdolledVal = tHum:FindFirstChild("Ragdolled")
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
-                            -- 레그돌이 아니면 판자로 강타
                             if not isRagdolled then
+                                -- 판자를 타겟 몸속 정중앙에 배치하고 극도로 빠른 속도로 충격
                                 strikePhase = not strikePhase
                                 if strikePhase then
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
+                                    soundPart.CFrame = tRoot.CFrame
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, -900000, 0)
                                 else
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
+                                    soundPart.CFrame = tRoot.CFrame
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, 900000, 0)
                                 end
 
@@ -475,4 +476,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥/판자 레그돌 초고속 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥/판자 레그돌 초고속 최적화 완료 (몸속 충돌 적용)", Duration = 3})
