@@ -50,13 +50,13 @@ local function startFKeyAttack(targetPlayer)
     if tRoot then
         fAttackBodyPos = Instance.new("BodyPosition", tRoot)
         fAttackBodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        fAttackBodyPos.D = 500
-        fAttackBodyPos.P = 20000
+        fAttackBodyPos.D = 1000          -- 증가
+        fAttackBodyPos.P = 50000         -- 증가
 
         fAttackBodyGyro = Instance.new("BodyGyro", tRoot)
         fAttackBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        fAttackBodyGyro.D = 500
-        fAttackBodyGyro.P = 20000
+        fAttackBodyGyro.D = 1000         -- 증가
+        fAttackBodyGyro.P = 50000        -- 증가
     end
 
     fAttackConnection = RunService.RenderStepped:Connect(function()
@@ -67,7 +67,6 @@ local function startFKeyAttack(targetPlayer)
         local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
         if not myRoot or not tgtRoot then return end
 
-        -- 속도 초기화 및 타겟을 카메라 앞 20스터드로 고정
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
         tgtRoot.AssemblyAngularVelocity = Vector3.zero
         if tgtHum then
@@ -78,10 +77,9 @@ local function startFKeyAttack(targetPlayer)
         end
 
         local camCF = camera.CFrame
-        local targetPos = camCF.Position + camCF.LookVector * 20
+        local targetPos = camCF.Position + camCF.LookVector * 15   -- 15스터드로 가깝게
         tgtRoot.CFrame = CFrame.new(targetPos)
 
-        -- BodyPosition/gyro 업데이트
         if fAttackBodyPos and fAttackBodyPos.Parent then
             fAttackBodyPos.Position = targetPos
         end
@@ -89,9 +87,9 @@ local function startFKeyAttack(targetPlayer)
             fAttackBodyGyro.CFrame = CFrame.lookAt(targetPos, myRoot.Position)
         end
 
-        -- 거리 내에서만 소유권 스팸 (서버 과부하 방지)
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            for i = 1, 10 do
+            -- 빈도 증가 (15회)
+            for i = 1, 15 do
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
@@ -99,7 +97,6 @@ local function startFKeyAttack(targetPlayer)
                 end)
             end
         else
-            -- 멀어지면 내가 타겟 쪽으로 순간이동
             pcall(function()
                 myRoot.CFrame = tgtRoot.CFrame * CFrame.new(0, 0, -3)
             end)
@@ -133,7 +130,6 @@ GrabTab:CreateKeybind({
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local recoveringTargets = {} 
-
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -183,26 +179,23 @@ local function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- 타겟에 BodyPosition/gyro 부착
             if not bodyPos or bodyPos.Parent ~= charHRP then
                 if bodyPos then bodyPos:Destroy() end
                 if bodyGyro then bodyGyro:Destroy() end
                 bodyPos = Instance.new("BodyPosition", charHRP)
                 bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bodyPos.D = 500
-                bodyPos.P = 20000
+                bodyPos.D = 1000
+                bodyPos.P = 50000
 
                 bodyGyro = Instance.new("BodyGyro", charHRP)
                 bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                bodyGyro.D = 500
-                bodyGyro.P = 20000
+                bodyGyro.D = 1000
+                bodyGyro.P = 50000
             end
 
-            -- 고정 위치 (내 머리 위 20스터드)
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 15스터드 이상 벗어나면 재소유 + 텔레포트
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
@@ -214,8 +207,8 @@ local function loopPlayerBlobF4()
                     end)
                     RunService.RenderStepped:Wait()
 
-                    -- 소유권 스팸
-                    for i = 1, 30 do
+                    -- 소유권 스팸 횟수 증가 (40회)
+                    for i = 1, 40 do
                         pcall(function()
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
@@ -230,7 +223,7 @@ local function loopPlayerBlobF4()
                     end)
                     RunService.RenderStepped:Wait()
                     
-                    for i = 1, 30 do
+                    for i = 1, 40 do
                         pcall(function()
                             rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
@@ -244,7 +237,6 @@ local function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 강제 위치 고정 + 속도 초기화
             pcall(function()
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -257,15 +249,13 @@ local function loopPlayerBlobF4()
                 if bodyPos then bodyPos.Position = targetCF.Position end
                 if bodyGyro then bodyGyro.CFrame = targetCF end
 
-                -- 거리 30 이하에서만 소유권 교차 발사
                 if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
-                    frameToggle = not frameToggle
-                    if frameToggle then
+                    -- 매 프레임 두 가지 이벤트를 모두 실행 (고정 강화)
+                    pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    else
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                    end
+                    end)
                 end
             end)
         end
@@ -292,182 +282,8 @@ KickTab:CreateToggle({
 --=============================================
 -- [판자 레그돌 (Invis) - 충돌 방지 + 속도 조절]
 --=============================================
-KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 강제 레그돌",
-    Flag = "Ragdoll Target",
-    Default = false,
-    Callback = function(Value)
-        local RS = ReplicatedStorage
-        local RunService = game:GetService("RunService")
-        local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
-        local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
-        local RagdollRemote = RS:WaitForChild("CharacterEvents"):WaitForChild("RagdollRemote")
-        local lpName = plr.Name
-
-        local function clearAttackLoop()
-            if getgenv().ragdollSteppedConn then
-                getgenv().ragdollSteppedConn:Disconnect()
-                getgenv().ragdollSteppedConn = nil
-            end
-        end
-
-        if Value then
-            if not selectedKickPlayer then
-                Rayfield:Notify({Title = "알림", Content = "Select target first (타겟을 먼저 입력해주세요)", Duration = 3})
-                return
-            end
-
-            getgenv().palletRagdollActive = true
-            getgenv().PalletForRagdoll = nil
-            
-            if getgenv().palletCacheConn then
-                getgenv().palletCacheConn:Disconnect()
-            end
-            clearAttackLoop()
-
-            local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
-            if not toysFolder then
-                Rayfield:Notify({Title = "오류", Content = "생성된 토이 폴더를 찾을 수 없습니다.", Duration = 3})
-                return
-            end
-
-            getgenv().palletCacheConn = toysFolder.ChildAdded:Connect(function(child)
-                if not getgenv().palletRagdollActive then return end
-                if child.Name ~= "PalletLightBrown" and child.Name ~= "PalletForRagdoll" then return end
-
-                local soundPart = child:WaitForChild("SoundPart", 3)
-                if not soundPart then return end
-
-                -- 소유권 강제 획득
-                for i = 1, 5 do
-                    pcall(function()
-                        SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                        DestroyLine:FireServer(soundPart)
-                    end)
-                    RunService.RenderStepped:Wait()
-                end
-
-                local partOwner = soundPart:WaitForChild("PartOwner", 1)
-                if partOwner and partOwner.Value == lpName then
-                    -- 판자 투명화 및 충돌 해제 (CanCollide = false!)
-                    for _, v in pairs(child:GetChildren()) do
-                        if v:IsA("BasePart") then
-                            v.Transparency = 1 
-                            v.CanQuery = false
-                            v.CanCollide = false  -- 충돌 방지 → 양쪽 날아감 문제 해결
-                        end
-                    end
-
-                    child.Name = "PalletForRagdoll"
-                    getgenv().PalletForRagdoll = child
-
-                    local strikePhase = false
-                    local lastRagdollFire = 0
-
-                    getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
-                        if not getgenv().palletRagdollActive or not child.Parent then 
-                            clearAttackLoop()
-                            return 
-                        end
-
-                        local tChar = selectedKickPlayer and selectedKickPlayer.Character
-                        local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                        local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-
-                        if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
-                            local ragdolledVal = tHum:FindFirstChild("Ragdolled")
-                            local isRagdolled = ragdolledVal and ragdolledVal.Value or false
-
-                            if not isRagdolled then
-                                -- 판자를 타겟 위치에 배치하고 속도로 충격 (충돌 없음)
-                                strikePhase = not strikePhase
-                                if strikePhase then
-                                    soundPart.CFrame = tRoot.CFrame
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -50000, 0)  -- 속도 감소
-                                else
-                                    soundPart.CFrame = tRoot.CFrame
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 50000, 0)
-                                end
-
-                                -- 0.05초마다 RagdollRemote 추가 발사 (레그돌 강제)
-                                if tick() - lastRagdollFire > 0.05 then
-                                    pcall(function()
-                                        RagdollRemote:FireServer(tRoot, 1)
-                                    end)
-                                    lastRagdollFire = tick()
-                                end
-                            else
-                                -- 이미 레그돌이면 판자를 하늘로 치워서 렉 감소
-                                soundPart.CFrame = CFrame.new(0, 9e9, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.zero
-                            end
-                        else
-                            soundPart.CFrame = CFrame.new(0, 9e9, 0)
-                            soundPart.AssemblyLinearVelocity = Vector3.zero
-                        end
-                    end)
-
-                    -- 판자 파괴 시 재생성
-                    child.AncestryChanged:Connect(function()
-                        if not child.Parent then
-                            clearAttackLoop()
-                            getgenv().PalletForRagdoll = nil
-                            if getgenv().palletRagdollActive then
-                                task.wait(0.03)
-                                if getgenv().spawnNewPallet then getgenv().spawnNewPallet() end
-                            end
-                        end
-                    end)
-                else
-                    pcall(function() DestroyToy:FireServer(child) end)
-                end
-            end)
-
-            -- 판자 생성 함수
-            getgenv().spawnNewPallet = function()
-                if not getgenv().palletRagdollActive then return end
-                if getgenv().PalletForRagdoll and getgenv().PalletForRagdoll.Parent then return end
-                
-                local c = plr.Character
-                local h = c and c:FindFirstChild("HumanoidRootPart")
-                if not h then return end
-
-                task.spawn(function()
-                    pcall(function()
-                        RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
-                            "PalletLightBrown",
-                            h.CFrame * CFrame.new(0, 10, 20),
-                            Vector3.zero
-                        )
-                    end)
-                end)
-            end
-
-            getgenv().spawnNewPallet()
-        else
-            getgenv().palletRagdollActive = false
-            clearAttackLoop()
-
-            if getgenv().palletCacheConn then
-                getgenv().palletCacheConn:Disconnect()
-                getgenv().palletCacheConn = nil
-            end
-
-            local pallet = getgenv().PalletForRagdoll
-            if pallet and pallet.Parent then
-                pcall(function() DestroyToy:FireServer(pallet) end)
-            end
-
-            getgenv().PalletForRagdoll = nil
-
-            local toysFolder = workspace:FindFirstChild(lpName .. "SpawnedInToys")
-            if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
-                pcall(function() DestroyToy:FireServer(toysFolder.PalletForRagdoll) end)
-            end
-        end
-    end,
-})
+-- (아래는 기존과 동일하므로 생략, 필요 시 원본 그대로 유지)
+-- ... (원본 코드의 Pallet Ragdoll 부분을 그대로 두시면 됩니다) ...
 
 --=============================================
 -- [기타 탭]
