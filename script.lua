@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
+    Name = "🔥 FSOF Extreme Kick Hub (Ultimate)",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -29,10 +29,10 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 조준 킥 그랩 (고정력 및 속도 강화)
+-- [GRAB 탭] - F키 조준 킥 그랩 (초고속)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
+GrabTab:CreateSection("=== 킥 그랩 (매 프레임 스팸) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -89,11 +89,14 @@ local function startFKeyAttack(targetPlayer)
 
         -- 거리 내에서만 소유권 스팸 (서버 과부하 방지)
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
+            -- 매 프레임 10회씩 발사 (초고속)
+            for i = 1, 10 do
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                end)
+            end
         else
             -- 멀어지면 내가 타겟 쪽으로 순간이동
             pcall(function()
@@ -124,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (강력 고정 + 자동 추적)
+-- [KICK 탭] - 블롭맨 오너 킥 (초고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -209,34 +212,35 @@ local function loopPlayerBlobF4()
                     pcall(function()
                         myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
                     end)
-                    RunService.Heartbeat:Wait() -- 1프레임 대기
+                    RunService.RenderStepped:Wait()
 
-                    -- 소유권 스팸 (속도 향상: 딜레이 없이 연속 발사)
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
+                    -- 소유권 스팸 (매 프레임 30회)
+                    for i = 1, 30 do
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            RunService.Heartbeat:Wait() -- 서버 부하 방지
-                        end
-                    end)
-                    RunService.Heartbeat:Wait()
+                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        end)
+                        RunService.RenderStepped:Wait()
+                    end
                     
                     pcall(function()
                         charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
                         myHRP.CFrame = originalCF
                     end)
-                    RunService.Heartbeat:Wait()
+                    RunService.RenderStepped:Wait()
                     
                     -- 다시 소유권 강화
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 30 do
+                    for i = 1, 30 do
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            RunService.Heartbeat:Wait()
-                        end
-                    end)
+                            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        end)
+                        RunService.RenderStepped:Wait()
+                    end
                     
-                    task.wait(0.3)
+                    task.wait(0.1)
                     recoveringTargets[name] = nil
                 end)
             end
@@ -286,7 +290,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [판자 레그돌 (Invis) - 완전히 개선]
+-- [판자 레그돌 (Invis) - 레그돌 강제 유도 (최종)
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 레그돌 강제 유도",
@@ -335,11 +339,14 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                -- 소유권 강제 획득
-                pcall(function()
-                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine:FireServer(soundPart)
-                end)
+                -- 소유권 강제 획득 (매 프레임 5회)
+                for i = 1, 5 do
+                    pcall(function()
+                        SetNetOwner:FireServer(soundPart, soundPart.CFrame)
+                        DestroyLine:FireServer(soundPart)
+                    end)
+                    RunService.RenderStepped:Wait()
+                end
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
@@ -377,14 +384,14 @@ KickTab:CreateToggle({
                                 strikePhase = not strikePhase
                                 if strikePhase then
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -900000, 0)
                                 else
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 900000, 0)
                                 end
 
-                                -- 0.2초마다 RagdollRemote 추가 발사 (레그돌 강제)
-                                if tick() - lastRagdollFire > 0.2 then
+                                -- 0.05초마다 RagdollRemote 추가 발사 (레그돌 강제)
+                                if tick() - lastRagdollFire > 0.05 then
                                     pcall(function()
                                         RagdollRemote:FireServer(tRoot, 1)
                                     end)
@@ -468,4 +475,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥 속도/고정력 강화 및 레그돌 수정 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 킥/판자 레그돌 초고속 최적화 완료", Duration = 3})
