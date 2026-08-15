@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (Heartbeat, 매 프레임)
+-- [GRAB 탭] - F키 킥 그랩 (매 프레임 모든 리모트 스팸)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -42,7 +42,6 @@ local fAttackTarget = nil
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
-    local counter = 0
     
     fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
@@ -57,17 +56,17 @@ local function startFKeyAttack(targetPlayer)
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
         
+        -- 카메라 앞으로 던지기
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            counter = counter + 1
-            if counter % 2 == 0 then
+            -- 매 프레임 모든 리모트 동시 호출
+            pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-            else
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end
+            end)
         end
     end)
 end
@@ -91,7 +90,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (XOCU Loop Grab Kick V3 방식)
+-- [KICK 탭] - 블롭맨 오너 킥 (x=3, y=10 고정 + 최대 빈도)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -131,12 +130,11 @@ local function startKickLoop()
         
         local myChar = plr.Character
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        local myHead = myChar and myChar:FindFirstChild("Head")
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         local tHum = tChar and tChar:FindFirstChild("Humanoid")
         
-        if not (myChar and myHRP and myHead and tHRP and tHum and tHum.Health > 0) then return end
+        if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
         -- 거리 확인
         local dist = (tHRP.Position - myHRP.Position).Magnitude
@@ -153,10 +151,10 @@ local function startKickLoop()
             return -- 다음 프레임에 다시 처리
         end
         
-        -- ★ 고정 목표 위치: 내 머리 위 20스터드
-        local targetPos = myHead.Position + Vector3.new(0, 20, 0)
+        -- ★ 고정 위치: 내 HRP 기준 (3, 10, 0) (오른쪽 3, 위 10)
+        local targetPos = myHRP.CFrame * CFrame.new(3, 10, 0)
         
-        -- ★ AlignPosition / AlignOrientation 설정 (XOCU 방식)
+        -- ★ AlignPosition / AlignOrientation 설정 (XOCU 방식) - 고정력 극대화
         if not tHRP:FindFirstChild("KickAlign") then
             -- 기존 BodyPosition 등 정리
             for _, v in pairs(tHRP:GetChildren()) do
@@ -196,7 +194,7 @@ local function startKickLoop()
         -- 목표 위치 갱신 (Attachment1의 WorldPosition)
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
-            align.Attachment1.WorldPosition = targetPos
+            align.Attachment1.WorldPosition = targetPos.Position
         end
         
         -- 회전 고정 (정면을 바라보게)
@@ -211,7 +209,7 @@ local function startKickLoop()
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
         
-        -- ★ 매 프레임 SetNetworkOwner 및 GrabLine 갱신
+        -- ★ 매 프레임 모든 리모트 동시 호출 (최대 빈도)
         pcall(function()
             rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
             rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
@@ -240,7 +238,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (XOCU 스타일 고정)",
+    Name = "블롭맨 오너 킥 실행 (x=3, y=10 고정 + 최대 빈도)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -421,4 +419,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "XOCU식 Fetch + AlignPosition 고정 + 매 프레임 셋오너 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "x=3, y=10 고정 + 모든 리모트 매 프레임 스팸", Duration = 3})
