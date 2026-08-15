@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (66FPS, 2셋오너 1디트로이트)
+-- [GRAB 탭] - F키 킥 그랩 (50FPS, 2셋오너 1디트로이트)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -71,7 +71,7 @@ local function startFKeyAttack(targetPlayer)
             end
         end
         
-        task.wait(0.015)  -- 66FPS
+        task.wait(0.02)  -- 50FPS (안정성 최적화)
     end)
 end
 
@@ -94,7 +94,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (66FPS, 2셋오너 1디트로이트)
+-- [KICK 탭] - 블롭맨 오너 킥 (50FPS, 2셋오너 1디트로이트 + BodyPosition 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -125,17 +125,20 @@ KickTab:CreateInput({
     end
 })
 
--- 블롭맨 오너 루프 - 66FPS, 2셋오너 1디트로이트
+-- 블롭맨 오너 루프 - 50FPS, 2셋오너 1디트로이트, BodyPosition 강제 고정
 local function loopPlayerBlobF4()
     local initialized = false
     local counter = 0
+    local bodyPos = nil  -- 물리적 고정을 위한 BodyPosition
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            task.wait(0.015)
+            if bodyPos and bodyPos.Parent then bodyPos:Destroy() end
+            bodyPos = nil
+            task.wait(0.02)
             continue
         end
 
@@ -145,9 +148,22 @@ local function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
+            -- ★ 고정 목표 위치 (내 머리 위 20스터드)
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
+            -- ★ BodyPosition 생성 및 매 프레임 위치 강제 고정 (떨어짐 방지)
+            if not bodyPos or bodyPos.Parent ~= charHRP then
+                if bodyPos then bodyPos:Destroy() end
+                bodyPos = Instance.new("BodyPosition")
+                bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bodyPos.P = 10000
+                bodyPos.D = 1000
+                bodyPos.Parent = charHRP
+            end
+            bodyPos.Position = targetCF.Position
+            
+            -- 범위 이탈 시 추적 및 재설정
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true 
@@ -163,7 +179,7 @@ local function loopPlayerBlobF4()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            task.wait(0.015)
+                            task.wait(0.02)
                         end
                     end)
                     task.wait(0.05)
@@ -178,7 +194,7 @@ local function loopPlayerBlobF4()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            task.wait(0.015)
+                            task.wait(0.02)
                         end
                     end)
                     
@@ -206,8 +222,11 @@ local function loopPlayerBlobF4()
                 end
             end)
         end
-        task.wait(0.015)
+        task.wait(0.02)  -- 50FPS (안정성 최적화)
     end
+    
+    -- 루프 종료 시 정리
+    if bodyPos and bodyPos.Parent then bodyPos:Destroy() end
 end
 
 KickTab:CreateToggle({
@@ -389,4 +408,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "66FPS + 2셋오너 1디트로이트 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "50FPS + BodyPosition 고정 + 2셋오너 1디트로이트 패턴 적용", Duration = 3})
