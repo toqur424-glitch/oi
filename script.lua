@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (0.015초, 1셋오너 1디트로이트 번갈아)
+-- [GRAB 탭] - F키 킥 그랩 (Heartbeat, 매 프레임)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -69,8 +69,6 @@ local function startFKeyAttack(targetPlayer)
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end
         end
-        
-        task.wait(0.015)  -- 67FPS
     end)
 end
 
@@ -93,11 +91,11 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (0.015초, 1셋오너 1디트로이트 번갈아 + BodyPosition)
+-- [KICK 탭] - 블롭맨 오너 킥 (Heartbeat, 매 프레임, 이중 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
-local recoveringTargets = {} 
+local blobConnection = nil
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -124,107 +122,62 @@ KickTab:CreateInput({
     end
 })
 
--- 블롭맨 오너 루프 - 0.015초, 1셋오너 1디트로이트 번갈아, BodyPosition 고정
-local function loopPlayerBlobF4()
-    local initialized = false
+-- 블롭맨 오너 루프 - Heartbeat, 매 프레임, 이중 고정, 1:1 번갈아
+local function startBlobLoop()
+    if blobConnection then blobConnection:Disconnect() end
     local counter = 0
     local bodyPos = nil
     
-    while blobLoopT4 do
-        local player = selectedKickPlayer
+    blobConnection = RunService.Heartbeat:Connect(function()
+        if not blobLoopT4 then
+            if bodyPos and bodyPos.Parent then bodyPos:Destroy() end
+            blobConnection:Disconnect()
+            blobConnection = nil
+            return
+        end
         
+        local player = selectedKickPlayer
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-            initialized = false
             if bodyPos and bodyPos.Parent then bodyPos:Destroy() end
             bodyPos = nil
-            task.wait(0.015)
-            continue
+            return
         end
-
-        local name = player.Name
+        
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local charHRP = player.Character.HumanoidRootPart
         local charHUM = player.Character:FindFirstChild("Humanoid")
+        if not myHRP or not charHRP or not charHUM then return end
         
-        if myHRP and charHRP and charHUM then
-            local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-            local currentDist = (charHRP.Position - targetCF.Position).Magnitude
-            
-            -- BodyPosition 물리적 고정
-            if not bodyPos or bodyPos.Parent ~= charHRP then
-                if bodyPos then bodyPos:Destroy() end
-                bodyPos = Instance.new("BodyPosition")
-                bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bodyPos.P = 10000
-                bodyPos.D = 1000
-                bodyPos.Parent = charHRP
-            end
-            bodyPos.Position = targetCF.Position
-            
-            -- 범위 이탈 시 추적 및 재설정
-            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
-                recoveringTargets[name] = true
-                initialized = true 
-                
-                task.spawn(function()
-                    local originalCF = myHRP.CFrame
-                    pcall(function()
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    end)
-                    task.wait(0.15)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            task.wait(0.015)
-                        end
-                    end)
-                    task.wait(0.05)
-                    
-                    pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
-                        myHRP.CFrame = originalCF
-                    end)
-                    task.wait(0.1)
-                    
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            task.wait(0.015)
-                        end
-                    end)
-                    
-                    task.wait(0.3)
-                    recoveringTargets[name] = nil
-                end)
-            end
-            
-            pcall(function()
-                charHRP.CFrame = targetCF
-                charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHRP.AssemblyAngularVelocity = Vector3.zero
-                charHUM.PlatformStand = true
-                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                
-                if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
-                    counter = counter + 1
-                    if counter % 2 == 0 then
-                        -- 셋오너 1번
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    else
-                        -- 디트로이트 1번 (크리에이트+디스트로이)
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                    end
-                end
-            end)
+        -- ★ 고정 목표 위치 (내 머리 위 20스터드)
+        local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
+        
+        -- ★ BodyPosition (물리적 고정)
+        if not bodyPos or bodyPos.Parent ~= charHRP then
+            if bodyPos then bodyPos:Destroy() end
+            bodyPos = Instance.new("BodyPosition")
+            bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bodyPos.P = 10000
+            bodyPos.D = 1000
+            bodyPos.Parent = charHRP
         end
-        task.wait(0.015)  -- 67FPS
-    end
-    
-    if bodyPos and bodyPos.Parent then bodyPos:Destroy() end
+        bodyPos.Position = targetCF.Position
+        
+        -- ★ CFrame 강제 설정 (매 프레임 좌표 직접 지정)
+        charHRP.CFrame = targetCF
+        charHRP.AssemblyLinearVelocity = Vector3.zero
+        charHRP.AssemblyAngularVelocity = Vector3.zero
+        charHUM.PlatformStand = true
+        charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+        
+        -- ★ 1:1 번갈아 패턴 (매 프레임 실행)
+        counter = counter + 1
+        if counter % 2 == 0 then
+            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+        else
+            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+        end
+    end)
 end
 
 KickTab:CreateToggle({
@@ -236,7 +189,14 @@ KickTab:CreateToggle({
             return
         end
         blobLoopT4 = v
-        if v then task.spawn(loopPlayerBlobF4) end
+        if v then
+            startBlobLoop()
+        else
+            if blobConnection then
+                blobConnection:Disconnect()
+                blobConnection = nil
+            end
+        end
     end
 })
 
@@ -406,4 +366,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "0.015초 + 1셋오너 1디트로이트 번갈아 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Heartbeat + 이중 고정 + 1:1 번갈아 (최대 빈도)", Duration = 3})
