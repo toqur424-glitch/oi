@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (100Hz 번갈아)
+-- [GRAB 탭] - F키 킥 그랩 (66Hz 번갈아)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -96,7 +96,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (y=20, x=0 고정 + 100Hz 번갈아)
+-- [KICK 탭] - 블롭맨 오너 킥 (y=20, x=0 고정 + 66Hz 번갈아)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -141,7 +141,7 @@ local function startKickLoop()
             local tHum = tChar and tChar:FindFirstChild("Humanoid")
             
             if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then
-                task.wait(0.01)
+                task.wait(0.015)
                 continue
             end
             
@@ -155,7 +155,7 @@ local function startKickLoop()
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
-                task.wait(0.01)
+                task.wait(0.015)
                 continue
             end
             
@@ -209,7 +209,7 @@ local function startKickLoop()
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
             
-            -- ★ SetOwner ↔ Detroit 번갈아 호출 (100Hz)
+            -- ★ SetOwner ↔ Detroit 번갈아 호출 (66Hz)
             kickCounter = kickCounter + 1
             if kickCounter % 2 == 0 then
                 pcall(function()
@@ -222,7 +222,7 @@ local function startKickLoop()
                 end)
             end
             
-            task.wait(0.01)  -- 100Hz (빠른 반응)
+            task.wait(0.015)  -- 66Hz (완벽한 균형점)
         end
     end)
 end
@@ -243,7 +243,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (y=20, x=0 고정 + 100Hz 번갈아)",
+    Name = "블롭맨 오너 킥 실행 (y=20, x=0 고정 + 66Hz 번갈아)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -423,4 +423,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "100Hz로 빈도 2배 증가! 킥 속도 대폭 향상", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "66Hz로 최적화! 고정 안정성 + 속도 균형 완벽", Duration = 3})
