@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (그랩 라인 제거, 적당한 빈도)
+-- [GRAB 탭] - F키 킥 그랩 (SetOwner ↔ Detroit 번갈아)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -38,10 +38,12 @@ getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
+local fCounter = 0
 
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
+    fCounter = 0
     
     fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
@@ -56,15 +58,23 @@ local function startFKeyAttack(targetPlayer)
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
         
-        -- 카메라 앞으로 던지기
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            -- ★ SetNetworkOwner만 호출 (그랩 라인 없음)
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-            end)
+            fCounter = fCounter + 1
+            if fCounter % 2 == 0 then
+                -- ★ SetOwner
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                end)
+            else
+                -- ★ Detroit (Create + Destroy)
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                end)
+            end
         end
     end)
 end
@@ -88,12 +98,13 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (y=20, x=0 고정 + 적당한 빈도)
+-- [KICK 탭] - 블롭맨 오너 킥 (y=20, x=0 고정 + 번갈아)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickLoopTask = nil
+local kickCounter = 0
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -121,6 +132,7 @@ KickTab:CreateInput({
 
 local function startKickLoop()
     kickLoopRunning = true
+    kickCounter = 0
     task.spawn(function()
         while kickLoopRunning do
             if not selectedKickPlayer then break end
@@ -200,12 +212,20 @@ local function startKickLoop()
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
             
-            -- ★ SetNetworkOwner만 적당한 빈도로 호출 (0.02초 = 50Hz)
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-            end)
+            -- ★ SetOwner ↔ Detroit 번갈아 호출
+            kickCounter = kickCounter + 1
+            if kickCounter % 2 == 0 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            else
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                end)
+            end
             
-            task.wait(0.02)  -- 적당한 빈도
+            task.wait(0.02)  -- 적당한 빈도 (50Hz)
         end
     end)
 end
@@ -226,7 +246,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (y=20, x=0 고정 + 적당한 빈도)",
+    Name = "블롭맨 오너 킥 실행 (y=20, x=0 고정 + 번갈아)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -406,4 +426,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "그랩 라인 제거 + Align 고정 유지 + 적당한 빈도 (0.02초)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "번갈아 SetOwner/Detroit + 고정 유지 (0.02초)", Duration = 3})
