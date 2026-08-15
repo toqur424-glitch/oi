@@ -91,12 +91,12 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (Heartbeat, 매 프레임, 이중 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (AlignPosition 고정, XOCU 방식)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
-local blobLoopT4 = false
-local blobConnection = nil
 local selectedKickPlayer = nil
+local kickConnection = nil
+local kickActive = false
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -122,80 +122,122 @@ KickTab:CreateInput({
     end
 })
 
--- 블롭맨 오너 루프 - Heartbeat, 매 프레임, 이중 고정, 1:1 번갈아
-local function startBlobLoop()
-    if blobConnection then blobConnection:Disconnect() end
-    local counter = 0
-    local bodyPos = nil
+local function startKickLoop()
+    if kickConnection then kickConnection:Disconnect() end
+    kickActive = true
     
-    blobConnection = RunService.Heartbeat:Connect(function()
-        if not blobLoopT4 then
-            if bodyPos and bodyPos.Parent then bodyPos:Destroy() end
-            blobConnection:Disconnect()
-            blobConnection = nil
-            return
+    kickConnection = RunService.Heartbeat:Connect(function()
+        if not kickActive or not selectedKickPlayer then return end
+        
+        local myChar = plr.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local myHead = myChar and myChar:FindFirstChild("Head")
+        local tChar = selectedKickPlayer.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        local tHum = tChar and tChar:FindFirstChild("Humanoid")
+        
+        if not (myChar and myHRP and myHead and tHRP and tHum and tHum.Health > 0) then return end
+        
+        -- 목표 위치: 내 머리 위 20스터드
+        local targetPos = myHead.Position + Vector3.new(0, 20, 0)
+        
+        -- AlignPosition 설정 (XOCU 방식)
+        if not tHRP:FindFirstChild("KickAlign") then
+            -- 기존 BodyPosition 등 정리
+            for _, v in pairs(tHRP:GetChildren()) do
+                if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                    v:Destroy()
+                end
+            end
+            
+            -- Attachment on target HRP
+            local att0 = Instance.new("Attachment", tHRP)
+            att0.Name = "KickAtt0"
+            
+            -- Attachment on Terrain (고정 기준점)
+            local att1 = Instance.new("Attachment", workspace.Terrain)
+            att1.Name = "KickAtt1"
+            
+            -- AlignPosition
+            local alignPos = Instance.new("AlignPosition")
+            alignPos.Name = "KickAlign"
+            alignPos.Attachment0 = att0
+            alignPos.Attachment1 = att1
+            alignPos.MaxForce = math.huge
+            alignPos.Responsiveness = 200
+            alignPos.RigidityEnabled = true
+            alignPos.Parent = tHRP
+            
+            -- AlignOrientation (회전 고정)
+            local alignRot = Instance.new("AlignOrientation")
+            alignRot.Name = "KickRot"
+            alignRot.Attachment0 = att0
+            alignRot.MaxTorque = math.huge
+            alignRot.Responsiveness = 200
+            alignRot.RigidityEnabled = true
+            alignRot.Parent = tHRP
         end
         
-        local player = selectedKickPlayer
-        if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-            if bodyPos and bodyPos.Parent then bodyPos:Destroy() end
-            bodyPos = nil
-            return
+        -- 목표 위치 설정 (Attachment1의 WorldPosition)
+        local align = tHRP:FindFirstChild("KickAlign")
+        if align and align.Attachment1 then
+            align.Attachment1.WorldPosition = targetPos
         end
         
-        local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        local charHRP = player.Character.HumanoidRootPart
-        local charHUM = player.Character:FindFirstChild("Humanoid")
-        if not myHRP or not charHRP or not charHUM then return end
-        
-        -- ★ 고정 목표 위치 (내 머리 위 20스터드)
-        local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-        
-        -- ★ BodyPosition (물리적 고정)
-        if not bodyPos or bodyPos.Parent ~= charHRP then
-            if bodyPos then bodyPos:Destroy() end
-            bodyPos = Instance.new("BodyPosition")
-            bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            bodyPos.P = 10000
-            bodyPos.D = 1000
-            bodyPos.Parent = charHRP
+        -- 회전 고정 (정면을 바라보게)
+        local rot = tHRP:FindFirstChild("KickRot")
+        if rot then
+            rot.CFrame = CFrame.Angles(0, 0, 0)
         end
-        bodyPos.Position = targetCF.Position
         
-        -- ★ CFrame 강제 설정 (매 프레임 좌표 직접 지정)
-        charHRP.CFrame = targetCF
-        charHRP.AssemblyLinearVelocity = Vector3.zero
-        charHRP.AssemblyAngularVelocity = Vector3.zero
-        charHUM.PlatformStand = true
-        charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+        -- 물리 제거
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
+        tHum.PlatformStand = true
+        tHum:ChangeState(Enum.HumanoidStateType.Physics)
         
-        -- ★ 1:1 번갈아 패턴 (매 프레임 실행)
-        counter = counter + 1
-        if counter % 2 == 0 then
-            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-        else
-            rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-            rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+        -- 매 프레임 SetNetworkOwner 및 GrabLine 갱신
+        if (myHRP.Position - tHRP.Position).Magnitude <= 40 then
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+            end)
         end
     end)
 end
 
+local function stopKickLoop()
+    kickActive = false
+    if kickConnection then
+        kickConnection:Disconnect()
+        kickConnection = nil
+    end
+    -- 정리
+    if selectedKickPlayer and selectedKickPlayer.Character then
+        local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if tHRP then
+            for _, v in pairs(tHRP:GetChildren()) do
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                    v:Destroy()
+                end
+            end
+        end
+    end
+end
+
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
+    Name = "블롭맨 오너 킥 실행 (XOCU 스타일 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
-            blobLoopT4 = false
+            stopKickLoop()
             return
         end
-        blobLoopT4 = v
         if v then
-            startBlobLoop()
+            startKickLoop()
         else
-            if blobConnection then
-                blobConnection:Disconnect()
-                blobConnection = nil
-            end
+            stopKickLoop()
         end
     end
 })
@@ -366,4 +408,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "Heartbeat + 이중 고정 + 1:1 번갈아 (최대 빈도)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "XOCU식 AlignPosition 고정 + 매 프레임 셋오너 적용", Duration = 3})
