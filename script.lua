@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (초당 100회로 안정화)
+-- [GRAB 탭] - F키 킥 그랩 (66FPS, 2셋오너 1디트로이트)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -42,8 +42,8 @@ local fAttackTarget = nil
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
+    local counter = 0
     
-    -- Heartbeat 연결에 task.wait(0.01)을 추가해 100FPS로 제한 (씹힘 방지)
     fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
         
@@ -61,14 +61,17 @@ local function startFKeyAttack(targetPlayer)
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            pcall(function()
+            counter = counter + 1
+            if counter % 3 == 0 then
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
+            else
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+            end
         end
         
-        task.wait(0.01) -- ★ 핵심: 0.01초 대기 (초당 100회로 속도 제한)
+        task.wait(0.015)  -- 66FPS
     end)
 end
 
@@ -91,7 +94,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (초당 100회로 안정화)
+-- [KICK 탭] - 블롭맨 오너 킥 (66FPS, 2셋오너 1디트로이트)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -122,17 +125,17 @@ KickTab:CreateInput({
     end
 })
 
--- 블롭맨 오너 루프 - Heartbeat:Wait() 대신 task.wait(0.01)로 대체
+-- 블롭맨 오너 루프 - 66FPS, 2셋오너 1디트로이트
 local function loopPlayerBlobF4()
     local initialized = false
-    local frameToggle = false
+    local counter = 0
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            task.wait(0.01) -- 대기 시간 통일
+            task.wait(0.015)
             continue
         end
 
@@ -160,7 +163,7 @@ local function loopPlayerBlobF4()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            task.wait(0.01) -- 서버 부하 방지용 0.01초 대기
+                            task.wait(0.015)
                         end
                     end)
                     task.wait(0.05)
@@ -175,7 +178,7 @@ local function loopPlayerBlobF4()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            task.wait(0.01) -- 서버 부하 방지용 0.01초 대기
+                            task.wait(0.015)
                         end
                     end)
                     
@@ -192,17 +195,18 @@ local function loopPlayerBlobF4()
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
                 if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
-                    frameToggle = not frameToggle
-                    if frameToggle then
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    else
+                    counter = counter + 1
+                    if counter % 3 == 0 then
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    else
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end
                 end
             end)
         end
-        task.wait(0.01) -- 루프 주기 100FPS로 안정화 (씹힘 방지)
+        task.wait(0.015)
     end
 end
 
@@ -220,7 +224,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - XOCU 완전 이식, Stepped 유지 (건드리지 않음)]
+-- [팔레트 레그돌 (Invis) - XOCU 완전 이식, Stepped 유지]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 위아래 강타",
@@ -288,7 +292,6 @@ KickTab:CreateToggle({
 
                     local strikePhase = false
 
-                    -- Stepped: 물리 프레임에서 위아래 강타 (이 부분은 60FPS가 최적이므로 그대로 유지)
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
                             clearAttackLoop()
@@ -306,11 +309,9 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 strikePhase = not strikePhase
                                 if strikePhase then
-                                    -- 아래로 강타
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
                                 else
-                                    -- 위로 올려치기 (연속 충격 유도)
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
                                 end
@@ -388,4 +389,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "초당 100회로 안정화 (씹힘/끊김 해결)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "66FPS + 2셋오너 1디트로이트 패턴 적용", Duration = 3})
