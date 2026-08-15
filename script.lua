@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (50FPS, 2셋오너 1디트로이트)
+-- [GRAB 탭] - F키 킥 그랩 (0.015초, 1셋오너 1디트로이트 번갈아)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -62,16 +62,15 @@ local function startFKeyAttack(targetPlayer)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             counter = counter + 1
-            if counter % 3 == 0 then
+            if counter % 2 == 0 then
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+            else
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            else
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
             end
         end
         
-        task.wait(0.02)  -- 50FPS (안정성 최적화)
+        task.wait(0.015)  -- 67FPS
     end)
 end
 
@@ -94,7 +93,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (50FPS, 2셋오너 1디트로이트 + BodyPosition 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (0.015초, 1셋오너 1디트로이트 번갈아 + BodyPosition)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -125,11 +124,11 @@ KickTab:CreateInput({
     end
 })
 
--- 블롭맨 오너 루프 - 50FPS, 2셋오너 1디트로이트, BodyPosition 강제 고정
+-- 블롭맨 오너 루프 - 0.015초, 1셋오너 1디트로이트 번갈아, BodyPosition 고정
 local function loopPlayerBlobF4()
     local initialized = false
     local counter = 0
-    local bodyPos = nil  -- 물리적 고정을 위한 BodyPosition
+    local bodyPos = nil
     
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -138,7 +137,7 @@ local function loopPlayerBlobF4()
             initialized = false
             if bodyPos and bodyPos.Parent then bodyPos:Destroy() end
             bodyPos = nil
-            task.wait(0.02)
+            task.wait(0.015)
             continue
         end
 
@@ -148,11 +147,10 @@ local function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- ★ 고정 목표 위치 (내 머리 위 20스터드)
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- ★ BodyPosition 생성 및 매 프레임 위치 강제 고정 (떨어짐 방지)
+            -- BodyPosition 물리적 고정
             if not bodyPos or bodyPos.Parent ~= charHRP then
                 if bodyPos then bodyPos:Destroy() end
                 bodyPos = Instance.new("BodyPosition")
@@ -179,7 +177,7 @@ local function loopPlayerBlobF4()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            task.wait(0.02)
+                            task.wait(0.015)
                         end
                     end)
                     task.wait(0.05)
@@ -194,7 +192,7 @@ local function loopPlayerBlobF4()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            task.wait(0.02)
+                            task.wait(0.015)
                         end
                     end)
                     
@@ -212,20 +210,20 @@ local function loopPlayerBlobF4()
                 
                 if (myHRP.Position - charHRP.Position).Magnitude <= 30 then
                     counter = counter + 1
-                    if counter % 3 == 0 then
+                    if counter % 2 == 0 then
+                        -- 셋오너 1번
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    else
+                        -- 디트로이트 1번 (크리에이트+디스트로이)
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                    else
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     end
                 end
             end)
         end
-        task.wait(0.02)  -- 50FPS (안정성 최적화)
+        task.wait(0.015)  -- 67FPS
     end
     
-    -- 루프 종료 시 정리
     if bodyPos and bodyPos.Parent then bodyPos:Destroy() end
 end
 
@@ -408,4 +406,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "50FPS + BodyPosition 고정 + 2셋오너 1디트로이트 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "0.015초 + 1셋오너 1디트로이트 번갈아 적용", Duration = 3})
