@@ -91,7 +91,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (AlignPosition 고정, XOCU 방식)
+-- [KICK 탭] - 블롭맨 오너 킥 (XOCU Loop Grab Kick V3 방식)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -138,10 +138,25 @@ local function startKickLoop()
         
         if not (myChar and myHRP and myHead and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- 목표 위치: 내 머리 위 20스터드
+        -- 거리 확인
+        local dist = (tHRP.Position - myHRP.Position).Magnitude
+        
+        -- ★ FETCH: 거리가 30 이상이면 자신을 대상 쪽으로 텔레포트
+        if dist > 30 then
+            pcall(function()
+                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+            end)
+            -- 텔레포트 후에도 SetNetworkOwner 호출
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+            end)
+            return -- 다음 프레임에 다시 처리
+        end
+        
+        -- ★ 고정 목표 위치: 내 머리 위 20스터드
         local targetPos = myHead.Position + Vector3.new(0, 20, 0)
         
-        -- AlignPosition 설정 (XOCU 방식)
+        -- ★ AlignPosition / AlignOrientation 설정 (XOCU 방식)
         if not tHRP:FindFirstChild("KickAlign") then
             -- 기존 BodyPosition 등 정리
             for _, v in pairs(tHRP:GetChildren()) do
@@ -178,7 +193,7 @@ local function startKickLoop()
             alignRot.Parent = tHRP
         end
         
-        -- 목표 위치 설정 (Attachment1의 WorldPosition)
+        -- 목표 위치 갱신 (Attachment1의 WorldPosition)
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = targetPos
@@ -196,14 +211,12 @@ local function startKickLoop()
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
         
-        -- 매 프레임 SetNetworkOwner 및 GrabLine 갱신
-        if (myHRP.Position - tHRP.Position).Magnitude <= 40 then
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-            end)
-        end
+        -- ★ 매 프레임 SetNetworkOwner 및 GrabLine 갱신
+        pcall(function()
+            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+            rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+            rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+        end)
     end)
 end
 
@@ -408,4 +421,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "XOCU식 AlignPosition 고정 + 매 프레임 셋오너 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "XOCU식 Fetch + AlignPosition 고정 + 매 프레임 셋오너 적용", Duration = 3})
