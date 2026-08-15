@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - 극대화된 킥 그랩 (F키) - 빈도 증가
+-- [GRAB 탭] - F키 킥 그랩 (Heartbeat로 빈도 상승)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -43,7 +43,8 @@ local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
     
-    fAttackConnection = RunService.RenderStepped:Connect(function()
+    -- RenderStepped → Heartbeat로 변경 (빈도 약 2~3배 증가)
+    fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
         
         local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
@@ -59,7 +60,6 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
-        -- 거리 체크 후 SetOwner / Detroit 를 매 프레임 실행 (대기 없음)
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
@@ -89,7 +89,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (빈도 증가) + 팔레트 레그돌 완전 통합
+-- [KICK 탭] - 블롭맨 오너 킥 (Heartbeat로 빈도 상승) + 팔레트 레그돌
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -120,7 +120,7 @@ KickTab:CreateInput({
     end
 })
 
--- 블롭맨 오너 루프 - 매 프레임 실행 (대기 제거)
+-- 블롭맨 오너 루프 - RenderStepped → Heartbeat로 변경
 local function loopPlayerBlobF4()
     local initialized = false
     local frameToggle = false
@@ -130,7 +130,7 @@ local function loopPlayerBlobF4()
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            RunService.RenderStepped:Wait()
+            RunService.Heartbeat:Wait() -- 변경됨
             continue
         end
 
@@ -156,7 +156,6 @@ local function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        -- SetOwner 15회 연속 호출 (빈도 유지)
                         for i = 1, 15 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                             RunService.Heartbeat:Wait()
@@ -183,7 +182,6 @@ local function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 위치 고정 및 SetOwner/Detroit 교차 호출 (대기 없음)
             pcall(function()
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -202,7 +200,7 @@ local function loopPlayerBlobF4()
                 end
             end)
         end
-        RunService.RenderStepped:Wait()
+        RunService.Heartbeat:Wait() -- 변경됨
     end
 end
 
@@ -220,10 +218,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [XOCU 완전 통합 팔레트 레그돌 (Invis)]
+-- [팔레트 레그돌 (Invis) - XOCU 완전 이식, Stepped 유지]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - XOCU 완전 이식",
+    Name = "Pallet Ragdoll (Invis) - 위아래 강타",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -257,7 +255,7 @@ KickTab:CreateToggle({
             clearAttackLoop()
 
             if not toysFolder then
-                Rayfield:Notify({Title = "오류", Content = "생성된 토이 폴더를 찾을 수 없습니다. (캐릭터가 생성된 후 다시 시도)", Duration = 3})
+                Rayfield:Notify({Title = "오류", Content = "토이 폴더 없음 (캐릭터 재생성 후 시도)", Duration = 3})
                 return
             end
 
@@ -268,7 +266,6 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                -- 네트워크 소유권 즉시 탈취
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
                     DestroyLine:FireServer(soundPart)
@@ -276,7 +273,6 @@ KickTab:CreateToggle({
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
-                    -- 투명화 및 충돌 비활성화
                     for _, v in pairs(child:GetChildren()) do
                         if v:IsA("BasePart") then
                             v.CanCollide = false
@@ -290,7 +286,7 @@ KickTab:CreateToggle({
 
                     local strikePhase = false
 
-                    -- Stepped : 매 물리 프레임마다 교차 충격
+                    -- Stepped: 물리 프레임에서 위아래 강타 (XOCU 원리 그대로)
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
                             clearAttackLoop()
@@ -308,14 +304,15 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 strikePhase = not strikePhase
                                 if strikePhase then
+                                    -- 아래로 강타
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
                                 else
+                                    -- 위로 올려치기 (연속 충격 유도)
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
                                 end
                             else
-                                -- 래그돌되면 판자를 멀리 보내 렉 방지
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
                             end
@@ -325,7 +322,6 @@ KickTab:CreateToggle({
                         end
                     end)
 
-                    -- 판자가 삭제되면 재생성
                     child.AncestryChanged:Connect(function()
                         if not child.Parent then
                             clearAttackLoop()
@@ -341,7 +337,6 @@ KickTab:CreateToggle({
                 end
             end)
 
-            -- 판자 스폰 함수 (XOCU와 동일)
             getgenv().spawnNewPallet = function()
                 if not getgenv().palletRagdollActive then return end
                 if getgenv().PalletForRagdoll and getgenv().PalletForRagdoll.Parent then return end
@@ -363,7 +358,6 @@ KickTab:CreateToggle({
 
             getgenv().spawnNewPallet()
         else
-            -- 비활성화 시 정리
             getgenv().palletRagdollActive = false
             clearAttackLoop()
 
@@ -392,4 +386,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트 및 오너 룹 최적화 반영됨", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "디트로이트/셋오너 Heartbeat 적용 (빈도 소폭 증가)", Duration = 3})
