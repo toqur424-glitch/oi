@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (매 프레임 모든 리모트 스팸)
+-- [GRAB 탭] - F키 킥 그랩 (SetNetworkOwner만 유지)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -61,11 +61,9 @@ local function startFKeyAttack(targetPlayer)
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            -- 매 프레임 모든 리모트 동시 호출
+            -- 매 프레임 SetNetworkOwner만 호출 (그랩 라인 제거)
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
         end
     end)
@@ -90,7 +88,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (x=3, y=10 고정 + 최대 빈도)
+-- [KICK 탭] - 블롭맨 오너 킥 (x=3, y=10 고정, 회전 없음)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -151,8 +149,8 @@ local function startKickLoop()
             return -- 다음 프레임에 다시 처리
         end
         
-        -- ★ 고정 위치: 내 HRP 기준 (3, 10, 0) (오른쪽 3, 위 10)
-        local targetPos = myHRP.CFrame * CFrame.new(3, 10, 0)
+        -- ★ 고정 위치: 내 HRP 위치 기준 (3, 10, 0) - 회전 영향 없음
+        local targetPos = myHRP.Position + Vector3.new(3, 10, 0)
         
         -- ★ AlignPosition / AlignOrientation 설정 (XOCU 방식) - 고정력 극대화
         if not tHRP:FindFirstChild("KickAlign") then
@@ -177,7 +175,7 @@ local function startKickLoop()
             alignPos.Attachment0 = att0
             alignPos.Attachment1 = att1
             alignPos.MaxForce = math.huge
-            alignPos.Responsiveness = 200
+            alignPos.Responsiveness = 300  -- 더 빠르게 반응
             alignPos.RigidityEnabled = true
             alignPos.Parent = tHRP
             
@@ -186,7 +184,7 @@ local function startKickLoop()
             alignRot.Name = "KickRot"
             alignRot.Attachment0 = att0
             alignRot.MaxTorque = math.huge
-            alignRot.Responsiveness = 200
+            alignRot.Responsiveness = 300
             alignRot.RigidityEnabled = true
             alignRot.Parent = tHRP
         end
@@ -194,7 +192,7 @@ local function startKickLoop()
         -- 목표 위치 갱신 (Attachment1의 WorldPosition)
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
-            align.Attachment1.WorldPosition = targetPos.Position
+            align.Attachment1.WorldPosition = targetPos
         end
         
         -- 회전 고정 (정면을 바라보게)
@@ -209,11 +207,9 @@ local function startKickLoop()
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
         
-        -- ★ 매 프레임 모든 리모트 동시 호출 (최대 빈도)
+        -- ★ 매 프레임 SetNetworkOwner만 호출 (그랩 라인 제거)
         pcall(function()
             rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-            rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-            rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
         end)
     end)
 end
@@ -238,7 +234,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (x=3, y=10 고정 + 최대 빈도)",
+    Name = "블롭맨 오너 킥 실행 (x=3, y=10 고정, 회전 없음)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -419,4 +415,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "x=3, y=10 고정 + 모든 리모트 매 프레임 스팸", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "x=3, y=10 고정 (회전 없음) + SetNetworkOwner만 매 프레임", Duration = 3})
