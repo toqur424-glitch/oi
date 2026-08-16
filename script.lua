@@ -29,25 +29,36 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩 탈출 리모트 차단 (전역)]
+-- [안티그랩 탈출 리모트 대응 (차단 X, 즉시 재소유권)]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
 local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 5)
-local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")  -- 혹시 모를 추가 리모트
+local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
 
-if StruggleEvent then
-    StruggleEvent.OnClientEvent:Connect(function(...)
-        -- 탈출 리모트를 가로채서 무효화 (서버에 도달하지 않음)
-        -- 필요하다면 여기서 SetNetworkOwner를 추가로 때릴 수 있음
-        return
+local function handleAntiGrabEscape(...)
+    task.spawn(function()
+        -- 탈출 시도가 감지되면 즉시 타겟의 소유권을 강제로 재설정
+        if not selectedKickPlayer then return end
+        local tChar = selectedKickPlayer.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        if tHRP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            for i = 1, 5 do
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
+                end)
+                task.wait() -- 0.05초 미만의 극히 짧은 대기로 연속 강제 적용
+            end
+        end
     end)
 end
 
+if StruggleEvent then
+    StruggleEvent.OnClientEvent:Connect(handleAntiGrabEscape)
+end
+
 if ReleaseGrab then
-    ReleaseGrab.OnClientEvent:Connect(function(...)
-        return  -- 차단
-    end)
+    ReleaseGrab.OnClientEvent:Connect(handleAntiGrabEscape)
 end
 
 --=============================================
@@ -118,7 +129,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (Stepped Align + 200Hz 리모트 + 리스폰 대응 + 안티그랩 무력화)
+-- [KICK 탭] - 블롭맨 오너 킥 (Stepped Align + 200Hz 리모트 + 리스폰 대응 + 안티그랩 덮어쓰기)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -315,7 +326,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (안티그랩 차단 + Stepped Align + 200Hz)",
+    Name = "블롭맨 오너 킥 실행 (안티그랩 덮어쓰기 + Stepped Align + 200Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -495,4 +506,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 탈출 리모트 차단 + Stepped Align + 200Hz", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "차단 대신 즉시 재소유권(Overwrite) 방식으로 변경, 고정력 복원", Duration = 3})
