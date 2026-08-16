@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (Align + Body 백업)
+-- [GRAB 탭] - F키 킥 그랩 (200Hz 번갈아, 유지)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -96,12 +96,17 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (Align + Body 백업)
+-- [KICK 탭] - 블롭맨 오너 킥 (Stepped Align 갱신 + 200Hz 리모트)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
+
+-- 리모트 호출용 루프 (200Hz)
+local remoteLoop = nil
+-- AlignPosition 갱신용 Stepped 연결
+local alignSteppedConn = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -130,24 +135,90 @@ KickTab:CreateInput({
 local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
+
+    -- 1. AlignPosition 갱신 (매 프레임, 물리 전)
+    alignSteppedConn = RunService.Stepped:Connect(function()
+        if not kickLoopRunning or not selectedKickPlayer then return end
+        
+        local myChar = plr.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local tChar = selectedKickPlayer.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        local tHum = tChar and tChar:FindFirstChild("Humanoid")
+        
+        if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
+        
+        -- 고정 위치: 내 머리 위 20스터드
+        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+        
+        -- AlignPosition 생성 (처음 한 번)
+        if not tHRP:FindFirstChild("KickAlign") then
+            for _, v in pairs(tHRP:GetChildren()) do
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                    v:Destroy()
+                end
+            end
+            
+            local att0 = Instance.new("Attachment", tHRP)
+            att0.Name = "KickAtt0"
+            local att1 = Instance.new("Attachment", workspace.Terrain)
+            att1.Name = "KickAtt1"
+            
+            local alignPos = Instance.new("AlignPosition")
+            alignPos.Name = "KickAlign"
+            alignPos.Attachment0 = att0
+            alignPos.Attachment1 = att1
+            alignPos.MaxForce = math.huge
+            alignPos.Responsiveness = math.huge
+            alignPos.RigidityEnabled = true
+            alignPos.Parent = tHRP
+            
+            local alignRot = Instance.new("AlignOrientation")
+            alignRot.Name = "KickRot"
+            alignRot.Attachment0 = att0
+            alignRot.MaxTorque = math.huge
+            alignRot.Responsiveness = math.huge
+            alignRot.RigidityEnabled = true
+            alignRot.Parent = tHRP
+        end
+        
+        -- 위치 갱신 (매 프레임)
+        local align = tHRP:FindFirstChild("KickAlign")
+        if align and align.Attachment1 then
+            align.Attachment1.WorldPosition = targetPos
+        end
+        
+        -- 회전 고정
+        local rot = tHRP:FindFirstChild("KickRot")
+        if rot then
+            rot.CFrame = CFrame.Angles(0, 0, 0)
+        end
+        
+        -- 물리 제거
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
+        tHum.PlatformStand = true
+        tHum:ChangeState(Enum.HumanoidStateType.Physics)
+    end)
+
+    -- 2. 리모트 호출 루프 (200Hz, 번갈아)
     task.spawn(function()
         while kickLoopRunning do
             if not selectedKickPlayer then break end
             
-            local myChar = plr.Character
-            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             local tChar = selectedKickPlayer.Character
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             local tHum = tChar and tChar:FindFirstChild("Humanoid")
+            local myChar = plr.Character
+            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             
             if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then
                 task.wait(0.005)
                 continue
             end
             
+            -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
             local dist = (tHRP.Position - myHRP.Position).Magnitude
-            
-            -- FETCH: 거리가 30 이상이면 자신을 대상 쪽으로 텔레포트
             if dist > 30 then
                 pcall(function()
                     myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
@@ -159,74 +230,7 @@ local function startKickLoop()
                 continue
             end
             
-            -- 고정 위치: 내 머리 바로 위 20스터드 (x=0, y=20)
-            local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
-            
-            -- ★★★ AlignPosition (주 고정) ★★★
-            if not tHRP:FindFirstChild("KickAlign") then
-                for _, v in pairs(tHRP:GetChildren()) do
-                    if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
-                        v:Destroy()
-                    end
-                end
-                
-                local att0 = Instance.new("Attachment", tHRP)
-                att0.Name = "KickAtt0"
-                local att1 = Instance.new("Attachment", workspace.Terrain)
-                att1.Name = "KickAtt1"
-                
-                local alignPos = Instance.new("AlignPosition")
-                alignPos.Name = "KickAlign"
-                alignPos.Attachment0 = att0
-                alignPos.Attachment1 = att1
-                alignPos.MaxForce = math.huge
-                alignPos.Responsiveness = math.huge
-                alignPos.RigidityEnabled = true
-                alignPos.Parent = tHRP
-                
-                local alignRot = Instance.new("AlignOrientation")
-                alignRot.Name = "KickRot"
-                alignRot.Attachment0 = att0
-                alignRot.MaxTorque = math.huge
-                alignRot.Responsiveness = math.huge
-                alignRot.RigidityEnabled = true
-                alignRot.Parent = tHRP
-            end
-            
-            -- ★★★ BodyPosition (백업, 아주 약한 힘) ★★★
-            if not tHRP:FindFirstChild("KickBodyPos") then
-                local bp = Instance.new("BodyPosition")
-                bp.Name = "KickBodyPos"
-                bp.MaxForce = Vector3.new(500, 500, 500) -- 약한 힘
-                bp.P = 300
-                bp.D = 100
-                bp.Parent = tHRP
-            end
-            
-            -- 위치 갱신
-            local align = tHRP:FindFirstChild("KickAlign")
-            if align and align.Attachment1 then
-                align.Attachment1.WorldPosition = targetPos
-            end
-            
-            local bp = tHRP:FindFirstChild("KickBodyPos")
-            if bp then
-                bp.Position = targetPos
-            end
-            
-            -- 회전 고정
-            local rot = tHRP:FindFirstChild("KickRot")
-            if rot then
-                rot.CFrame = CFrame.Angles(0, 0, 0)
-            end
-            
-            -- 물리 제거
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-            tHum.PlatformStand = true
-            tHum:ChangeState(Enum.HumanoidStateType.Physics)
-            
-            -- SetOwner ↔ Detroit 번갈아 (100Hz)
+            -- SetOwner ↔ Detroit 번갈아 (각 100Hz)
             kickCounter = kickCounter + 1
             if kickCounter % 2 == 0 then
                 pcall(function()
@@ -246,11 +250,15 @@ end
 
 local function stopKickLoop()
     kickLoopRunning = false
+    if alignSteppedConn then
+        alignSteppedConn:Disconnect()
+        alignSteppedConn = nil
+    end
     if selectedKickPlayer and selectedKickPlayer.Character then
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                     v:Destroy()
                 end
             end
@@ -259,7 +267,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (Align + Body 백업)",
+    Name = "블롭맨 오너 킥 실행 (Stepped Align + 200Hz 리모트)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -439,4 +447,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "Align + 약한 BodyPosition 백업, 200Hz, 번갈아", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Stepped Align 갱신 + 200Hz 리모트 (1% 풀림 최소화)", Duration = 3})
