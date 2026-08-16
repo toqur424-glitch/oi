@@ -60,7 +60,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (200Hz 1:1 번갈아)
+-- [GRAB 탭] - F키 킥 그랩 (통합 루프)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -127,18 +127,13 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (200Hz + AlignPosition + 1:1 번갈아 + 누락 방지)
+-- [KICK 탭] - 블롭맨 오너 킥 (통합 루프: 위치 갱신 + 리모트 동기화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
-
--- AlignPosition 갱신 (Stepped, 물리 전)
-local alignSteppedConn = nil
--- 리모트 호출 (Heartbeat, 200Hz)
-local remoteHeartbeatConn = nil
--- 리스폰 감지
+local kickHeartbeatConn = nil
 local targetCharacterAddedConn = nil
 
 KickTab:CreateInput({
@@ -202,21 +197,33 @@ local function setupAlignForTarget()
 end
 
 local function startKickLoop()
+    if kickHeartbeatConn then kickHeartbeatConn:Disconnect() end
+    if targetCharacterAddedConn then targetCharacterAddedConn:Disconnect() end
+    
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 1. AlignPosition 갱신 (매 프레임, 물리 전)
-    alignSteppedConn = RunService.Stepped:Connect(function()
+    -- 리스폰 감지
+    if selectedKickPlayer then
+        targetCharacterAddedConn = selectedKickPlayer.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            setupAlignForTarget()
+        end)
+    end
+
+    -- 통합 루프: Heartbeat에서 위치 갱신 + 리모트 호출 동시에 (200Hz)
+    kickHeartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
-        local myChar = plr.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         local tHum = tChar and tChar:FindFirstChild("Humanoid")
+        local myChar = plr.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
+        -- 1. 위치 갱신 (AlignPosition)
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
         if not tHRP:FindFirstChild("KickAlign") then
@@ -237,29 +244,8 @@ local function startKickLoop()
         tHRP.AssemblyAngularVelocity = Vector3.zero
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
-    end)
-
-    -- 2. 리스폰 감지
-    if selectedKickPlayer then
-        targetCharacterAddedConn = selectedKickPlayer.CharacterAdded:Connect(function()
-            task.wait(0.1)
-            setupAlignForTarget()
-        end)
-    end
-
-    -- 3. 리모트 호출 (Heartbeat, 200Hz, 1:1 번갈아, 누락 방지)
-    remoteHeartbeatConn = RunService.Heartbeat:Connect(function()
-        if not kickLoopRunning or not selectedKickPlayer then return end
         
-        local tChar = selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tHum = tChar and tChar:FindFirstChild("Humanoid")
-        local myChar = plr.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        
-        if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
-        
-        -- FETCH: 거리가 30 이상이면 자신이 대상에게 텔레포트 (리모트 누락 방지)
+        -- 2. FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트 (리모트 누락 방지)
         local dist = (tHRP.Position - myHRP.Position).Magnitude
         if dist > 30 then
             pcall(function()
@@ -268,10 +254,10 @@ local function startKickLoop()
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
             end)
-            -- return을 쓰지 않고 계속 진행하여 리모트가 누락되지 않도록 함
+            -- return 없이 계속 진행
         end
         
-        -- 1:1 번갈아 (200Hz)
+        -- 3. 리모트 호출: 1:1 번갈아 (200Hz)
         kickCounter = kickCounter + 1
         if kickCounter % 2 == 0 then
             pcall(function()
@@ -283,18 +269,16 @@ local function startKickLoop()
                 rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
             end)
         end
+        
+        task.wait(0.005)  -- 200Hz
     end)
 end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    if alignSteppedConn then
-        alignSteppedConn:Disconnect()
-        alignSteppedConn = nil
-    end
-    if remoteHeartbeatConn then
-        remoteHeartbeatConn:Disconnect()
-        remoteHeartbeatConn = nil
+    if kickHeartbeatConn then
+        kickHeartbeatConn:Disconnect()
+        kickHeartbeatConn = nil
     end
     if targetCharacterAddedConn then
         targetCharacterAddedConn:Disconnect()
@@ -313,7 +297,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (200Hz + Align 강화 + 누락 방지)",
+    Name = "블롭맨 오너 킥 실행 (통합 루프: 위치+리모트 동기화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -493,4 +477,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "200Hz + Align 강화 + 1:1 번갈아 + 누락 방지 (최종)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "통합 루프: 위치 갱신 + 리모트 1:1 동기화 (200Hz)", Duration = 3})
