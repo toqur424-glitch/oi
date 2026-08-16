@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (280Hz, Stepped Align + 별도 리모트 루프)
+-- [KICK 탭] - 블롭맨 오너 킥 (350Hz, Stepped Align + 별도 리모트 루프)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -252,7 +252,7 @@ local function startKickLoop()
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
     end)
 
-    -- 2. 리모트 호출 (별도 루프, 280Hz, 1:1 번갈아)
+    -- 2. 리모트 호출 (별도 루프, 350Hz, 1:1 번갈아)
     remoteLoopTask = task.spawn(function()
         while kickLoopRunning do
             if not selectedKickPlayer then break end
@@ -264,7 +264,7 @@ local function startKickLoop()
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             
             if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then
-                task.wait(0.00357)
+                task.wait(0.002857)
                 continue
             end
             
@@ -279,7 +279,7 @@ local function startKickLoop()
                 end)
             end
             
-            -- 1:1 번갈아 호출 (280Hz)
+            -- 1:1 번갈아 호출 (350Hz)
             kickCounter = kickCounter + 1
             if kickCounter % 2 == 0 then
                 pcall(function()
@@ -292,7 +292,7 @@ local function startKickLoop()
                 end)
             end
             
-            task.wait(0.00357)  -- 280Hz
+            task.wait(0.002857)  -- 350Hz
         end
     end)
 end
@@ -324,7 +324,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (280Hz, Stepped Align + 별도 리모트 루프)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, Stepped Align + 별도 리모트 루프)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -504,4 +504,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "280Hz, Stepped Align + 별도 리모트 루프 (BodyVelocity 제거)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, Stepped Align + 별도 리모트 루프 (기존 고정 방식 유지)", Duration = 3})
