@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 순수 Align, 1:1 번갈아)
+-- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 분리 루프, 기본)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -136,7 +136,7 @@ local kickCounter = 0
 
 -- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
--- 리모트 호출 루프 (task.spawn + task.wait)
+-- 별도 리모트 루프 (while + task.wait)
 local remoteLoopTask = nil
 -- 리스폰 감지
 local respawnConn = nil
@@ -327,7 +327,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, 순수 Align, 1:1 번갈아)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, 분리 루프, 기본)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -507,4 +507,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, 순수 Align, 1:1 번갈아, FETCH 유지", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, 분리 루프, 기본 (초반 강화 전)", Duration = 3})
