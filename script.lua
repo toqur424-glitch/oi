@@ -127,18 +127,18 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 분리 루프, task.wait)
+-- [KICK 탭] - 블롭맨 오너 킥 (정밀 타이머 리모트 + Stepped CFrame 강제)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: AlignPosition 갱신 (물리 직전)
+-- Stepped: AlignPosition 갱신 + CFrame 강제 (물리 직전)
 local steppedConn = nil
--- Heartbeat: 리모트 호출 (350Hz, task.wait)
-local heartbeatConn = nil
--- 리스폰 감지 (강화)
+-- 리모트 호출: 정밀 타이머 (별도 루프)
+local remoteTask = nil
+-- 리스폰 감지
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -165,14 +165,14 @@ KickTab:CreateInput({
     end
 })
 
-local function setupAlignForTarget()
+local function setupLockForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 Align 제거
+    -- 기존 장치 제거
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
@@ -206,14 +206,14 @@ local function setupAlignForTarget()
 end
 
 local function startKickLoop()
-    if heartbeatConn then heartbeatConn:Disconnect() end
+    if remoteTask then task.cancel(remoteTask) end
     if steppedConn then steppedConn:Disconnect() end
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지 (강화: 캐릭터가 완전히 로드되고 살아있을 때까지 대기)
+    -- 리스폰 감지
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
@@ -225,12 +225,12 @@ local function startKickLoop()
                     timeout = timeout + 0.1
                 end
                 task.wait(0.3)
-                setupAlignForTarget()
+                setupLockForTarget()
             end
         end)
     end
 
-    -- 1. AlignPosition 갱신 (Stepped, 물리 직전)
+    -- 1. Stepped: AlignPosition 갱신 + CFrame 강제 (물리 직전)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -245,71 +245,90 @@ local function startKickLoop()
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
         if not tHRP:FindFirstChild("KickAlign") then
-            setupAlignForTarget()
+            setupLockForTarget()
         end
         
+        -- AlignPosition 갱신
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = targetPos
         end
         
-        -- 회전은 AlignOrientation이 0도로 유지
+        -- 회전 고정
+        local rot = tHRP:FindFirstChild("KickRot")
+        if rot then
+            rot.CFrame = CFrame.Angles(0, 0, 0)
+        end
         
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
+        -- CFrame 강제 덮어쓰기 (고정력 강화)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+        end)
+        
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
     end)
 
-    -- 2. 리모트 호출 (Heartbeat, 350Hz, 1:1 번갈아, task.wait)
-    heartbeatConn = RunService.Heartbeat:Connect(function()
-        if not kickLoopRunning or not selectedKickPlayer then return end
+    -- 2. 리모트 호출 (정밀 타이머, 350Hz, 1:1 번갈아)
+    remoteTask = task.spawn(function()
+        local interval = 0.002857
+        local nextTime = tick() + interval
         
-        local tChar = selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tHum = tChar and tChar:FindFirstChild("Humanoid")
-        local myChar = plr.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        
-        if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
-        
-        -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
-        local dist = (tHRP.Position - myHRP.Position).Magnitude
-        if dist > 30 then
-            pcall(function()
-                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-            end)
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-            end)
+        while kickLoopRunning do
+            -- 정밀 대기
+            while tick() < nextTime do
+                task.wait()
+            end
+            nextTime = nextTime + interval
+            
+            if not selectedKickPlayer then continue end
+            
+            local tChar = selectedKickPlayer.Character
+            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+            local tHum = tChar and tChar:FindFirstChild("Humanoid")
+            local myChar = plr.Character
+            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            
+            if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then continue end
+            
+            -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
+            local dist = (tHRP.Position - myHRP.Position).Magnitude
+            if dist > 30 then
+                pcall(function()
+                    myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                end)
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            end
+            
+            -- 1:1 번갈아 호출 (정확히 매 타이머마다 실행)
+            kickCounter = kickCounter + 1
+            if kickCounter % 2 == 0 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            else
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                end)
+            end
         end
-        
-        -- 1:1 번갈아 호출 (350Hz)
-        kickCounter = kickCounter + 1
-        if kickCounter % 2 == 0 then
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-            end)
-        else
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-            end)
-        end
-        
-        task.wait(0.002857)  -- 350Hz
     end)
 end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    if heartbeatConn then
-        heartbeatConn:Disconnect()
-        heartbeatConn = nil
-    end
     if steppedConn then
         steppedConn:Disconnect()
         steppedConn = nil
+    end
+    if remoteTask then
+        task.cancel(remoteTask)
+        remoteTask = nil
     end
     if respawnConn then
         respawnConn:Disconnect()
@@ -328,7 +347,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, 분리 루프, task.wait)",
+    Name = "블롭맨 오너 킥 실행 (정밀 타이머 + Stepped CFrame 강제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -508,4 +527,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, 분리 루프, task.wait (정밀 타이머 제거)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "정밀 타이머 + Stepped CFrame 강제 (고정력 강화)", Duration = 3})
