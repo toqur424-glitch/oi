@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 분리 루프, 버벅거림 제거)
+-- [KICK 탭] - 블롭맨 오너 킥 (리스폰 대응 강화, 350Hz, 분리 루프)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -138,7 +138,7 @@ local kickCounter = 0
 local steppedConn = nil
 -- Heartbeat: 리모트 호출 (350Hz)
 local heartbeatConn = nil
--- 리스폰 감지
+-- 리스폰 감지 (강화)
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -213,11 +213,15 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지
+    -- 리스폰 감지 (강화: 캐릭터가 완전히 로드될 때까지 대기)
     if selectedKickPlayer then
-        respawnConn = selectedKickPlayer.CharacterAdded:Connect(function()
-            task.wait(0.1)
-            setupAlignForTarget()
+        respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
+            -- 새 캐릭터의 HumanoidRootPart가 생성될 때까지 대기
+            local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
+            if hrp then
+                task.wait(0.2) -- 추가 안전 대기
+                setupAlignForTarget()
+            end
         end)
     end
 
@@ -252,7 +256,7 @@ local function startKickLoop()
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
     end)
 
-    -- 2. 리모트 호출 (Heartbeat, 350Hz, 1:1 번갈아, 버벅거림 제거)
+    -- 2. 리모트 호출 (Heartbeat, 350Hz, 1:1 번갈아)
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -317,7 +321,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, 분리 루프, 버벅거림 제거)",
+    Name = "블롭맨 오너 킥 실행 (리스폰 대응 강화, 350Hz, 분리 루프)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -497,4 +501,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, 분리 루프, 버벅거림 제거 (가장 안정적)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "리스폰 대응 강화, 350Hz, 분리 루프 (초반/후반 모두 안정)", Duration = 3})
