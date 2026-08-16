@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아 + Align 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (250Hz, 1:1 번갈아, Align 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -244,7 +244,7 @@ local function startKickLoop()
             align.Attachment1.WorldPosition = targetPos
         end
         
-        -- 회전은 AlignOrientation이 0도로 유지
+        -- 회전은 AlignOrientation이 0도로 유지 (레그돌 상태에서도 유지됨)
         
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
@@ -252,7 +252,7 @@ local function startKickLoop()
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
     end)
 
-    -- 2. 리모트 호출 (Heartbeat, 200Hz, 1:1 번갈아)
+    -- 2. 리모트 호출 (Heartbeat, 250Hz, 1:1 번갈아)
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -287,7 +287,7 @@ local function startKickLoop()
             end)
         end
         
-        task.wait(0.005)
+        task.wait(0.004)  -- 250Hz
     end)
 end
 
@@ -318,7 +318,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:1 번갈아 + Align 고정)",
+    Name = "블롭맨 오너 킥 실행 (250Hz, 1:1 번갈아, Align 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -498,4 +498,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아 + Align 고정 (원래 방식으로 복원)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "250Hz, 1:1 번갈아, Align 고정 (레그돌 회전 방지)", Duration = 3})
