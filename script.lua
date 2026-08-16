@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (45도 앞으로 숙인 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (순수 Align + Detroit 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -172,7 +172,7 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 Align 제거
+    -- 기존 Align 제거 (혹시 남아있을 경우)
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
@@ -194,14 +194,13 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
-    -- 새 AlignOrientation (회전 고정: 앞으로 45도 숙임)
+    -- 새 AlignOrientation (회전 고정: 0도 유지)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
     alignRot.MaxTorque = math.huge
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
-    alignRot.CFrame = CFrame.Angles(math.rad(45), 0, 0)  -- 45도 앞으로 숙임
     alignRot.Parent = tHRP
 end
 
@@ -245,8 +244,7 @@ local function startKickLoop()
             align.Attachment1.WorldPosition = targetPos
         end
         
-        -- 회전은 AlignOrientation이 자동으로 처리하므로 별도 설정 불필요
-        -- 단, 회전 고정을 강화하기 위해 CFrame을 직접 설정할 수도 있지만, AlignOrientation으로 충분함
+        -- 회전은 AlignOrientation이 자동으로 0도 유지
         
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
@@ -320,7 +318,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (45도 앞으로 숙인 고정)",
+    Name = "블롭맨 오너 킥 실행 (순수 Align + Detroit 강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -500,4 +498,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "45도 앞으로 숙인 고정 + AlignOrientation으로 회전 완전 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "순수 Align + Detroit 강화 (불필요한 기능 제거)", Duration = 3})
