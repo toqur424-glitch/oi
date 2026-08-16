@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (280Hz, Stepped Align + 별도 리모트 루프)
+-- [KICK 탭] - 블롭맨 오너 킥 (Y=23, 280Hz, Stepped Align + 별도 리모트 루프)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -233,7 +233,8 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+        -- ★ 높이를 Y=23으로 변경
+        local targetPos = myHRP.Position + Vector3.new(0, 23, 0)
         
         if not tHRP:FindFirstChild("KickAlign") then
             setupAlignForTarget()
@@ -324,7 +325,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (280Hz, Stepped Align + 별도 리모트 루프)",
+    Name = "블롭맨 오너 킥 실행 (Y=23, 280Hz, Stepped Align + 별도 리모트 루프)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -504,4 +505,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "280Hz, Stepped Align + 별도 리모트 루프 (BodyVelocity 제거)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Y=23, 280Hz, Stepped Align + 별도 리모트 루프", Duration = 3})
