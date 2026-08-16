@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 분리 루프, 초반 고정력 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 순수 Align, 1:1 번갈아)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -213,18 +213,15 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지 (강화: 캐릭터가 완전히 로드될 때까지 대기)
+    -- 리스폰 감지
     if selectedKickPlayer then
-        respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
-            local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
-            if hrp then
-                task.wait(0.1)
-                setupAlignForTarget()
-            end
+        respawnConn = selectedKickPlayer.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            setupAlignForTarget()
         end)
     end
 
-    -- 1. AlignPosition 갱신 (Stepped, 물리 직전) - 초반 고정력 강화
+    -- 1. AlignPosition 갱신 (Stepped, 물리 직전)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -255,7 +252,7 @@ local function startKickLoop()
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
     end)
 
-    -- 2. 리모트 호출 (별도 루프, 350Hz, 1:1 번갈아) - 킥 속도 빠르게
+    -- 2. 리모트 호출 (별도 루프, 350Hz, 1:1 번갈아)
     remoteLoopTask = task.spawn(function()
         while kickLoopRunning do
             if not selectedKickPlayer then 
@@ -330,7 +327,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, 분리 루프, 초반 고정력 강화)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, 순수 Align, 1:1 번갈아)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -510,4 +507,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, 분리 루프, 초반 고정력 강화, 빠른 킥", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, 순수 Align, 1:1 번갈아, FETCH 유지", Duration = 3})
