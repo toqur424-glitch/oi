@@ -60,7 +60,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (Detroit 주력)
+-- [GRAB 탭] - F키 킥 그랩 (1:1 번갈아)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -94,13 +94,11 @@ local function startFKeyAttack(targetPlayer)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % 3 == 0 then
-                -- SetOwner (3프레임에 1번)
+            if fCounter % 2 == 0 then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
             else
-                -- Detroit (나머지 2프레임)
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
@@ -129,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (Detroit 주력 + Stepped Align)
+-- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아 + Stepped Align)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -249,7 +247,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 리모트 루프 (200Hz, Detroit 주력)
+    -- 리모트 루프 (200Hz, 1:1 번갈아)
     task.spawn(function()
         while kickLoopRunning do
             if not selectedKickPlayer then break end
@@ -278,13 +276,11 @@ local function startKickLoop()
             end
             
             kickCounter = kickCounter + 1
-            if kickCounter % 3 == 0 then
-                -- SetOwner (3번에 1번)
+            if kickCounter % 2 == 0 then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
             else
-                -- Detroit (2번)
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
@@ -319,7 +315,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (Detroit 주력 + Stepped Align)",
+    Name = "블롭맨 오너 킥 실행 (1:1 번갈아 + Stepped Align)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -499,4 +495,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "Detroit 주력 (2:1) + Align 강화로 고정력 극대화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아 + Stepped Align + 200Hz + 안티그랩 대응", Duration = 3})
