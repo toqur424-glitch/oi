@@ -233,7 +233,6 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- ★ 높이를 Y=20으로 변경
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
         if not tHRP:FindFirstChild("KickAlign") then
