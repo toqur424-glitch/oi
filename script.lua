@@ -60,7 +60,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (Detroit 2배)
+-- [GRAB 탭] - F키 킥 그랩 (SetOwner 1, Detroit 2)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (SetOwner 1, Detroit 2)
+-- [KICK 탭] - 블롭맨 오너 킥 (고정력 극대화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -167,12 +167,14 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
+    -- 기존 고정 장치 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyVelocity") then
             v:Destroy()
         end
     end
     
+    -- 1. AlignPosition (주 고정, 성능 극대화)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -183,6 +185,7 @@ local function setupAlignForTarget()
     alignPos.Attachment0 = att0
     alignPos.Attachment1 = att1
     alignPos.MaxForce = math.huge
+    alignPos.MaxVelocity = math.huge  -- 속도 제한 없음
     alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
@@ -194,6 +197,13 @@ local function setupAlignForTarget()
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
+    
+    -- 2. BodyVelocity (관성 제거, 약한 힘)
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "KickBodyVel"
+    bv.MaxForce = Vector3.new(500, 500, 500)  -- 매우 약한 힘
+    bv.Velocity = Vector3.zero
+    bv.Parent = tHRP
 end
 
 local function startKickLoop()
@@ -211,7 +221,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 통합 루프: Heartbeat에서 위치 갱신 + 리모트 호출 (Detroit 2배)
+    -- 통합 루프: 위치 갱신 + 리모트 + CFrame 강제 (고정력 극대화)
     kickHeartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -223,29 +233,43 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- 1. 위치 갱신 (AlignPosition)
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
+        -- 장치가 없으면 생성
         if not tHRP:FindFirstChild("KickAlign") then
             setupAlignForTarget()
         end
         
+        -- 1. AlignPosition 위치 갱신
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = targetPos
         end
         
+        -- 2. 회전 고정
         local rot = tHRP:FindFirstChild("KickRot")
         if rot then
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
+        -- 3. CFrame 강제 덮어쓰기 (약하게, 승천 방지)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+        end)
+        
+        -- 4. BodyVelocity 속도 0 유지
+        local bv = tHRP:FindFirstChild("KickBodyVel")
+        if bv then
+            bv.Velocity = Vector3.zero
+        end
+        
+        -- 5. 물리 상태 제거
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
         
-        -- 2. FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
+        -- 6. FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
         local dist = (tHRP.Position - myHRP.Position).Magnitude
         if dist > 30 then
             pcall(function()
@@ -256,7 +280,7 @@ local function startKickLoop()
             end)
         end
         
-        -- 3. 리모트 호출: SetOwner 1회, Detroit 2회 (3프레임 주기)
+        -- 7. 리모트 호출: SetOwner 1, Detroit 2 (3프레임 주기)
         kickCounter = kickCounter + 1
         if kickCounter % 3 == 0 then
             pcall(function()
@@ -287,7 +311,7 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyVelocity") then
                     v:Destroy()
                 end
             end
@@ -296,7 +320,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetOwner 1, Detroit 2 – 고정력 강화)",
+    Name = "블롭맨 오너 킥 실행 (고정력 극대화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -476,4 +500,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1, Detroit 2 – 고정력 초반/후반 모두 강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "고정력 극대화: Align MaxVelocity + CFrame 덮어쓰기 + 관성 제거", Duration = 3})
