@@ -60,7 +60,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (통합 루프)
+-- [GRAB 탭] - F키 킥 그랩 (Detroit 2배)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -94,11 +94,11 @@ local function startFKeyAttack(targetPlayer)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % 2 == 0 then
+            if fCounter % 3 == 0 then  -- SetOwner 1회
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
-            else
+            else  -- Detroit 2회
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (통합 루프: 위치 갱신 + 리모트 동기화)
+-- [KICK 탭] - 블롭맨 오너 킥 (SetOwner 1, Detroit 2)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -211,7 +211,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 통합 루프: Heartbeat에서 위치 갱신 + 리모트 호출 동시에 (200Hz)
+    -- 통합 루프: Heartbeat에서 위치 갱신 + 리모트 호출 (Detroit 2배)
     kickHeartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -245,7 +245,7 @@ local function startKickLoop()
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
         
-        -- 2. FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트 (리모트 누락 방지)
+        -- 2. FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
         local dist = (tHRP.Position - myHRP.Position).Magnitude
         if dist > 30 then
             pcall(function()
@@ -254,12 +254,11 @@ local function startKickLoop()
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
             end)
-            -- return 없이 계속 진행
         end
         
-        -- 3. 리모트 호출: 1:1 번갈아 (200Hz)
+        -- 3. 리모트 호출: SetOwner 1회, Detroit 2회 (3프레임 주기)
         kickCounter = kickCounter + 1
-        if kickCounter % 2 == 0 then
+        if kickCounter % 3 == 0 then
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
             end)
@@ -297,7 +296,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (통합 루프: 위치+리모트 동기화)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 1, Detroit 2 – 고정력 강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -477,4 +476,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "통합 루프: 위치 갱신 + 리모트 1:1 동기화 (200Hz)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1, Detroit 2 – 고정력 초반/후반 모두 강화", Duration = 3})
