@@ -60,7 +60,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (SetOwner 1, Detroit 2)
+-- [GRAB 탭] - F키 킥 그랩 (1:1 번갈아)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -94,7 +94,7 @@ local function startFKeyAttack(targetPlayer)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % 3 == 0 then
+            if fCounter % 2 == 0 then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (300Hz, SetOwner 1, Detroit 2, 고정력 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아, 300Hz, 고정력 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -169,13 +169,14 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
+    -- 기존 Align 제거
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
         end
     end
     
-    -- AlignPosition (위치 고정, 성능 극대화)
+    -- AlignPosition (위치 고정, 성능 최대)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -216,7 +217,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 통합 Heartbeat 루프 (300Hz, SetOwner 1, Detroit 2)
+    -- 통합 Heartbeat 루프 (300Hz, 1:1 번갈아)
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -257,9 +258,9 @@ local function startKickLoop()
             end)
         end
         
-        -- SetOwner 1회, Detroit 2회 (3프레임 주기)
+        -- 1:1 번갈아 호출 (300Hz)
         kickCounter = kickCounter + 1
-        if kickCounter % 3 == 0 then
+        if kickCounter % 2 == 0 then
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
             end)
@@ -297,7 +298,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (300Hz, SetOwner 1, Detroit 2, 고정력 강화)",
+    Name = "블롭맨 오너 킥 실행 (1:1 번갈아, 300Hz, 고정력 강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -477,4 +478,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "300Hz, SetOwner 1, Detroit 2 (고정력 강화)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아, 300Hz, 고정력 강화 (추가 기능 없음)", Duration = 3})
