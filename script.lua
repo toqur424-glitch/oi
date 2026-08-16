@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (100Hz 목표)
+-- [GRAB 탭] - F키 킥 그랩 (66Hz 번갈아)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -38,10 +38,12 @@ getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
+local fCounter = 0
 
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
+    fCounter = 0
     
     fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
@@ -60,13 +62,17 @@ local function startFKeyAttack(targetPlayer)
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-            end)
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
+            fCounter = fCounter + 1
+            if fCounter % 2 == 0 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                end)
+            else
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                end)
+            end
         end
     end)
 end
@@ -90,11 +96,12 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (고정력 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (y=20, x=0 고정 + 66Hz 번갈아)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
+local kickCounter = 0
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -122,18 +129,7 @@ KickTab:CreateInput({
 
 local function startKickLoop()
     kickLoopRunning = true
-    local kickCounter = 0
-    
-    -- ★ 고정 기준점용 투명 앵커 파트 생성
-    local anchorPart = Instance.new("Part")
-    anchorPart.Name = "KickAnchor"
-    anchorPart.Anchored = true
-    anchorPart.CanCollide = false
-    anchorPart.CanQuery = false
-    anchorPart.Transparency = 1
-    anchorPart.Size = Vector3.new(0.2, 0.2, 0.2)
-    anchorPart.Parent = workspace
-    
+    kickCounter = 0
     task.spawn(function()
         while kickLoopRunning do
             if not selectedKickPlayer then break end
@@ -145,13 +141,13 @@ local function startKickLoop()
             local tHum = tChar and tChar:FindFirstChild("Humanoid")
             
             if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then
-                task.wait(0.01)
+                task.wait(0.015)
                 continue
             end
             
             local dist = (tHRP.Position - myHRP.Position).Magnitude
             
-            -- 거리 30 이상이면 자신을 대상 쪽으로 텔레포트
+            -- ★ FETCH: 거리가 30 이상이면 자신을 대상 쪽으로 텔레포트
             if dist > 30 then
                 pcall(function()
                     myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
@@ -159,23 +155,14 @@ local function startKickLoop()
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
-                task.wait(0.01)
+                task.wait(0.015)
                 continue
             end
             
             -- ★ 고정 위치: 내 머리 바로 위 20스터드 (x=0, y=20)
             local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
             
-            -- 고정용 앵커 파트 위치 갱신
-            anchorPart.CFrame = CFrame.new(targetPos)
-            
-            -- ★ 소유권 획득 (로컬 메서드 + 리모트)
-            pcall(function() tHRP:SetNetworkOwner(plr) end)
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-            end)
-            
-            -- ★ AlignPosition / AlignOrientation 생성 (한 번만)
+            -- ★ AlignPosition / AlignOrientation (고정력 유지)
             if not tHRP:FindFirstChild("KickAlign") then
                 for _, v in pairs(tHRP:GetChildren()) do
                     if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
@@ -185,7 +172,7 @@ local function startKickLoop()
                 
                 local att0 = Instance.new("Attachment", tHRP)
                 att0.Name = "KickAtt0"
-                local att1 = Instance.new("Attachment", anchorPart)
+                local att1 = Instance.new("Attachment", workspace.Terrain)
                 att1.Name = "KickAtt1"
                 
                 local alignPos = Instance.new("AlignPosition")
@@ -193,49 +180,49 @@ local function startKickLoop()
                 alignPos.Attachment0 = att0
                 alignPos.Attachment1 = att1
                 alignPos.MaxForce = math.huge
-                alignPos.MaxVelocity = math.huge
-                alignPos.Responsiveness = 1000
+                alignPos.Responsiveness = 300
                 alignPos.RigidityEnabled = true
                 alignPos.Parent = tHRP
                 
                 local alignRot = Instance.new("AlignOrientation")
                 alignRot.Name = "KickRot"
                 alignRot.Attachment0 = att0
-                alignRot.Attachment1 = att1
                 alignRot.MaxTorque = math.huge
-                alignRot.Responsiveness = 1000
+                alignRot.Responsiveness = 300
                 alignRot.RigidityEnabled = true
                 alignRot.Parent = tHRP
             end
             
-            -- ★ 물리 제거 + 땅 충돌 방지
-            tHRP.CanCollide = false
+            -- 위치 갱신
+            local align = tHRP:FindFirstChild("KickAlign")
+            if align and align.Attachment1 then
+                align.Attachment1.WorldPosition = targetPos
+            end
+            
+            -- 회전 고정
+            local rot = tHRP:FindFirstChild("KickRot")
+            if rot then rot.CFrame = CFrame.Angles(0, 0, 0) end
+            
+            -- 물리 제거
             tHRP.AssemblyLinearVelocity = Vector3.zero
             tHRP.AssemblyAngularVelocity = Vector3.zero
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
             
-            -- ★ 직접 CFrame 강제 보정 (0.25초마다)
-            if kickCounter % 25 == 0 then
+            -- ★ SetOwner ↔ Detroit 번갈아 호출 (66Hz)
+            kickCounter = kickCounter + 1
+            if kickCounter % 2 == 0 then
                 pcall(function()
-                    tHRP.CFrame = CFrame.new(targetPos)
-                    tHRP.AssemblyLinearVelocity = Vector3.zero
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            else
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                 end)
             end
             
-            -- ★ Detroit(그랩라인) 리모트
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-            end)
-            
-            kickCounter = kickCounter + 1
-            task.wait(0.01)  -- 100Hz 목표
-        end
-        
-        -- 루프 종료 시 앵커 제거
-        if anchorPart and anchorPart.Parent then
-            anchorPart:Destroy()
+            task.wait(0.015)  -- 66Hz
         end
     end)
 end
@@ -246,24 +233,17 @@ local function stopKickLoop()
     if selectedKickPlayer and selectedKickPlayer.Character then
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
-            tHRP.CanCollide = true
             for _, v in pairs(tHRP:GetChildren()) do
                 if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                     v:Destroy()
                 end
             end
-            for _, v in pairs(tHRP:GetChildren()) do
-                if v.Name == "KickAtt0" then
-                    v:Destroy()
-                end
-            end
         end
     end
-    -- 앵커 제거는 루프 내에서 처리됨
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (고정력 강화)",
+    Name = "블롭맨 오너 킥 실행 (y=20, x=0 고정 + 66Hz 번갈아)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -443,4 +423,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "고정력 강화 + 100Hz 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "66Hz + Align 고정 + 번갈아 (추가 기능 제거)", Duration = 3})
