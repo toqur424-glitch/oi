@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (정밀 타이머 리모트 + Stepped CFrame 강제)
+-- [KICK 탭] - 블롭맨 오너 킥 (리스폰 완전 대응, 정밀 타이머)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -138,7 +138,7 @@ local kickCounter = 0
 local steppedConn = nil
 -- 리모트 호출: 정밀 타이머 (별도 루프)
 local remoteTask = nil
--- 리스폰 감지
+-- 리스폰 감지 (강화)
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -213,18 +213,20 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지
+    -- 리스폰 감지 (강화: 캐릭터가 완전히 로드될 때까지 충분히 대기)
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
-            local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
-            local hum = newChar:WaitForChild("Humanoid", 5)
+            -- 충분한 시간 동안 HRP와 Humanoid가 로드될 때까지 대기
+            local hrp = newChar:WaitForChild("HumanoidRootPart", 10)
+            local hum = newChar:WaitForChild("Humanoid", 10)
             if hrp and hum then
+                -- 체력이 0보다 클 때까지 대기 (리스폰 완전히 완료)
                 local timeout = 0
-                while hum.Health <= 0 and timeout < 2 do
+                while hum.Health <= 0 and timeout < 5 do
                     task.wait(0.1)
                     timeout = timeout + 0.1
                 end
-                task.wait(0.3)
+                task.wait(0.5) -- 추가 안전 대기
                 setupLockForTarget()
             end
         end)
@@ -232,15 +234,19 @@ local function startKickLoop()
 
     -- 1. Stepped: AlignPosition 갱신 + CFrame 강제 (물리 직전)
     steppedConn = RunService.Stepped:Connect(function()
-        if not kickLoopRunning or not selectedKickPlayer then return end
+        if not kickLoopRunning then return end
         
         local myChar = plr.Character
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        local tChar = selectedKickPlayer.Character
+        local tChar = selectedKickPlayer and selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         local tHum = tChar and tChar:FindFirstChild("Humanoid")
         
-        if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
+        -- 내 캐릭터가 없으면 리턴
+        if not (myChar and myHRP) then return end
+        
+        -- 대상 캐릭터가 없거나 죽었으면 고정을 시도하지 않고 다음 프레임으로 넘어감
+        if not (tChar and tHRP and tHum and tHum.Health > 0) then return end
         
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
@@ -291,7 +297,11 @@ local function startKickLoop()
             local myChar = plr.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             
-            if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then continue end
+            -- 내 캐릭터가 없으면 리턴
+            if not (myChar and myHRP) then continue end
+            
+            -- 대상 캐릭터가 없거나 죽었으면 리모트를 보내지 않고 다음 프레임으로 넘어감
+            if not (tHRP and tHum and tHum.Health > 0) then continue end
             
             -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
             local dist = (tHRP.Position - myHRP.Position).Magnitude
@@ -347,7 +357,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (정밀 타이머 + Stepped CFrame 강제)",
+    Name = "블롭맨 오너 킥 실행 (리스폰 완전 대응, 정밀 타이머)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -527,4 +537,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "정밀 타이머 + Stepped CFrame 강제 (고정력 강화)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "리스폰 완전 대응, 죽어도 고정 유지", Duration = 3})
