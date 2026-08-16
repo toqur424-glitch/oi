@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아, 300Hz, 고정력 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (CFrame 강제 덮어쓰기 + 300Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -162,21 +162,21 @@ KickTab:CreateInput({
     end
 })
 
-local function setupAlignForTarget()
+local function setupLockForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 Align 제거
+    -- 기존 장치 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyVelocity") then
             v:Destroy()
         end
     end
     
-    -- AlignPosition (위치 고정, 성능 최대)
+    -- AlignPosition (위치 보조)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -200,6 +200,13 @@ local function setupAlignForTarget()
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
+    
+    -- BodyVelocity (관성 제거)
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "KickBodyVel"
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Velocity = Vector3.zero
+    bv.Parent = tHRP
 end
 
 local function startKickLoop()
@@ -213,11 +220,11 @@ local function startKickLoop()
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function()
             task.wait(0.1)
-            setupAlignForTarget()
+            setupLockForTarget()
         end)
     end
 
-    -- 통합 Heartbeat 루프 (300Hz, 1:1 번갈아)
+    -- 통합 Heartbeat 루프 (300Hz, CFrame 강제 덮어쓰기)
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -229,21 +236,35 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- AlignPosition 갱신
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
+        -- 장치가 없으면 생성
         if not tHRP:FindFirstChild("KickAlign") then
-            setupAlignForTarget()
+            setupLockForTarget()
         end
         
+        -- AlignPosition 위치 갱신
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = targetPos
         end
         
-        -- 물리 제거
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
+        -- CFrame 강제 덮어쓰기 (고정력 극대화)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+        end)
+        
+        -- BodyVelocity 속도 0 유지
+        local bv = tHRP:FindFirstChild("KickBodyVel")
+        if bv then
+            bv.Velocity = Vector3.zero
+        end
+        
+        -- 회전은 AlignOrientation이 0도로 유지
+        
+        -- 물리 상태 제거
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
         
@@ -289,7 +310,7 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyVelocity") then
                     v:Destroy()
                 end
             end
@@ -298,7 +319,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:1 번갈아, 300Hz, 고정력 강화)",
+    Name = "블롭맨 오너 킥 실행 (CFrame 강제 덮어쓰기 + 300Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -478,4 +499,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아, 300Hz, 고정력 강화 (추가 기능 없음)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "CFrame 강제 덮어쓰기 + BodyVelocity 관성 제거 + 300Hz", Duration = 3})
