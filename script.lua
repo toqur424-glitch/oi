@@ -96,7 +96,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (100Hz 고정 + 50Hz 리모트 + CFrame 강제)
+-- [KICK 탭] - 블롭맨 오너 킥 (100Hz 고정, 50Hz 리모트, CFrame 강제 제거)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -162,29 +162,11 @@ local function startKickLoop()
             -- ★ 고정 위치: 내 머리 바로 위 20스터드 (x=0, y=20)
             local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
             
-            -- ★ CFrame 강제 설정 (매 프레임)
-            pcall(function()
-                tHRP.CFrame = CFrame.new(targetPos)
-                tHRP.AssemblyLinearVelocity = Vector3.zero
-                tHRP.AssemblyAngularVelocity = Vector3.zero
-            end)
-            
-            -- ★ BodyPosition (물리 고정)
-            local bp = tHRP:FindFirstChild("KickBodyPos")
-            if not bp then
-                bp = Instance.new("BodyPosition")
-                bp.Name = "KickBodyPos"
-                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bp.P = 1e6
-                bp.D = 1e5
-                bp.Parent = tHRP
-            end
-            bp.Position = targetPos
-            
             -- ★ AlignPosition / AlignOrientation (강체 고정)
             if not tHRP:FindFirstChild("KickAlign") then
+                -- 기존 고정 장치 제거
                 for _, v in pairs(tHRP:GetChildren()) do
-                    if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                    if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                         v:Destroy()
                     end
                 end
@@ -212,6 +194,18 @@ local function startKickLoop()
                 alignRot.Parent = tHRP
             end
             
+            -- ★ BodyPosition (물리 보조 고정)
+            local bp = tHRP:FindFirstChild("KickBodyPos")
+            if not bp then
+                bp = Instance.new("BodyPosition")
+                bp.Name = "KickBodyPos"
+                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bp.P = 100000
+                bp.D = 5000
+                bp.Parent = tHRP
+            end
+            bp.Position = targetPos
+            
             -- AlignPosition 위치 갱신
             local align = tHRP:FindFirstChild("KickAlign")
             if align and align.Attachment1 then
@@ -225,6 +219,8 @@ local function startKickLoop()
             end
             
             -- 물리 상태 강제
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
             
@@ -262,7 +258,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (100Hz + CFrame 강제 + 이중 고정)",
+    Name = "블롭맨 오너 킥 실행 (100Hz + Align + BodyPosition, CFrame 강제 제거)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -442,4 +438,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "매 프레임 CFrame 강제 + 이중 고정 (흔들림 제거)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "CFrame 강제 제거, Align+Body 고정, 100Hz/50Hz, 승천 버그 수정", Duration = 3})
