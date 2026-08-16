@@ -60,7 +60,7 @@ local function startFKeyAttack(targetPlayer)
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            -- ★ 매 프레임 둘 다 호출 (번갈아 X)
+            -- 매 프레임 둘 다 호출 (번갈아 X)
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
             end)
@@ -123,6 +123,7 @@ KickTab:CreateInput({
 
 local function startKickLoop()
     kickLoopRunning = true
+    local kickCounter = 0
     task.spawn(function()
         while kickLoopRunning do
             if not selectedKickPlayer then break end
@@ -155,54 +156,72 @@ local function startKickLoop()
             -- ★ 고정 위치: 내 머리 바로 위 20스터드 (x=0, y=20)
             local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
             
-            -- ★ AlignPosition / AlignOrientation (고정력 유지)
+            -- ★ AlignPosition / AlignOrientation 생성 (한 번만)
             if not tHRP:FindFirstChild("KickAlign") then
+                -- 기존 물리 객체 제거
                 for _, v in pairs(tHRP:GetChildren()) do
                     if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                         v:Destroy()
                     end
                 end
                 
+                -- Attachment 생성
                 local att0 = Instance.new("Attachment", tHRP)
                 att0.Name = "KickAtt0"
-                local att1 = Instance.new("Attachment", workspace.Terrain)
-                att1.Name = "KickAtt1"
+                local attPos1 = Instance.new("Attachment", workspace.Terrain)
+                attPos1.Name = "KickAtt1"          -- 위치용 기준
+                local attRot1 = Instance.new("Attachment", workspace.Terrain)
+                attRot1.Name = "KickRotAtt1"       -- 회전용 기준
                 
+                -- AlignPosition (고정력 최상)
                 local alignPos = Instance.new("AlignPosition")
                 alignPos.Name = "KickAlign"
                 alignPos.Attachment0 = att0
-                alignPos.Attachment1 = att1
+                alignPos.Attachment1 = attPos1
                 alignPos.MaxForce = math.huge
-                alignPos.Responsiveness = 200  -- 안정적인 최대값
+                alignPos.MaxVelocity = math.huge   -- 속도 제한 없음
+                alignPos.Responsiveness = 1000    -- 최대 반응성
                 alignPos.RigidityEnabled = true
                 alignPos.Parent = tHRP
                 
+                -- AlignOrientation (회전 고정력 최상)
                 local alignRot = Instance.new("AlignOrientation")
                 alignRot.Name = "KickRot"
                 alignRot.Attachment0 = att0
+                alignRot.Attachment1 = attRot1
                 alignRot.MaxTorque = math.huge
-                alignRot.Responsiveness = 200  -- 안정적인 최대값
+                alignRot.Responsiveness = 1000
                 alignRot.RigidityEnabled = true
                 alignRot.Parent = tHRP
             end
             
-            -- 위치 갱신
             local align = tHRP:FindFirstChild("KickAlign")
+            local rot = tHRP:FindFirstChild("KickRot")
+            
+            -- 위치 갱신 (목표 위치로 강제)
             if align and align.Attachment1 then
                 align.Attachment1.WorldPosition = targetPos
             end
             
-            -- 회전 고정
-            local rot = tHRP:FindFirstChild("KickRot")
-            if rot then rot.CFrame = CFrame.Angles(0, 0, 0) end
+            -- 회전 고정 (월드 축 정렬)
+            if rot and rot.Attachment1 then
+                rot.Attachment1.WorldCFrame = CFrame.identity
+            end
             
-            -- 물리 제거
+            -- 물리 제거 (속도/회전 초기화)
             tHRP.AssemblyLinearVelocity = Vector3.zero
             tHRP.AssemblyAngularVelocity = Vector3.zero
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
             
-            -- ★ 매 루프마다 SetOwner와 Detroit 둘 다 호출 (100Hz 목표)
+            -- 직접 CFrame 보정 (강제 고정, 0.5초마다 한 번씩)
+            if kickCounter % 50 == 0 then
+                pcall(function()
+                    tHRP.CFrame = CFrame.new(targetPos)
+                end)
+            end
+            
+            -- ★ SetOwner + Detroit (그랩라인) 매 루프 호출
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
             end)
@@ -211,7 +230,8 @@ local function startKickLoop()
                 rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
             end)
             
-            task.wait(0.01)  -- 100Hz (실제 프레임 제한으로 60~100Hz)
+            kickCounter = kickCounter + 1
+            task.wait(0.01)  -- 100Hz 목표 (실제 프레임 제한으로 60~100Hz)
         end
     end)
 end
@@ -222,10 +242,25 @@ local function stopKickLoop()
     if selectedKickPlayer and selectedKickPlayer.Character then
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
+            -- Align 객체 제거
             for _, v in pairs(tHRP:GetChildren()) do
                 if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                     v:Destroy()
                 end
+            end
+            -- Attachment 제거
+            for _, v in pairs(tHRP:GetChildren()) do
+                if v.Name == "KickAtt0" then
+                    v:Destroy()
+                end
+            end
+        end
+    end
+    -- Terrain에 있는 Attachment 제거
+    if workspace.Terrain then
+        for _, v in pairs(workspace.Terrain:GetChildren()) do
+            if v.Name == "KickAtt1" or v.Name == "KickRotAtt1" then
+                v:Destroy()
             end
         end
     end
