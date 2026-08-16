@@ -60,7 +60,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (최적화)
+-- [GRAB 탭] - F키 킥 그랩 (SetOwner 1, Detroit 2)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -94,11 +94,11 @@ local function startFKeyAttack(targetPlayer)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % 3 == 0 then  -- SetOwner 1회
+            if fCounter % 3 == 0 then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
-            else  -- Detroit 2회
+            else
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
@@ -127,16 +127,16 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (정식 버전: Align만, 200Hz, 패킷 손실 방지)
+-- [KICK 탭] - 블롭맨 오너 킥 (45도 앞으로 숙인 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- AlignPosition 갱신 (Stepped, 물리 직전)
+-- AlignPosition 갱신 (Stepped)
 local steppedConn = nil
--- 리모트 호출 (Heartbeat, 200Hz)
+-- 리모트 호출 (Heartbeat)
 local heartbeatConn = nil
 -- 리스폰 감지
 local respawnConn = nil
@@ -179,7 +179,7 @@ local function setupAlignForTarget()
         end
     end
     
-    -- 새 Align 생성 (최고 성능)
+    -- 새 AlignPosition (위치 고정)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -194,12 +194,14 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
+    -- 새 AlignOrientation (회전 고정: 앞으로 45도 숙임)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
     alignRot.MaxTorque = math.huge
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
+    alignRot.CFrame = CFrame.Angles(math.rad(45), 0, 0)  -- 45도 앞으로 숙임
     alignRot.Parent = tHRP
 end
 
@@ -219,7 +221,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 1. AlignPosition 갱신 (Stepped, 물리 직전)
+    -- 1. AlignPosition/AlignOrientation 갱신 (Stepped, 물리 직전)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -237,15 +239,14 @@ local function startKickLoop()
             setupAlignForTarget()
         end
         
+        -- 위치 갱신
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = targetPos
         end
         
-        local rot = tHRP:FindFirstChild("KickRot")
-        if rot then
-            rot.CFrame = CFrame.Angles(0, 0, 0)
-        end
+        -- 회전은 AlignOrientation이 자동으로 처리하므로 별도 설정 불필요
+        -- 단, 회전 고정을 강화하기 위해 CFrame을 직접 설정할 수도 있지만, AlignOrientation으로 충분함
         
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
@@ -274,10 +275,8 @@ local function startKickLoop()
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
             end)
-            -- return 없음 → 리모트 누락 방지
         end
         
-        -- 200Hz 주기 (0.005초), SetOwner 1회, Detroit 2회
         kickCounter = kickCounter + 1
         if kickCounter % 3 == 0 then
             pcall(function()
@@ -321,7 +320,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (최적화 버전: Align만, 200Hz, 패킷 손실 방지)",
+    Name = "블롭맨 오너 킥 실행 (45도 앞으로 숙인 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -501,4 +500,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "최종 최적화: Stepped Align + Heartbeat 200Hz, 추가 기능 제거", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "45도 앞으로 숙인 고정 + AlignOrientation으로 회전 완전 고정", Duration = 3})
