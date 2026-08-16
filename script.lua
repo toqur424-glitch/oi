@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 부드럽고 끊김 없는 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 고정 유지, 리모트 호출 빠르게)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -136,9 +136,9 @@ local kickCounter = 0
 
 -- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
--- 별도 리모트 루프 (while + task.wait)
-local remoteLoopTask = nil
--- 리스폰 감지 (재설정/죽음 대응)
+-- 리모트 호출 (Heartbeat, 350Hz)
+local heartbeatConn = nil
+-- 리스폰 감지
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -172,7 +172,7 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 Align 제거 (혹시 남아있을 경우)
+    -- 기존 Align 제거
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
@@ -206,14 +206,14 @@ local function setupAlignForTarget()
 end
 
 local function startKickLoop()
-    if remoteLoopTask then task.cancel(remoteLoopTask) end
+    if heartbeatConn then heartbeatConn:Disconnect() end
     if steppedConn then steppedConn:Disconnect() end
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지 (대상이 죽거나 재설정하면 Align 재설정)
+    -- 리스폰 감지
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function()
             task.wait(0.1)
@@ -252,64 +252,53 @@ local function startKickLoop()
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
     end)
 
-    -- 2. 리모트 호출 (별도 루프, 350Hz, 1:1 번갈아, 부드럽게)
-    remoteLoopTask = task.spawn(function()
-        while kickLoopRunning do
-            if not selectedKickPlayer then 
-                task.wait(0.002857)
-                continue 
-            end
-            
-            local tChar = selectedKickPlayer.Character
-            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-            local tHum = tChar and tChar:FindFirstChild("Humanoid")
-            local myChar = plr.Character
-            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            
-            -- 캐릭터가 없거나 죽으면 루프를 멈추지 않고 대기
-            if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then
-                task.wait(0.002857)
-                continue
-            end
-            
-            -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
-            local dist = (tHRP.Position - myHRP.Position).Magnitude
-            if dist > 30 then
-                pcall(function()
-                    myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                end)
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
-            end
-            
-            -- 1:1 번갈아 호출 (350Hz)
-            kickCounter = kickCounter + 1
-            if kickCounter % 2 == 0 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
-            else
-                pcall(function()
-                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                end)
-            end
-            
-            task.wait(0.002857)  -- 350Hz
+    -- 2. 리모트 호출 (Heartbeat, 350Hz, 1:1 번갈아, 빠르게)
+    heartbeatConn = RunService.Heartbeat:Connect(function()
+        if not kickLoopRunning or not selectedKickPlayer then return end
+        
+        local tChar = selectedKickPlayer.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        local tHum = tChar and tChar:FindFirstChild("Humanoid")
+        local myChar = plr.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        
+        if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
+        
+        -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
+        local dist = (tHRP.Position - myHRP.Position).Magnitude
+        if dist > 30 then
+            pcall(function()
+                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+            end)
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+            end)
+        end
+        
+        -- 1:1 번갈아 호출 (350Hz)
+        kickCounter = kickCounter + 1
+        if kickCounter % 2 == 0 then
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+            end)
+        else
+            pcall(function()
+                rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+            end)
         end
     end)
 end
 
 local function stopKickLoop()
     kickLoopRunning = false
+    if heartbeatConn then
+        heartbeatConn:Disconnect()
+        heartbeatConn = nil
+    end
     if steppedConn then
         steppedConn:Disconnect()
         steppedConn = nil
-    end
-    if remoteLoopTask then
-        task.cancel(remoteLoopTask)
-        remoteLoopTask = nil
     end
     if respawnConn then
         respawnConn:Disconnect()
@@ -328,7 +317,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, 부드럽고 끊김 없는 고정)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, 고정 유지, 리모트 호출 빠르게)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -508,4 +497,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, 부드러운 고정, 리스폰 대응 완벽", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, 고정 유지, 리모트 호출 빠르게 (Heartbeat)", Duration = 3})
