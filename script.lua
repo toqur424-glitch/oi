@@ -60,7 +60,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (매 프레임 동시 호출)
+-- [GRAB 탭] - F키 킥 그랩 (1:1 번갈아)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -69,10 +69,12 @@ getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
+local fCounter = 0
 
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
+    fCounter = 0
     
     fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
@@ -91,12 +93,17 @@ local function startFKeyAttack(targetPlayer)
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            -- 매 프레임 SetOwner + Detroit 동시에
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
+            fCounter = fCounter + 1
+            if fCounter % 2 == 0 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                end)
+            else
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                end)
+            end
         end
     end)
 end
@@ -120,11 +127,12 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (매 프레임 동시 호출 + Heartbeat 동기화)
+-- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아, 250Hz, 완전 동기화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
+local kickCounter = 0
 
 -- Heartbeat 하나로 모든 작업 처리 (완전 동기화)
 local heartbeatConn = nil
@@ -200,6 +208,7 @@ local function startKickLoop()
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
+    kickCounter = 0
 
     -- 리스폰 감지
     if selectedKickPlayer then
@@ -209,7 +218,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 통합 Heartbeat 루프 (250Hz, Align 갱신 + 리모트 동시)
+    -- 통합 Heartbeat 루프 (250Hz, Align 갱신 + 리모트 1:1)
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -252,12 +261,18 @@ local function startKickLoop()
             end)
         end
         
-        -- 4. 매 프레임 SetOwner와 Detroit 동시 호출 (완전한 고정)
-        pcall(function()
-            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-            rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-            rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-        end)
+        -- 4. 1:1 번갈아 호출 (250Hz)
+        kickCounter = kickCounter + 1
+        if kickCounter % 2 == 0 then
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+            end)
+        else
+            pcall(function()
+                rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+            end)
+        end
         
         task.wait(0.004)  -- 250Hz
     end)
@@ -286,7 +301,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (매 프레임 동시 호출, 완전 동기화)",
+    Name = "블롭맨 오너 킥 실행 (1:1 번갈아, 250Hz, 완전 동기화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -466,4 +481,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "매 프레임 동시 호출 + Heartbeat 완전 동기화 (250Hz)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아, 250Hz, 완전 동기화 (추가 기능 제거)", Duration = 3})
