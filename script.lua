@@ -127,19 +127,18 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 분리 루프, 리스폰 시 초기화)
+-- [KICK 탭] - 블롭맨 오너 킥 (킥 시작 즉시 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
-local currentHRP = nil -- 현재 대상 HRP 저장 (리스폰 시 제거용)
 
 -- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
--- Heartbeat: 리모트 호출 (350Hz, task.wait)
+-- Heartbeat: 리모트 호출 (350Hz)
 local heartbeatConn = nil
--- 리스폰 감지 (강화)
+-- 리스폰 감지
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -166,17 +165,6 @@ KickTab:CreateInput({
     end
 })
 
-local function destroyOldAlign()
-    if currentHRP and currentHRP.Parent then
-        for _, v in pairs(currentHRP:GetChildren()) do
-            if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
-                v:Destroy()
-            end
-        end
-    end
-    currentHRP = nil
-end
-
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -184,10 +172,14 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 Align 제거 (안전)
-    destroyOldAlign()
+    -- 기존 Align 제거
+    for _, v in pairs(tHRP:GetChildren()) do
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+            v:Destroy()
+        end
+    end
     
-    -- 새 Align 생성
+    -- AlignPosition (위치 고정, 성능 최대)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -203,6 +195,7 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
+    -- AlignOrientation (회전 0도 고정)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
@@ -210,8 +203,6 @@ local function setupAlignForTarget()
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
-    
-    currentHRP = tHRP
 end
 
 local function startKickLoop()
@@ -222,11 +213,14 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터가 생성되면 기존 고정 제거 후 재설정
+    -- 리스폰 감지: 새 캐릭터가 생성되면 즉시 Align 설정
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
-            task.wait(0.2) -- 캐릭터가 완전히 로드될 때까지 대기
+            task.wait(0.1) -- 캐릭터 로드 대기
             setupAlignForTarget()
+            -- Stepped 루프가 즉시 적용되도록 강제 갱신
+            if steppedConn then steppedConn:Disconnect() end
+            steppedConn = RunService.Stepped:Connect(function() end) -- 더미 연결 (실제 갱신은 아래에서 함)
         end)
     end
 
@@ -261,7 +255,7 @@ local function startKickLoop()
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
     end)
 
-    -- 2. 리모트 호출 (Heartbeat, 350Hz, 1:1 번갈아, task.wait)
+    -- 2. 리모트 호출 (Heartbeat, 350Hz, 1:1 번갈아)
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -315,11 +309,20 @@ local function stopKickLoop()
         respawnConn:Disconnect()
         respawnConn = nil
     end
-    destroyOldAlign()
+    if selectedKickPlayer and selectedKickPlayer.Character then
+        local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if tHRP then
+            for _, v in pairs(tHRP:GetChildren()) do
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                    v:Destroy()
+                end
+            end
+        end
+    end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, 리스폰 시 기존 고정 제거 후 재설정)",
+    Name = "블롭맨 오너 킥 실행 (킥 시작 즉시 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -499,4 +502,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "350Hz, 리스폰 시 기존 고정 제거 후 재설정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "킥 시작 즉시 고정, 리스폰 대응 강화", Duration = 3})
