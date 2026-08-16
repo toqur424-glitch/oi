@@ -60,7 +60,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (1:1 번갈아)
+-- [GRAB 탭] - F키 킥 그랩 (1:1 번갈아, 200Hz)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아 + Stepped Align)
+-- [KICK 탭] - 블롭맨 오너 킥 (200Hz, 1:1, Align + BodyPosition 보조)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -172,12 +172,14 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
+    -- 기존 고정 장치 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyVelocity") then
             v:Destroy()
         end
     end
     
+    -- 1. AlignPosition (주 고정)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -199,13 +201,28 @@ local function setupAlignForTarget()
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
+    
+    -- 2. BodyPosition (보조 고정, 약한 힘으로 밀림 보정)
+    local bp = Instance.new("BodyPosition")
+    bp.Name = "KickBodyPos"
+    bp.MaxForce = Vector3.new(10000, 10000, 10000)
+    bp.P = 5000
+    bp.D = 1000
+    bp.Parent = tHRP
+    
+    -- 3. BodyVelocity (속도 0 유지, 관성 제거)
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "KickBodyVel"
+    bv.MaxForce = Vector3.new(10000, 10000, 10000)
+    bv.Velocity = Vector3.zero
+    bv.Parent = tHRP
 end
 
 local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- AlignPosition 갱신 (매 프레임, 물리 전)
+    -- AlignPosition 및 보조 장치 갱신 (매 프레임, 물리 전)
     alignSteppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -219,20 +236,36 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
+        -- 장치가 없으면 생성
         if not tHRP:FindFirstChild("KickAlign") then
             setupAlignForTarget()
         end
         
+        -- AlignPosition 위치 갱신
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = targetPos
         end
         
+        -- 회전 고정
         local rot = tHRP:FindFirstChild("KickRot")
         if rot then
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
+        -- BodyPosition 위치 갱신
+        local bp = tHRP:FindFirstChild("KickBodyPos")
+        if bp then
+            bp.Position = targetPos
+        end
+        
+        -- BodyVelocity 속도 0 유지
+        local bv = tHRP:FindFirstChild("KickBodyVel")
+        if bv then
+            bv.Velocity = Vector3.zero
+        end
+        
+        -- 물리 상태 제거
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         tHum.PlatformStand = true
@@ -306,7 +339,7 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyVelocity") then
                     v:Destroy()
                 end
             end
@@ -315,7 +348,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:1 번갈아 + Stepped Align)",
+    Name = "블롭맨 오너 킥 실행 (200Hz + Align + Body 보조)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -495,4 +528,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아 + Stepped Align + 200Hz + 안티그랩 대응", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "200Hz + 1:1 번갈아 + Align + Body보조 + 관성제거", Duration = 3})
