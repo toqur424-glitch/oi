@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (200Hz, 번갈아)
+-- [GRAB 탭] - F키 킥 그랩 (Align 극대화, 동기화 루프)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -96,7 +96,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (Align만, 200Hz로 빈틈 제거)
+-- [KICK 탭] - 블롭맨 오너 킥 (Align 극대화, 200Hz 동기화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -141,7 +141,7 @@ local function startKickLoop()
             local tHum = tChar and tChar:FindFirstChild("Humanoid")
             
             if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then
-                task.wait(0.005)  -- 200Hz
+                task.wait(0.005)
                 continue
             end
             
@@ -162,7 +162,7 @@ local function startKickLoop()
             -- 고정 위치: 내 머리 바로 위 20스터드 (x=0, y=20)
             local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
             
-            -- AlignPosition / AlignOrientation (이것만 유지)
+            -- ★★★ AlignPosition / AlignOrientation (극대화 설정) ★★★
             if not tHRP:FindFirstChild("KickAlign") then
                 for _, v in pairs(tHRP:GetChildren()) do
                     if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
@@ -179,21 +179,21 @@ local function startKickLoop()
                 alignPos.Name = "KickAlign"
                 alignPos.Attachment0 = att0
                 alignPos.Attachment1 = att1
-                alignPos.MaxForce = math.huge
-                alignPos.Responsiveness = 300
-                alignPos.RigidityEnabled = true
+                alignPos.MaxForce = math.huge          -- 힘 제한 없음
+                alignPos.Responsiveness = math.huge    -- 반응 속도 최대치
+                alignPos.RigidityEnabled = true        -- 강체 고정
                 alignPos.Parent = tHRP
                 
                 local alignRot = Instance.new("AlignOrientation")
                 alignRot.Name = "KickRot"
                 alignRot.Attachment0 = att0
                 alignRot.MaxTorque = math.huge
-                alignRot.Responsiveness = 300
+                alignRot.Responsiveness = math.huge
                 alignRot.RigidityEnabled = true
                 alignRot.Parent = tHRP
             end
             
-            -- 위치 갱신
+            -- 위치 갱신 (매 프레임)
             local align = tHRP:FindFirstChild("KickAlign")
             if align and align.Attachment1 then
                 align.Attachment1.WorldPosition = targetPos
@@ -211,7 +211,7 @@ local function startKickLoop()
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
             
-            -- SetOwner ↔ Detroit 번갈아 호출 (각 100Hz)
+            -- SetOwner ↔ Detroit 번갈아 호출 (각 100Hz, Align 갱신과 동기화)
             kickCounter = kickCounter + 1
             if kickCounter % 2 == 0 then
                 pcall(function()
@@ -244,7 +244,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (Align만, 200Hz 번갈아)",
+    Name = "블롭맨 오너 킥 실행 (Align 극대화 + 동기화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -424,4 +424,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "Align만, 200Hz로 빈틈 제거, 번갈아 리모트", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Align 극대화 (Responsiveness=math.huge) + 동기화 루프", Duration = 3})
