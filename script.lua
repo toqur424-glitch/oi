@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (BodyVelocity 제거, 300Hz, 1:1 번갈아, Align 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (280Hz, 1:1 번갈아, Align 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -217,7 +217,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 통합 Heartbeat 루프 (300Hz, 1:1 번갈아)
+    -- 통합 Heartbeat 루프 (280Hz, 1:1 번갈아)
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -258,7 +258,7 @@ local function startKickLoop()
             end)
         end
         
-        -- 1:1 번갈아 호출 (300Hz)
+        -- 1:1 번갈아 호출 (280Hz)
         kickCounter = kickCounter + 1
         if kickCounter % 2 == 0 then
             pcall(function()
@@ -271,7 +271,7 @@ local function startKickLoop()
             end)
         end
         
-        task.wait(0.00333)  -- 300Hz
+        task.wait(0.00357)  -- 280Hz
     end)
 end
 
@@ -298,7 +298,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (BodyVelocity 제거, 300Hz, 1:1 번갈아, Align 강화)",
+    Name = "블롭맨 오너 킥 실행 (280Hz, 1:1 번갈아, Align 강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -478,4 +478,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "BodyVelocity 제거, 300Hz, 1:1 번갈아, Align 강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "280Hz, 1:1 번갈아, Align 강화", Duration = 3})
