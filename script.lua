@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (200Hz, 1:1, Align + BodyPosition 보조)
+-- [KICK 탭] - 블롭맨 오너 킥 (하트 파트 고정 + Align + 1:1 번갈아)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -165,6 +165,37 @@ KickTab:CreateInput({
     end
 })
 
+local function setupHeartPart(targetHRP)
+    -- 하트 파트 생성 (시각적/보조 고정용)
+    local heart = Instance.new("Part")
+    heart.Name = "HeartPart"
+    heart.Size = Vector3.new(1, 1, 1)
+    heart.Material = Enum.Material.Neon
+    heart.Color = Color3.fromRGB(255, 0, 0)
+    heart.Transparency = 0.3
+    heart.CanCollide = false
+    heart.CanTouch = false
+    heart.CanQuery = false
+    heart.Massless = true
+    heart.Anchored = true
+    heart.Parent = targetHRP
+    
+    -- 하트 파트에 Attachment 추가 (AlignPosition 연결용)
+    local attHeart = Instance.new("Attachment", heart)
+    attHeart.Name = "HeartAtt"
+    
+    -- AlignPosition으로 하트 파트를 타겟 위치에 고정
+    local alignHeart = Instance.new("AlignPosition")
+    alignHeart.Name = "HeartAlign"
+    alignHeart.Attachment0 = attHeart
+    alignHeart.MaxForce = math.huge
+    alignHeart.Responsiveness = math.huge
+    alignHeart.RigidityEnabled = true
+    alignHeart.Parent = heart
+    
+    return heart
+end
+
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -172,9 +203,12 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 고정 장치 제거
+    -- 기존 Align 및 하트 파트 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyVelocity") then
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+            v:Destroy()
+        end
+        if v.Name == "HeartPart" then
             v:Destroy()
         end
     end
@@ -202,27 +236,16 @@ local function setupAlignForTarget()
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
     
-    -- 2. BodyPosition (보조 고정, 약한 힘으로 밀림 보정)
-    local bp = Instance.new("BodyPosition")
-    bp.Name = "KickBodyPos"
-    bp.MaxForce = Vector3.new(10000, 10000, 10000)
-    bp.P = 5000
-    bp.D = 1000
-    bp.Parent = tHRP
-    
-    -- 3. BodyVelocity (속도 0 유지, 관성 제거)
-    local bv = Instance.new("BodyVelocity")
-    bv.Name = "KickBodyVel"
-    bv.MaxForce = Vector3.new(10000, 10000, 10000)
-    bv.Velocity = Vector3.zero
-    bv.Parent = tHRP
+    -- 2. 하트 파트 (보조 고정)
+    local heartPart = setupHeartPart(tHRP)
+    -- 하트 파트의 위치를 타겟의 위치로 고정 (AlignPosition으로 이미 고정됨)
 end
 
 local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- AlignPosition 및 보조 장치 갱신 (매 프레임, 물리 전)
+    -- AlignPosition 및 하트 파트 갱신 (매 프레임, 물리 전)
     alignSteppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -253,17 +276,7 @@ local function startKickLoop()
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        -- BodyPosition 위치 갱신
-        local bp = tHRP:FindFirstChild("KickBodyPos")
-        if bp then
-            bp.Position = targetPos
-        end
-        
-        -- BodyVelocity 속도 0 유지
-        local bv = tHRP:FindFirstChild("KickBodyVel")
-        if bv then
-            bv.Velocity = Vector3.zero
-        end
+        -- 하트 파트가 있으면 위치 갱신 (AlignPosition이 이미 처리함)
         
         -- 물리 상태 제거
         tHRP.AssemblyLinearVelocity = Vector3.zero
@@ -339,7 +352,7 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyVelocity") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v.Name == "HeartPart" then
                     v:Destroy()
                 end
             end
@@ -348,7 +361,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (200Hz + Align + Body 보조)",
+    Name = "블롭맨 오너 킥 실행 (하트 파트 고정 + Align + 1:1 번갈아)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -528,4 +541,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "200Hz + 1:1 번갈아 + Align + Body보조 + 관성제거", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "하트 파트 고정 + Align + 1:1 번갈아 (Body 보조 제거)", Duration = 3})
