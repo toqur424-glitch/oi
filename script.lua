@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (삼중 고정 포함)
+-- [GRAB 탭] - F키 킥 그랩 (200Hz, 번갈아)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -96,7 +96,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (삼중 고정 시스템)
+-- [KICK 탭] - 블롭맨 오너 킥 (Align만, 200Hz로 빈틈 제거)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -147,7 +147,7 @@ local function startKickLoop()
             
             local dist = (tHRP.Position - myHRP.Position).Magnitude
             
-            -- ★ FETCH: 거리가 30 이상이면 자신을 대상 쪽으로 텔레포트
+            -- FETCH: 거리가 30 이상이면 자신을 대상 쪽으로 텔레포트
             if dist > 30 then
                 pcall(function()
                     myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
@@ -159,14 +159,10 @@ local function startKickLoop()
                 continue
             end
             
-            -- ★ 고정 위치: 내 머리 바로 위 20스터드 (x=0, y=20)
+            -- 고정 위치: 내 머리 바로 위 20스터드 (x=0, y=20)
             local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
             
-            -- =========================================================
-            -- ★★★ 삼중 고정 시스템 ★★★
-            -- =========================================================
-            
-            -- 1. AlignPosition (강체 고정)
+            -- AlignPosition / AlignOrientation (이것만 유지)
             if not tHRP:FindFirstChild("KickAlign") then
                 for _, v in pairs(tHRP:GetChildren()) do
                     if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
@@ -197,33 +193,10 @@ local function startKickLoop()
                 alignRot.Parent = tHRP
             end
             
-            -- 2. BodyPosition (물리 이중 고정)
-            if not tHRP:FindFirstChild("KickBodyPos") then
-                local bp = Instance.new("BodyPosition")
-                bp.Name = "KickBodyPos"
-                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bp.P = 1e6
-                bp.D = 1e5
-                bp.Parent = tHRP
-            end
-            
-            -- 3. CFrame 강제 덮어쓰기 (삼중 잠금)
-            pcall(function()
-                tHRP.CFrame = CFrame.new(targetPos)
-                tHRP.AssemblyLinearVelocity = Vector3.zero
-                tHRP.AssemblyAngularVelocity = Vector3.zero
-            end)
-            
-            -- AlignPosition 위치 갱신
+            -- 위치 갱신
             local align = tHRP:FindFirstChild("KickAlign")
             if align and align.Attachment1 then
                 align.Attachment1.WorldPosition = targetPos
-            end
-            
-            -- BodyPosition 위치 갱신
-            local bp = tHRP:FindFirstChild("KickBodyPos")
-            if bp then
-                bp.Position = targetPos
             end
             
             -- 회전 고정
@@ -232,11 +205,13 @@ local function startKickLoop()
                 rot.CFrame = CFrame.Angles(0, 0, 0)
             end
             
-            -- 물리 상태 강제
+            -- 물리 제거
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
             
-            -- ★ SetOwner ↔ Detroit 번갈아 호출 (각 100Hz)
+            -- SetOwner ↔ Detroit 번갈아 호출 (각 100Hz)
             kickCounter = kickCounter + 1
             if kickCounter % 2 == 0 then
                 pcall(function()
@@ -260,7 +235,7 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                     v:Destroy()
                 end
             end
@@ -269,7 +244,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (삼중 고정 시스템)",
+    Name = "블롭맨 오너 킥 실행 (Align만, 200Hz 번갈아)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -449,4 +424,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "삼중 고정 시스템 적용 (Align + Body + CFrame 강제)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Align만, 200Hz로 빈틈 제거, 번갈아 리모트", Duration = 3})
