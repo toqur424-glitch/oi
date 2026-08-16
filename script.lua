@@ -423,4 +423,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "200Hz 루프, SetOwner/Detroit 각 100Hz, 고정력 향상", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "200Hz 루프, SetOwner/Detroit 각 100Hz, Align 고정 유지", Duration = 3})
