@@ -38,7 +38,7 @@ local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
 local RagdollRemote = CharacterEvents and CharacterEvents:FindFirstChild("RagdollRemote")
 local StopAllVelocity = ReplicatedStorage:WaitForChild("GameCorrectionEvents"):WaitForChild("StopAllVelocity")
 
--- 1. StruggleEvent / ReleaseGrab 완전 차단 (핵 탈출 신호 무효화)
+-- 1. StruggleEvent / ReleaseGrab 완전 차단
 if StruggleEvent then
     StruggleEvent.OnClientEvent:Connect(function(...) return end)
 end
@@ -46,7 +46,7 @@ if ReleaseGrab then
     ReleaseGrab.OnClientEvent:Connect(function(...) return end)
 end
 
--- 2. BeingHeld 감지 시 SetNetworkOwner를 10회 연속 발사 (소유권 강제 유지)
+-- 2. BeingHeld 감지 시 소유권 강제 유지
 local BeingHeld = plr:WaitForChild("IsHeld", 10)
 if BeingHeld then
     BeingHeld:GetPropertyChangedSignal("Value"):Connect(function()
@@ -58,7 +58,7 @@ if BeingHeld then
                 if tHRP and tHum and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                     for i = 1, 10 do
                         pcall(function()
-                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
+                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP)
                             if RagdollRemote then
                                 RagdollRemote:FireServer(tHRP, 0)
                             end
@@ -113,7 +113,7 @@ local function startFKeyAttack(targetPlayer)
             fCounter = fCounter + 1
             if fCounter % 2 == 0 then
                 pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot)
                 end)
             else
                 pcall(function()
@@ -144,18 +144,15 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20)
+-- [KICK 탭] - 블롭맨 오너 킥 (500Hz, 1:1 번갈아, 고정력 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
--- 리모트 호출: 정밀 타이머 (500Hz, 별도 루프)
 local remoteTask = nil
--- 리스폰 감지 (강화)
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -196,7 +193,7 @@ local function setupAlignForTarget()
         end
     end
     
-    -- AlignPosition (위치 고정, 성능 최대)
+    -- AlignPosition
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -206,18 +203,18 @@ local function setupAlignForTarget()
     alignPos.Name = "KickAlign"
     alignPos.Attachment0 = att0
     alignPos.Attachment1 = att1
-    alignPos.MaxForce = math.huge
-    alignPos.MaxVelocity = math.huge
-    alignPos.Responsiveness = math.huge
+    alignPos.MaxForce = 1e9
+    alignPos.MaxVelocity = 1e9
+    alignPos.Responsiveness = 1e9
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
-    -- AlignOrientation (회전 0도 고정)
+    -- AlignOrientation
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
-    alignRot.MaxTorque = math.huge
-    alignRot.Responsiveness = math.huge
+    alignRot.MaxTorque = 1e9
+    alignRot.Responsiveness = 1e9
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 end
@@ -230,21 +227,19 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지 (강화): 새 캐릭터가 완전히 로드되고 체력이 0보다 클 때까지 대기
+    -- 리스폰 감지
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
             if hrp and hum then
-                -- 체력이 0보다 클 때까지 대기 (리스폰 완료)
                 local timeout = 0
                 while hum.Health <= 0 and timeout < 5 do
                     task.wait(0.1)
                     timeout = timeout + 0.1
                 end
-                task.wait(0.5) -- 추가 안전 대기
+                task.wait(0.5)
                 setupAlignForTarget()
-                -- 즉시 7, 20 위치로 강제 텔레포트
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
@@ -254,11 +249,18 @@ local function startKickLoop()
                         hrp.AssemblyAngularVelocity = Vector3.zero
                     end)
                 end
+                -- 소유권 재요청
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(hrp)
+                end)
+                pcall(function()
+                    hrp:SetNetworkOwner(plr)
+                end)
             end
         end)
     end
 
-    -- 1. Stepped: AlignPosition 갱신 (물리 직전, 보조)
+    -- 1. Stepped: Align 갱신 + 직접 CFrame 고정
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -270,7 +272,6 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        -- Align이 없으면 즉시 재생성 (리스폰 후 문제 방지)
         if not tHRP:FindFirstChild("KickAlign") then
             setupAlignForTarget()
         end
@@ -287,6 +288,11 @@ local function startKickLoop()
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
+        -- 직접 CFrame 강제 고정 (소유권 확보 시 효과 큼)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+        end)
+        
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         local tHum = tChar:FindFirstChild("Humanoid")
@@ -296,9 +302,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 (정밀 타이머, 500Hz, 1:1 번갈아)
+    -- 2. 리모트 호출 + 직접 고정 (500Hz)
     remoteTask = task.spawn(function()
-        local interval = 0.002 -- 500Hz
+        local interval = 0.002
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -311,14 +317,13 @@ local function startKickLoop()
             
             local tChar = selectedKickPlayer.Character
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-            local tHum = tChar and tChar:FindFirstChild("Humanoid")
+            local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
             local myChar = plr.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
             
-            -- Align이 없으면 즉시 재생성 (리모트 루프에서도 감시)
             if not tHRP:FindFirstChild("KickAlign") then
                 setupAlignForTarget()
             end
@@ -335,6 +340,19 @@ local function startKickLoop()
                 rot.CFrame = CFrame.Angles(0, 0, 0)
             end
             
+            -- 네트워크 소유권 요청 (인자 없이)
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP)
+            end)
+            pcall(function()
+                tHRP:SetNetworkOwner(plr)
+            end)
+            
+            -- 직접 CFrame 강제 고정
+            pcall(function()
+                tHRP.CFrame = CFrame.new(targetPos)
+            end)
+            
             tHRP.AssemblyLinearVelocity = Vector3.zero
             tHRP.AssemblyAngularVelocity = Vector3.zero
             if tHum then
@@ -350,10 +368,17 @@ local function startKickLoop()
                     end)
                 end
                 
+                -- 거리가 벌어지면 즉시 복구
+                if (tHRP.Position - targetPos).Magnitude > 5 then
+                    pcall(function()
+                        tHRP.CFrame = CFrame.new(targetPos)
+                    end)
+                end
+                
                 kickCounter = kickCounter + 1
                 if kickCounter % 2 == 0 then
                     pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP)
                     end)
                 else
                     pcall(function()
@@ -368,18 +393,9 @@ end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    if steppedConn then
-        steppedConn:Disconnect()
-        steppedConn = nil
-    end
-    if remoteTask then
-        task.cancel(remoteTask)
-        remoteTask = nil
-    end
-    if respawnConn then
-        respawnConn:Disconnect()
-        respawnConn = nil
-    end
+    if steppedConn then steppedConn:Disconnect() steppedConn = nil end
+    if remoteTask then task.cancel(remoteTask) remoteTask = nil end
+    if respawnConn then respawnConn:Disconnect() respawnConn = nil end
     if selectedKickPlayer and selectedKickPlayer.Character then
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
@@ -393,7 +409,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20)",
+    Name = "블롭맨 오너 킥 실행 (500Hz, 1:1 번갈아, 고정력 강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -457,7 +473,7 @@ KickTab:CreateToggle({
                 if not soundPart then return end
 
                 pcall(function()
-                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
+                    SetNetOwner:FireServer(soundPart)
                     DestroyLine:FireServer(soundPart)
                 end)
 
@@ -573,4 +589,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20, 리스폰 완전 대응", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20, 리스폰 완전 대응, 고정력 강화", Duration = 3})
