@@ -127,14 +127,14 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (강제 고정 제거, 리스폰 텔레포트 유지)
+-- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition 제거, 350Hz, 분리 루프)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: AlignPosition 갱신 (물리 직전, CFrame 강제 없음)
+-- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
 -- Heartbeat: 리모트 호출 (350Hz)
 local heartbeatConn = nil
@@ -270,6 +270,8 @@ local function startKickLoop()
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
     end)
@@ -341,7 +343,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (강제 고정 제거, 리스폰 텔레포트 유지)",
+    Name = "블롭맨 오너 킥 실행 (BodyPosition 제거, 350Hz, 분리 루프)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -521,4 +523,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "강제 고정 제거, 리스폰 텔레포트 유지", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "BodyPosition 제거, 350Hz, 분리 루프 (가장 안정적)", Duration = 3})
