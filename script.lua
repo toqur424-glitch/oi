@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (킥 시작 즉시 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (리스폰 시 위치 즉시 보정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -213,14 +213,29 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터가 생성되면 즉시 Align 설정
+    -- 리스폰 감지: 새 캐릭터가 생성되면 Align 설정 및 즉시 위치 보정
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
-            task.wait(0.1) -- 캐릭터 로드 대기
-            setupAlignForTarget()
-            -- Stepped 루프가 즉시 적용되도록 강제 갱신
-            if steppedConn then steppedConn:Disconnect() end
-            steppedConn = RunService.Stepped:Connect(function() end) -- 더미 연결 (실제 갱신은 아래에서 함)
+            local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
+            local hum = newChar:WaitForChild("Humanoid", 5)
+            if hrp and hum then
+                -- 캐릭터가 완전히 로드될 때까지 대기
+                while hum.Health <= 0 do task.wait(0.1) end
+                task.wait(0.2)
+                
+                setupAlignForTarget()
+                
+                -- 새 캐릭터의 위치를 즉시 목표 위치로 강제 이동
+                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+                    pcall(function()
+                        hrp.CFrame = CFrame.new(targetPos)
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    end)
+                end
+            end
         end)
     end
 
@@ -322,7 +337,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (킥 시작 즉시 고정)",
+    Name = "블롭맨 오너 킥 실행 (리스폰 시 위치 즉시 보정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -502,4 +517,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "킥 시작 즉시 고정, 리스폰 대응 강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "리스폰 시 위치 즉시 보정 (이상한 곳 고정 해결)", Duration = 3})
