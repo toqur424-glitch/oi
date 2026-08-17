@@ -96,7 +96,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 제거, 죽어도 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 제거, 죽어도 고정, X=3, Y=20)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -193,7 +193,7 @@ local function startKickLoop()
                 setupAlignForTarget()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+                    local targetPos = myHRP.Position + Vector3.new(3, 20, 0)
                     pcall(function()
                         hrp.CFrame = CFrame.new(targetPos)
                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -216,7 +216,7 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+        local targetPos = myHRP.Position + Vector3.new(3, 20, 0)
         
         if not tHRP:FindFirstChild("KickAlign") then
             setupAlignForTarget()
@@ -263,7 +263,7 @@ local function startKickLoop()
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
             
-            local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+            local targetPos = myHRP.Position + Vector3.new(3, 20, 0)
             
             if not tHRP:FindFirstChild("KickAlign") then
                 setupAlignForTarget()
@@ -337,7 +337,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (안티그랩 제거, 죽어도 고정)",
+    Name = "블롭맨 오너 킥 실행 (안티그랩 제거, 죽어도 고정, X=3, Y=20)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -517,4 +517,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 제거, 죽어도 고정 (가장 안정적인 버전)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "X=3, Y=20 위치로 변경 (다른 기능 수정 없음)", Duration = 3})
