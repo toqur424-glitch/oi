@@ -264,11 +264,12 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-        
+        -- Align이 없으면 즉시 재생성 (리스폰 후 문제 방지)
         if not tHRP:FindFirstChild("KickAlign") then
             setupAlignForTarget()
         end
+        
+        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
@@ -312,11 +313,6 @@ local function startKickLoop()
             if not (tChar and tHRP) then continue end
             
             local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-            
-            -- AlignPosition 갱신 (없으면 재생성)
-            if not tHRP:FindFirstChild("KickAlign") then
-                setupAlignForTarget()
-            end
             
             local align = tHRP:FindFirstChild("KickAlign")
             if align and align.Attachment1 then
@@ -566,4 +562,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20 (텔레포트 방지 제거)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20, Align 재생성 보강", Duration = 3})
