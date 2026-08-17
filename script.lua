@@ -96,7 +96,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (X=6, Y=20, 리스폰 완전 대응)
+-- [KICK 탭] - 블롭맨 오너 킥 (X=6, Y=20, 빈틈없는 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -182,22 +182,23 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지 (강화: 캐릭터가 완전히 로드되고 체력이 0보다 클 때까지 대기)
+    -- 리스폰 감지 (강화: 캐릭터 완전 로드 대기)
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
             if hrp and hum then
-                -- 체력이 0보다 클 때까지 대기 (리스폰 완료)
+                -- 체력 0 이상 될 때까지 충분히 대기
                 local timeout = 0
-                while hum.Health <= 0 and timeout < 5 do
+                while hum.Health <= 0 and timeout < 6 do
                     task.wait(0.1)
                     timeout = timeout + 0.1
                 end
-                task.wait(0.3) -- 추가 안전 대기
+                task.wait(0.4) -- 추가 안전 대기
+                
                 setupAlignForTarget()
                 
-                -- 즉시 6, 20 위치로 강제 텔레포트
+                -- 즉시 X=6, Y=20 위치로 강제 텔레포트
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(6, 20, 0)
@@ -344,7 +345,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (X=6, Y=20, 리스폰 완전 대응)",
+    Name = "블롭맨 오너 킥 실행 (X=6, Y=20, 빈틈없는 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -524,4 +525,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "X=6, Y=20, 리스폰 완전 대응 (여러 번 재설정에도 동일)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "X=6, Y=20, 빈틈없는 고정 (리스폰 완전 대응)", Duration = 3})
