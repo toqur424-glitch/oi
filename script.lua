@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지 (자기 레그돌 방지 제외)]
+-- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지 + 텔레포트 방지]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -46,7 +46,7 @@ if ReleaseGrab then
     ReleaseGrab.OnClientEvent:Connect(function(...) return end)
 end
 
--- 2. BeingHeld 감지 시 SetNetworkOwner를 20회 연속 발사 + RagdollRemote + StopAllVelocity (소유권 강제 유지 및 물리 제어)
+-- 2. BeingHeld 감지 시 SetNetworkOwner를 20회 연속 발사 (소유권 강제 유지)
 local BeingHeld = plr:WaitForChild("IsHeld", 10)
 if BeingHeld then
     BeingHeld:GetPropertyChangedSignal("Value"):Connect(function()
@@ -68,7 +68,6 @@ if BeingHeld then
                         end)
                         task.wait()
                     end
-                    -- 강제로 물리 상태 고정 (레그돌 해제)
                     tHum.PlatformStand = true
                     tHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
@@ -145,16 +144,16 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20)
+-- [KICK 탭] - 블롭맨 오너 킥 (텔레포트 방지 + 500Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: AlignPosition 갱신 (물리 직전, 보조)
+-- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
--- 리모트 호출: 정밀 타이머 (500Hz, 별도 루프, Align 갱신 + CFrame 강제 포함)
+-- 리모트 호출: 정밀 타이머 (500Hz, 별도 루프)
 local remoteTask = nil
 -- 리스폰 감지
 local respawnConn = nil
@@ -253,7 +252,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 1. Stepped: AlignPosition 갱신 (물리 직전, 보조)
+    -- 1. Stepped: AlignPosition 갱신 (물리 직전)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -290,7 +289,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 + Align 갱신 + CFrame 강제 (정밀 타이머, 500Hz)
+    -- 2. 리모트 호출 + 텔레포트 방지 (정밀 타이머, 500Hz, 1:1 번갈아)
     remoteTask = task.spawn(function()
         local interval = 0.002 -- 500Hz
         local nextTime = tick() + interval
@@ -329,20 +328,28 @@ local function startKickLoop()
                 rot.CFrame = CFrame.Angles(0, 0, 0)
             end
             
-            -- ★ CFrame 강제 덮어쓰기 (텔레포트 방지)
-            pcall(function()
-                tHRP.CFrame = CFrame.new(targetPos)
-                tHRP.AssemblyLinearVelocity = Vector3.zero
-                tHRP.AssemblyAngularVelocity = Vector3.zero
-            end)
+            -- ★ 텔레포트 감지 및 즉시 복구
+            local dist = (tHRP.Position - myHRP.Position).Magnitude
+            if dist > 40 then -- 갑작스러운 거리 증가 = 텔레포트 감지
+                pcall(function()
+                    tHRP.CFrame = CFrame.new(targetPos)
+                    tHRP.AssemblyLinearVelocity = Vector3.zero
+                    tHRP.AssemblyAngularVelocity = Vector3.zero
+                end)
+                -- 추가로 SetNetworkOwner 강제 발사
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            end
             
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
             if tHum then
                 tHum.PlatformStand = true
                 tHum:ChangeState(Enum.HumanoidStateType.Physics)
             end
             
             if tHum and tHum.Health > 0 then
-                local dist = (tHRP.Position - myHRP.Position).Magnitude
                 if dist > 30 then
                     pcall(function()
                         myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
@@ -572,4 +579,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20, CFrame 강제 추가", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20 (텔레포트 방지 추가)", Duration = 3})
