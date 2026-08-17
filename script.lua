@@ -60,7 +60,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (1:1 번갈아)
+-- [GRAB 탭] - F키 킥 그랩 (SetNetworkOwner만 사용)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -93,17 +93,10 @@ local function startFKeyAttack(targetPlayer)
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            fCounter = fCounter + 1
-            if fCounter % 2 == 0 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                end)
-            else
-                pcall(function()
-                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-                end)
-            end
+            -- SetNetworkOwner만 호출 (줄 끌어당김 제거)
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+            end)
         end
     end)
 end
@@ -127,7 +120,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (빈틈없는 이중 갱신 + 죽어도 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (줄 끌어당김 제거, 회전 고정, 350Hz 정밀 타이머)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -195,7 +188,7 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
-    -- AlignOrientation (회전 0도 고정)
+    -- AlignOrientation (회전 0도 고정, 회전 완전 제거)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
@@ -328,7 +321,7 @@ local function startKickLoop()
                 tHum:ChangeState(Enum.HumanoidStateType.Physics)
             end
             
-            -- 살아있을 때만 리모트 호출
+            -- 살아있을 때만 SetNetworkOwner 호출 (줄 끌어당김 없음)
             if tHum and tHum.Health > 0 then
                 -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
                 local dist = (tHRP.Position - myHRP.Position).Magnitude
@@ -336,23 +329,12 @@ local function startKickLoop()
                     pcall(function()
                         myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
                     end)
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
                 end
                 
-                -- 1:1 번갈아 호출
-                kickCounter = kickCounter + 1
-                if kickCounter % 2 == 0 then
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                else
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                    end)
-                end
+                -- 매 프레임 SetNetworkOwner만 호출 (속도 유지)
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
             end
         end
     end)
@@ -385,7 +367,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (빈틈없는 이중 갱신 + 죽어도 고정)",
+    Name = "블롭맨 오너 킥 실행 (줄 끌어당김 제거, 회전 고정, 350Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -565,4 +547,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "빈틈없는 이중 갱신 + 죽어도 고정 (고정력 강화)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "줄 끌어당김 제거, 회전 고정, 350Hz 정밀 타이머", Duration = 3})
