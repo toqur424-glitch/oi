@@ -155,7 +155,7 @@ local kickCounter = 0
 local steppedConn = nil
 -- 리모트 호출: 정밀 타이머 (500Hz, 별도 루프)
 local remoteTask = nil
--- 리스폰 감지
+-- 리스폰 감지 (강화)
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -230,15 +230,21 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 20으로 텔레포트 후 Align 설정
+    -- 리스폰 감지 (강화): 새 캐릭터가 완전히 로드되고 체력이 0보다 클 때까지 대기
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
             if hrp and hum then
-                while hum.Health <= 0 do task.wait(0.1) end
-                task.wait(0.2)
+                -- 체력이 0보다 클 때까지 대기 (리스폰 완료)
+                local timeout = 0
+                while hum.Health <= 0 and timeout < 5 do
+                    task.wait(0.1)
+                    timeout = timeout + 0.1
+                end
+                task.wait(0.3) -- 추가 안전 대기
                 setupAlignForTarget()
+                -- 즉시 7, 20 위치로 강제 텔레포트
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
@@ -252,7 +258,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 1. Stepped: AlignPosition 갱신 (물리 직전)
+    -- 1. Stepped: AlignPosition 갱신 (물리 직전, 보조)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -311,6 +317,11 @@ local function startKickLoop()
             
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
+            
+            -- Align이 없으면 즉시 재생성 (리모트 루프에서도 감시)
+            if not tHRP:FindFirstChild("KickAlign") then
+                setupAlignForTarget()
+            end
             
             local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
             
@@ -562,4 +573,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20, Align 재생성 보강", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20, 리스폰 완전 대응", Duration = 3})
