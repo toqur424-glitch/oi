@@ -35,6 +35,8 @@ local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
 local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 5)
 local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
+local RagdollRemote = CharacterEvents and CharacterEvents:FindFirstChild("RagdollRemote")
+local StopAllVelocity = ReplicatedStorage:WaitForChild("GameCorrectionEvents"):WaitForChild("StopAllVelocity")
 
 -- 1. StruggleEvent / ReleaseGrab 완전 차단 (핵 탈출 신호 무효화)
 if StruggleEvent then
@@ -44,7 +46,7 @@ if ReleaseGrab then
     ReleaseGrab.OnClientEvent:Connect(function(...) return end)
 end
 
--- 2. BeingHeld 감지 시 SetNetworkOwner를 5회 연속 발사 (소유권 강제 유지)
+-- 2. BeingHeld 감지 시 SetNetworkOwner를 20회 연속 발사 + RagdollRemote + StopAllVelocity (소유권 강제 유지 및 물리 제어)
 local BeingHeld = plr:WaitForChild("IsHeld", 10)
 if BeingHeld then
     BeingHeld:GetPropertyChangedSignal("Value"):Connect(function()
@@ -52,13 +54,23 @@ if BeingHeld then
             task.spawn(function()
                 local tChar = selectedKickPlayer and selectedKickPlayer.Character
                 local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                if tHRP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                    for i = 1, 5 do
+                local tHum = tChar and tChar:FindFirstChild("Humanoid")
+                if tHRP and tHum and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                    for i = 1, 20 do
                         pcall(function()
                             rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
+                            if RagdollRemote then
+                                RagdollRemote:FireServer(tHRP, 0)
+                            end
+                            if StopAllVelocity then
+                                StopAllVelocity:FireServer()
+                            end
                         end)
                         task.wait()
                     end
+                    -- 강제로 물리 상태 고정 (레그돌 해제)
+                    tHum.PlatformStand = true
+                    tHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
             end)
         end
@@ -552,4 +564,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20 (500Hz Align 갱신 추가)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20 (20회 장악)", Duration = 3})
