@@ -278,7 +278,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 (정밀 타이머, 500Hz, 1:1 번갈아, Align 감시 포함)
+    -- 2. 리모트 호출 (정밀 타이머, 500Hz, 1:1 번갈아)
     remoteTask = task.spawn(function()
         local interval = 0.002 -- 500Hz
         local nextTime = tick() + interval
@@ -299,11 +299,6 @@ local function startKickLoop()
             
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
-            
-            -- Align이 없으면 즉시 재생성 (끊김 방지)
-            if not tHRP:FindFirstChild("KickAlign") then
-                setupAlignForTarget()
-            end
             
             local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
             
@@ -555,4 +550,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20 (Align 감시 제거)", Duration = 3})
