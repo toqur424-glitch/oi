@@ -127,14 +127,14 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (즉시 20 고정 + 리스폰 후 재고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (강제 고정 제거, 리스폰 텔레포트 유지)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: AlignPosition 갱신 + CFrame 강제 (물리 직전)
+-- Stepped: AlignPosition 갱신 (물리 직전, CFrame 강제 없음)
 local steppedConn = nil
 -- Heartbeat: 리모트 호출 (350Hz)
 local heartbeatConn = nil
@@ -226,7 +226,7 @@ local function startKickLoop()
                 -- 1. AlignPosition 생성
                 setupAlignForTarget()
                 
-                -- 2. 즉시 20 위치로 강제 텔레포트
+                -- 2. 즉시 20 위치로 강제 텔레포트 (한 번만)
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
@@ -240,7 +240,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 1. Stepped: AlignPosition 갱신 + CFrame 강제 (물리 직전)
+    -- 1. Stepped: AlignPosition 갱신 (물리 직전, CFrame 강제 없음)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -269,13 +269,6 @@ local function startKickLoop()
         if rot then
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
-        
-        -- CFrame 강제 덮어쓰기 (고정력 강화)
-        pcall(function()
-            tHRP.CFrame = CFrame.new(targetPos)
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-        end)
         
         tHum.PlatformStand = true
         tHum:ChangeState(Enum.HumanoidStateType.Physics)
@@ -348,7 +341,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (즉시 20 고정 + 리스폰 후 재고정)",
+    Name = "블롭맨 오너 킥 실행 (강제 고정 제거, 리스폰 텔레포트 유지)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -528,4 +521,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "즉시 20 고정 + 리스폰 후 재고정 (CFrame 강제 유지)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "강제 고정 제거, 리스폰 텔레포트 유지", Duration = 3})
