@@ -38,7 +38,6 @@ local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
 local RagdollRemote = CharacterEvents and CharacterEvents:FindFirstChild("RagdollRemote")
 local StopAllVelocity = ReplicatedStorage:WaitForChild("GameCorrectionEvents"):WaitForChild("StopAllVelocity")
 
--- 1. StruggleEvent / ReleaseGrab 완전 차단
 if StruggleEvent then
     StruggleEvent.OnClientEvent:Connect(function(...) return end)
 end
@@ -46,7 +45,6 @@ if ReleaseGrab then
     ReleaseGrab.OnClientEvent:Connect(function(...) return end)
 end
 
--- 2. BeingHeld 감지 시 소유권 강제 유지
 local BeingHeld = plr:WaitForChild("IsHeld", 10)
 if BeingHeld then
     BeingHeld:GetPropertyChangedSignal("Value"):Connect(function()
@@ -58,7 +56,7 @@ if BeingHeld then
                 if tHRP and tHum and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                     for i = 1, 10 do
                         pcall(function()
-                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP)
+                            rs.GrabEvents.SetNetworkOwner:FireServer(selectedKickPlayer) -- 플레이어 객체 전달
                             if RagdollRemote then
                                 RagdollRemote:FireServer(tHRP, 0)
                             end
@@ -103,17 +101,25 @@ local function startFKeyAttack(targetPlayer)
         
         if not myRoot or not tgtRoot then return end
         
-        tgtRoot.AssemblyLinearVelocity = Vector3.zero
-        if tgtHum then tgtHum.PlatformStand = true end
+        -- 네트워크 소유권 요청 (플레이어 객체)
+        pcall(function()
+            rs.GrabEvents.SetNetworkOwner:FireServer(fAttackTarget)
+        end)
         
-        local camCF = camera.CFrame
-        pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
+        -- 소유권이 있을 때만 직접 조작
+        if tgtRoot:GetNetworkOwner() == plr then
+            tgtRoot.AssemblyLinearVelocity = Vector3.zero
+            if tgtHum then tgtHum.PlatformStand = true end
+            
+            local camCF = camera.CFrame
+            pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
+        end
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
             if fCounter % 2 == 0 then
                 pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot)
+                    rs.GrabEvents.SetNetworkOwner:FireServer(fAttackTarget)
                 end)
             else
                 pcall(function()
@@ -144,7 +150,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (500Hz, 1:1 번갈아, 고정력 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (500Hz, 소유권 확인 후 직접 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -186,14 +192,12 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 Align 제거
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
         end
     end
     
-    -- AlignPosition
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -209,7 +213,6 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
-    -- AlignOrientation
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
@@ -227,7 +230,6 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
@@ -249,9 +251,8 @@ local function startKickLoop()
                         hrp.AssemblyAngularVelocity = Vector3.zero
                     end)
                 end
-                -- 소유권 재요청
                 pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(hrp)
+                    rs.GrabEvents.SetNetworkOwner:FireServer(selectedKickPlayer)
                 end)
                 pcall(function()
                     hrp:SetNetworkOwner(plr)
@@ -260,7 +261,6 @@ local function startKickLoop()
         end)
     end
 
-    -- 1. Stepped: Align 갱신 + 직접 CFrame 고정
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -278,39 +278,43 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        local align = tHRP:FindFirstChild("KickAlign")
-        if align and align.Attachment1 then
-            align.Attachment1.WorldPosition = targetPos
-        end
-        
-        local rot = tHRP:FindFirstChild("KickRot")
-        if rot then
-            rot.CFrame = CFrame.Angles(0, 0, 0)
-        end
-        
-        -- 직접 CFrame 강제 고정 (소유권 확보 시 효과 큼)
-        pcall(function()
-            tHRP.CFrame = CFrame.new(targetPos)
-        end)
-        
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
-        local tHum = tChar:FindFirstChild("Humanoid")
-        if tHum then
-            tHum.PlatformStand = true
-            tHum:ChangeState(Enum.HumanoidStateType.Physics)
+        -- 소유권이 있을 때만 Align/CFrame 적용
+        if tHRP:GetNetworkOwner() == plr then
+            local align = tHRP:FindFirstChild("KickAlign")
+            if align and align.Attachment1 then
+                align.Attachment1.WorldPosition = targetPos
+            end
+            
+            local rot = tHRP:FindFirstChild("KickRot")
+            if rot then
+                rot.CFrame = CFrame.Angles(0, 0, 0)
+            end
+            
+            pcall(function()
+                tHRP.CFrame = CFrame.new(targetPos)
+            end)
+            
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+            local tHum = tChar:FindFirstChild("Humanoid")
+            if tHum then
+                tHum.PlatformStand = true
+                tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            end
+        else
+            -- 소유권 없으면 계속 요청
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(selectedKickPlayer)
+            end)
         end
     end)
 
-    -- 2. 리모트 호출 + 직접 고정 (500Hz)
     remoteTask = task.spawn(function()
         local interval = 0.002
         local nextTime = tick() + interval
         
         while kickLoopRunning do
-            while tick() < nextTime do
-                task.wait()
-            end
+            while tick() < nextTime do task.wait() end
             nextTime = nextTime + interval
             
             if not selectedKickPlayer then continue end
@@ -330,34 +334,33 @@ local function startKickLoop()
             
             local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
             
-            local align = tHRP:FindFirstChild("KickAlign")
-            if align and align.Attachment1 then
-                align.Attachment1.WorldPosition = targetPos
-            end
-            
-            local rot = tHRP:FindFirstChild("KickRot")
-            if rot then
-                rot.CFrame = CFrame.Angles(0, 0, 0)
-            end
-            
-            -- 네트워크 소유권 요청 (인자 없이)
+            -- 소유권 요청 (플레이어 객체)
             pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP)
-            end)
-            pcall(function()
-                tHRP:SetNetworkOwner(plr)
+                rs.GrabEvents.SetNetworkOwner:FireServer(selectedKickPlayer)
             end)
             
-            -- 직접 CFrame 강제 고정
-            pcall(function()
-                tHRP.CFrame = CFrame.new(targetPos)
-            end)
-            
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-            if tHum then
-                tHum.PlatformStand = true
-                tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            -- 소유권이 있을 때만 직접 조작
+            if tHRP:GetNetworkOwner() == plr then
+                local align = tHRP:FindFirstChild("KickAlign")
+                if align and align.Attachment1 then
+                    align.Attachment1.WorldPosition = targetPos
+                end
+                
+                local rot = tHRP:FindFirstChild("KickRot")
+                if rot then
+                    rot.CFrame = CFrame.Angles(0, 0, 0)
+                end
+                
+                pcall(function()
+                    tHRP.CFrame = CFrame.new(targetPos)
+                end)
+                
+                tHRP.AssemblyLinearVelocity = Vector3.zero
+                tHRP.AssemblyAngularVelocity = Vector3.zero
+                if tHum then
+                    tHum.PlatformStand = true
+                    tHum:ChangeState(Enum.HumanoidStateType.Physics)
+                end
             end
             
             if tHum and tHum.Health > 0 then
@@ -368,8 +371,7 @@ local function startKickLoop()
                     end)
                 end
                 
-                -- 거리가 벌어지면 즉시 복구
-                if (tHRP.Position - targetPos).Magnitude > 5 then
+                if (tHRP.Position - targetPos).Magnitude > 5 and tHRP:GetNetworkOwner() == plr then
                     pcall(function()
                         tHRP.CFrame = CFrame.new(targetPos)
                     end)
@@ -378,7 +380,7 @@ local function startKickLoop()
                 kickCounter = kickCounter + 1
                 if kickCounter % 2 == 0 then
                     pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP)
+                        rs.GrabEvents.SetNetworkOwner:FireServer(selectedKickPlayer)
                     end)
                 else
                     pcall(function()
@@ -409,7 +411,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (500Hz, 1:1 번갈아, 고정력 강화)",
+    Name = "블롭맨 오너 킥 실행 (500Hz, 소유권 확인)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -473,7 +475,7 @@ KickTab:CreateToggle({
                 if not soundPart then return end
 
                 pcall(function()
-                    SetNetOwner:FireServer(soundPart)
+                    SetNetOwner:FireServer(selectedKickPlayer) -- 플레이어 객체
                     DestroyLine:FireServer(soundPart)
                 end)
 
@@ -589,4 +591,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20, 리스폰 완전 대응, 고정력 강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 소유권 확인, 안티그랩 유지, 고정력 강화", Duration = 3})
