@@ -29,53 +29,6 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩 완전 파괴 (핵 뚫기)]
---=============================================
-local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
-local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
-local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 5)
-local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
-local RagdollRemote = CharacterEvents and CharacterEvents:FindFirstChild("RagdollRemote")
-local StopAllVelocity = ReplicatedStorage:WaitForChild("GameCorrectionEvents"):WaitForChild("StopAllVelocity")
-
--- 1. 탈출 리모트 완전 차단
-if StruggleEvent then
-    StruggleEvent.OnClientEvent:Connect(function(...) return end)
-end
-if ReleaseGrab then
-    ReleaseGrab.OnClientEvent:Connect(function(...) return end)
-end
-
--- 2. BeingHeld 감지 시 완전 장악
-local BeingHeld = plr:WaitForChild("IsHeld", 10)
-if BeingHeld then
-    BeingHeld:GetPropertyChangedSignal("Value"):Connect(function()
-        if BeingHeld.Value then
-            task.spawn(function()
-                local tChar = selectedKickPlayer and selectedKickPlayer.Character
-                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                local tHum = tChar and tChar:FindFirstChild("Humanoid")
-                if tHRP and tHum and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                    -- 10회 연속 SetOwner + RagdollRemote + StopAllVelocity
-                    for i = 1, 10 do
-                        pcall(function()
-                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
-                            RagdollRemote:FireServer(tHRP, 0)
-                            StopAllVelocity:FireServer()
-                        end)
-                        task.wait()
-                    end
-                    
-                    -- 래그돌 상태에서도 고정 유지
-                    tHum.PlatformStand = true
-                    tHum:ChangeState(Enum.HumanoidStateType.Physics)
-                end
-            end)
-        end
-    end)
-end
-
---=============================================
 -- [GRAB 탭] - F키 킥 그랩 (1:1 번갈아)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
@@ -143,7 +96,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 완전 뚫기 + 1:1 번갈아 + 350Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 제거, 죽어도 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -384,7 +337,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (안티그랩 완전 뚫기 + 1:1 번갈아 + 350Hz)",
+    Name = "블롭맨 오너 킥 실행 (안티그랩 제거, 죽어도 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -564,4 +517,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 완전 뚫기 + 1:1 번갈아 + 350Hz + RagdollRemote", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 제거, 죽어도 고정 (가장 안정적인 버전)", Duration = 3})
