@@ -133,7 +133,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (600Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20)
+-- [KICK 탭] - 블롭맨 오너 킥 (500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -142,7 +142,7 @@ local kickCounter = 0
 
 -- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
--- 리모트 호출: 정밀 타이머 (600Hz, 별도 루프)
+-- 리모트 호출: 정밀 타이머 (500Hz, 별도 루프)
 local remoteTask = nil
 -- 리스폰 감지
 local respawnConn = nil
@@ -278,9 +278,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 (정밀 타이머, 600Hz, 1:1 번갈아)
+    -- 2. 리모트 호출 (정밀 타이머, 500Hz, 1:1 번갈아)
     remoteTask = task.spawn(function()
-        local interval = 0.001667 -- 600Hz
+        local interval = 0.002 -- 500Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -374,7 +374,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (600Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20)",
+    Name = "블롭맨 오너 킥 실행 (500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -554,4 +554,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "600Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20", Duration = 3})
