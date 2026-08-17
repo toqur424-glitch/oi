@@ -154,7 +154,7 @@ local kickCounter = 0
 
 -- Stepped: AlignPosition 갱신 (물리 직전, 보조)
 local steppedConn = nil
--- 리모트 호출: 정밀 타이머 (500Hz, 별도 루프, Align 갱신 포함)
+-- 리모트 호출: 정밀 타이머 (500Hz, 별도 루프, Align 갱신 + CFrame 강제 포함)
 local remoteTask = nil
 -- 리스폰 감지
 local respawnConn = nil
@@ -290,7 +290,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 + Align 갱신 (정밀 타이머, 500Hz, 1:1 번갈아)
+    -- 2. 리모트 호출 + Align 갱신 + CFrame 강제 (정밀 타이머, 500Hz)
     remoteTask = task.spawn(function()
         local interval = 0.002 -- 500Hz
         local nextTime = tick() + interval
@@ -312,25 +312,33 @@ local function startKickLoop()
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
             
-            -- AlignPosition 갱신 (500Hz에서도 지속적으로 위치 고정)
-            if tHRP:FindFirstChild("KickAlign") then
-                local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                local align = tHRP:FindFirstChild("KickAlign")
-                if align and align.Attachment1 then
-                    align.Attachment1.WorldPosition = targetPos
-                end
-                local rot = tHRP:FindFirstChild("KickRot")
-                if rot then
-                    rot.CFrame = CFrame.Angles(0, 0, 0)
-                end
+            local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+            
+            -- AlignPosition 갱신 (없으면 재생성)
+            if not tHRP:FindFirstChild("KickAlign") then
+                setupAlignForTarget()
+            end
+            
+            local align = tHRP:FindFirstChild("KickAlign")
+            if align and align.Attachment1 then
+                align.Attachment1.WorldPosition = targetPos
+            end
+            
+            local rot = tHRP:FindFirstChild("KickRot")
+            if rot then
+                rot.CFrame = CFrame.Angles(0, 0, 0)
+            end
+            
+            -- ★ CFrame 강제 덮어쓰기 (텔레포트 방지)
+            pcall(function()
+                tHRP.CFrame = CFrame.new(targetPos)
                 tHRP.AssemblyLinearVelocity = Vector3.zero
                 tHRP.AssemblyAngularVelocity = Vector3.zero
-                if tHum then
-                    tHum.PlatformStand = true
-                    tHum:ChangeState(Enum.HumanoidStateType.Physics)
-                end
-            else
-                setupAlignForTarget()
+            end)
+            
+            if tHum then
+                tHum.PlatformStand = true
+                tHum:ChangeState(Enum.HumanoidStateType.Physics)
             end
             
             if tHum and tHum.Health > 0 then
@@ -564,4 +572,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20 (20회 장악)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "500Hz, 1:1 번갈아, 안티그랩 유지, X=7, Y=20, CFrame 강제 추가", Duration = 3})
