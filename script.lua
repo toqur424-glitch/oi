@@ -127,14 +127,14 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (죽어도 고정, 초반 고정 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (빈틈없는 고정 + 죽어도 고정 유지)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: AlignPosition 갱신 (물리 직전, 죽은 상태도 포함)
+-- Stepped: AlignPosition 갱신 (물리 직전, Health 조건 제거)
 local steppedConn = nil
 -- 리모트 호출: 정밀 타이머 (별도 루프, Health > 0 체크)
 local remoteTask = nil
@@ -213,20 +213,20 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지
+    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 20으로 텔레포트 후 Align 설정
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
             if hrp and hum then
-                -- 체력 회복 대기 (필요 시)
+                -- 캐릭터가 완전히 로드되고 체력이 회복될 때까지 대기
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
                 
-                -- 1. Align 생성
+                -- 1. AlignPosition 생성
                 setupAlignForTarget()
                 
-                -- 2. 즉시 20 위치로 텔레포트 및 Align 강제 갱신
+                -- 2. 즉시 20 위치로 강제 텔레포트 (한 번만)
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
@@ -235,31 +235,12 @@ local function startKickLoop()
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                     end)
-                    -- AlignPosition 즉시 갱신
-                    local align = hrp:FindFirstChild("KickAlign")
-                    if align and align.Attachment1 then
-                        align.Attachment1.WorldPosition = targetPos
-                    end
                 end
             end
         end)
     end
 
-    -- 킥 시작 시 즉시 Align 생성 및 위치 설정 (초반 고정 강화)
-    if selectedKickPlayer and selectedKickPlayer.Character then
-        setupAlignForTarget()
-        local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
-        local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        if tHRP and myHRP then
-            local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
-            local align = tHRP:FindFirstChild("KickAlign")
-            if align and align.Attachment1 then
-                align.Attachment1.WorldPosition = targetPos
-            end
-        end
-    end
-
-    -- 1. Stepped: AlignPosition 갱신 (물리 직전, 죽은 상태도 포함)
+    -- 1. Stepped: AlignPosition 갱신 (물리 직전, Health 조건 제거)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -380,7 +361,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (죽어도 고정, 초반 고정 강화)",
+    Name = "블롭맨 오너 킥 실행 (빈틈없는 고정 + 죽어도 고정 유지)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -560,4 +541,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "죽어도 고정 유지, 초반 고정 강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "빈틈없는 고정 + 죽어도 고정 유지 (추가 기능 없음)", Duration = 3})
