@@ -242,7 +242,7 @@ local function startKickLoop()
                     task.wait(0.1)
                     timeout = timeout + 0.1
                 end
-                task.wait(0.3) -- 추가 안전 대기
+                task.wait(0.5) -- 추가 안전 대기
                 setupAlignForTarget()
                 -- 즉시 7, 20 위치로 강제 텔레포트
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
