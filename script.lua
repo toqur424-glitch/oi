@@ -96,7 +96,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 제거, 죽어도 고정, X=5, Y=20)
+-- [KICK 탭] - 블롭맨 오너 킥 (X=6, Y=20, 리스폰 완전 대응)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -107,7 +107,7 @@ local kickCounter = 0
 local steppedConn = nil
 -- 리모트 호출 + Align 갱신: 정밀 타이머 (350Hz, 주 갱신)
 local remoteTask = nil
--- 리스폰 감지
+-- 리스폰 감지 (강화)
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -182,18 +182,25 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 20으로 텔레포트 후 Align 설정
+    -- 리스폰 감지 (강화: 캐릭터가 완전히 로드되고 체력이 0보다 클 때까지 대기)
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
             if hrp and hum then
-                while hum.Health <= 0 do task.wait(0.1) end
-                task.wait(0.2)
+                -- 체력이 0보다 클 때까지 대기 (리스폰 완료)
+                local timeout = 0
+                while hum.Health <= 0 and timeout < 5 do
+                    task.wait(0.1)
+                    timeout = timeout + 0.1
+                end
+                task.wait(0.3) -- 추가 안전 대기
                 setupAlignForTarget()
+                
+                -- 즉시 6, 20 위치로 강제 텔레포트
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(5, 20, 0)
+                    local targetPos = myHRP.Position + Vector3.new(6, 20, 0)
                     pcall(function()
                         hrp.CFrame = CFrame.new(targetPos)
                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -216,7 +223,7 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(5, 20, 0)
+        local targetPos = myHRP.Position + Vector3.new(6, 20, 0)
         
         if not tHRP:FindFirstChild("KickAlign") then
             setupAlignForTarget()
@@ -263,7 +270,7 @@ local function startKickLoop()
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
             
-            local targetPos = myHRP.Position + Vector3.new(5, 20, 0)
+            local targetPos = myHRP.Position + Vector3.new(6, 20, 0)
             
             if not tHRP:FindFirstChild("KickAlign") then
                 setupAlignForTarget()
@@ -337,7 +344,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (안티그랩 제거, 죽어도 고정, X=5, Y=20)",
+    Name = "블롭맨 오너 킥 실행 (X=6, Y=20, 리스폰 완전 대응)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -517,4 +524,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "X=5, Y=20 위치로 변경 (다른 기능 수정 없음)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "X=6, Y=20, 리스폰 완전 대응 (여러 번 재설정에도 동일)", Duration = 3})
