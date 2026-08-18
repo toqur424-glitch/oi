@@ -223,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (룹텔 → 셋오너킥 전환)
+-- [KICK 탭] - 블롭맨 오너 킥 (내가 가서 걸고 돌아오기)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -303,7 +303,7 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- [1] 내 현재 위치를 기억 (고정할 지점)
+    -- [1] 내 위치 기억 (킥을 켠 장소)
     local myChar = plr.Character
     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if not myHRP then
@@ -311,7 +311,10 @@ local function startKickLoop()
         kickLoopRunning = false
         return
     end
-    local anchorPos = myHRP.CFrame  -- 이 위치가 기준점이 됨
+    local anchorPos = myHRP.CFrame
+
+    -- 상태 관리: "teleport" (내가 상대에게 가는 단계), "kick" (고정 단계)
+    local kickState = "teleport"
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -320,143 +323,131 @@ local function startKickLoop()
             if hrp and hum then
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
-                -- 리스폰 시에는 다시 룹텔부터 시작
+                -- 리스폰 시에는 다시 텔레포트 단계부터
+                kickState = "teleport"
+                if steppedConn then steppedConn:Disconnect(); steppedConn = nil end
+                if remoteTask then task.cancel(remoteTask); remoteTask = nil end
                 setupAlignForTarget()
-                local targetPos = anchorPos.Position + Vector3.new(7, 20, 0)
-                pcall(function()
-                    hrp.CFrame = CFrame.new(targetPos)
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                    hrp.AssemblyAngularVelocity = Vector3.zero
-                end)
             end
         end)
     end
 
-    -- [2] 룹텔(반복 텔레포트)을 먼저 실행하여 타겟을 내 위치로 데려옴
-    local isGrabbed = false
-    local grabStartTime = tick()
+    -- 메인 루프 (Heartbeat)
+    local loopConn = RunService.Heartbeat:Connect(function()
+        if not kickLoopRunning then return end
 
-    -- 룹텔 루프 (0.05초마다 실행)
-    local loopTeleportConn = RunService.Heartbeat:Connect(function()
-        if not kickLoopRunning or not selectedKickPlayer then return end
-        
         local myChar = plr.Character
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        local tChar = selectedKickPlayer.Character
+        local tChar = selectedKickPlayer and selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         local tHum = tChar and tChar:FindFirstChild("Humanoid")
-        
-        if not (myChar and myHRP) or not (tChar and tHRP) or not tHum then return end
-        
-        -- 이미 잡혔으면 룹텔 종료
-        if isGrabbed then
-            loopTeleportConn:Disconnect()
+
+        if not (myChar and myHRP) or not (tChar and tHRP) or not tHum or tHum.Health <= 0 then
             return
         end
 
-        -- [3] 타겟을 내 위치로 강제 텔레포트
-        local targetPos = anchorPos.Position + Vector3.new(0, 0, 0) -- 바로 내 위치로
-        tHRP.CFrame = CFrame.new(targetPos)
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
-        
-        -- 소유권 강제 (룹텔 중에도 소유권 유지)
-        pcall(function()
-            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-        end)
+        -- ==========================================================
+        -- 1단계: 내가 상대한테 룹텔 (가서 셋오너 걸고 돌아오기)
+        -- ==========================================================
+        if kickState == "teleport" then
+            local targetPos = tHRP.CFrame
+            myHRP.CFrame = targetPos  -- 내가 상대 위치로 감
+            task.wait(0.05)           -- 잠시 머물러 소유권 획득 시도
 
-        -- [4] 거리 확인: 내 위치에 도착하면 (5스터드 이내)
-        local dist = (tHRP.Position - anchorPos.Position).Magnitude
-        if dist < 5 then
-            isGrabbed = true
-            Rayfield:Notify({Title = "성공", Content = "상대를 내 위치로 데려왔습니다! 셋오너 킥 시작", Duration = 2})
-            
-            -- [5] 이제 본격적인 셋오너 킥 실행 (기존 로직)
-            steppedConn = RunService.Stepped:Connect(function()
-                if not kickLoopRunning or not selectedKickPlayer then return end
-                
-                local myChar = plr.Character
-                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                local tChar = selectedKickPlayer.Character
-                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                
-                if not (myChar and myHRP) then return end
-                if not (tChar and tHRP) then return end
-                
-                local targetPos = anchorPos.Position + Vector3.new(7, 20, 0)
-                
-                if not tHRP:FindFirstChild("KickAlign") then
-                    setupAlignForTarget()
-                end
-                
-                local align = tHRP:FindFirstChild("KickAlign")
-                if align and align.Attachment1 then
-                    align.Attachment1.WorldPosition = targetPos
-                end
-                
-                local rot = tHRP:FindFirstChild("KickRot")
-                if rot then
-                    rot.CFrame = CFrame.Angles(0, 0, 0)
-                end
-                
-                tHRP.AssemblyLinearVelocity = Vector3.zero
-                tHRP.AssemblyAngularVelocity = Vector3.zero
-                
-                local tHum = tChar:FindFirstChild("Humanoid")
-                if tHum then
-                    tHum.PlatformStand = true
-                    tHum:ChangeState(Enum.HumanoidStateType.Physics)
-                end
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
             end)
 
-            -- [6] 550Hz 타이머로 SetNetworkOwner 갱신 (기존 유지)
-            remoteTask = task.spawn(function()
-                local interval = 0.00181818
-                local nextTime = tick() + interval
-                
-                while kickLoopRunning do
-                    while tick() < nextTime do
-                        task.wait()
-                    end
-                    nextTime = nextTime + interval
-                    
-                    if not selectedKickPlayer then continue end
-                    
-                    local tChar = selectedKickPlayer.Character
-                    local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                    local tHum = tChar and tChar:FindFirstChild("Humanoid")
-                    local myChar = plr.Character
-                    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                    
-                    if not (myChar and myHRP) then continue end
-                    if not (tChar and tHRP) then continue end
-                    
-                    kickCounter = kickCounter + 1
-                    if kickCounter % 2 == 1 then
-                        pcall(function()
-                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                        end)
-                    end
-                    
-                    if tHum and tHum.Health > 0 then
-                        local dist = (tHRP.Position - anchorPos.Position).Magnitude
-                        if dist > 30 then
-                            pcall(function()
-                                tHRP.CFrame = anchorPos * CFrame.new(7, 20, 0)
-                                tHRP.AssemblyLinearVelocity = Vector3.zero
-                                tHRP.AssemblyAngularVelocity = Vector3.zero
-                            end)
+            myHRP.CFrame = anchorPos   -- 다시 내 위치로 돌아옴
+
+            -- 2단계: 셋오너가 걸린게 확인되면 (소유권 획득)
+            local isOwner = false
+            pcall(function()
+                isOwner = (tHRP:FindFirstChild("PartOwner") and tHRP.PartOwner.Value == plr.Name)
+            end)
+
+            if isOwner then
+                Rayfield:Notify({Title = "성공", Content = "셋오너 소유권 획득! 킥 시작", Duration = 2})
+                kickState = "kick"
+
+                -- 3단계: 본격적인 셋오너 킥 실행 (AlignPosition + SetOwner 유지)
+                if not steppedConn then
+                    steppedConn = RunService.Stepped:Connect(function()
+                        if not kickLoopRunning or kickState ~= "kick" then return end
+                        local myChar = plr.Character
+                        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                        local tChar = selectedKickPlayer and selectedKickPlayer.Character
+                        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                        if not (myChar and myHRP) or not (tChar and tHRP) then return end
+
+                        local targetPos = anchorPos.Position + Vector3.new(7, 20, 0)
+
+                        if not tHRP:FindFirstChild("KickAlign") then setupAlignForTarget() end
+
+                        local align = tHRP:FindFirstChild("KickAlign")
+                        if align and align.Attachment1 then
+                            align.Attachment1.WorldPosition = targetPos
                         end
-                    end
+
+                        local rot = tHRP:FindFirstChild("KickRot")
+                        if rot then rot.CFrame = CFrame.Angles(0, 0, 0) end
+
+                        tHRP.AssemblyLinearVelocity = Vector3.zero
+                        tHRP.AssemblyAngularVelocity = Vector3.zero
+
+                        local tHum = tChar:FindFirstChild("Humanoid")
+                        if tHum then
+                            tHum.PlatformStand = true
+                            tHum:ChangeState(Enum.HumanoidStateType.Physics)
+                        end
+                    end)
                 end
-            end)
+
+                if not remoteTask then
+                    remoteTask = task.spawn(function()
+                        local interval = 0.00181818 -- 550Hz
+                        local nextTime = tick() + interval
+                        while kickLoopRunning and kickState == "kick" do
+                            while tick() < nextTime do task.wait() end
+                            nextTime = nextTime + interval
+
+                            local tChar = selectedKickPlayer and selectedKickPlayer.Character
+                            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                            local tHum = tChar and tChar:FindFirstChild("Humanoid")
+                            local myChar = plr.Character
+                            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+                            if not (myChar and myHRP) or not (tChar and tHRP) then continue end
+
+                            kickCounter = kickCounter + 1
+                            if kickCounter % 2 == 1 then
+                                pcall(function()
+                                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                                end)
+                            end
+
+                            -- 4단계: 상대가 범위 20 이상으로 튀면 다시 1단계로
+                            if tHum and tHum.Health > 0 then
+                                local dist = (tHRP.Position - anchorPos.Position).Magnitude
+                                if dist > 20 then
+                                    Rayfield:Notify({Title = "알림", Content = "상대가 튀었습니다. 다시 룹텔 시작", Duration = 2})
+                                    kickState = "teleport"
+                                    if steppedConn then steppedConn:Disconnect(); steppedConn = nil end
+                                    if remoteTask then task.cancel(remoteTask); remoteTask = nil end
+                                    break
+                                end
+                            end
+                        end
+                    end)
+                end
+            end
         end
     end)
 
-    -- [7] 안전장치: 5초 안에 안 잡히면 자동 종료
-    task.delay(5, function()
-        if not isGrabbed and kickLoopRunning then
-            Rayfield:Notify({Title = "실패", Content = "5초 내에 상대를 데려오지 못했습니다. 종료합니다.", Duration = 3})
+    -- 안전장치: 10초 안에 소유권을 못 잡으면 자동 종료
+    task.delay(10, function()
+        if kickState == "teleport" and kickLoopRunning then
+            Rayfield:Notify({Title = "실패", Content = "10초 내에 소유권을 획득하지 못했습니다. 종료합니다.", Duration = 3})
             stopKickLoop()
         end
     end)
@@ -489,7 +480,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (룹텔 → 셋오너킥)",
+    Name = "블롭맨 오너 킥 (내가 가서 걸고 돌아오기)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -706,4 +697,4 @@ end
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 룹텔 → 셋오너킥 전환, 550Hz 정밀 타이머, SetOwner 1:Destroy 2 (순서: SetOwner → Destroy → Destroy)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 내가 가서 걸고 돌아오기, 550Hz 정밀 타이머", Duration = 3})
