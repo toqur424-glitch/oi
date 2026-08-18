@@ -69,7 +69,7 @@ end
 local setOwnerRatio = 3  -- 1:2 비율 (SetOwner 1번, Destroy 2번)
 
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩
+-- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -137,8 +137,7 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         local holdPos = camCF.Position + camCF.LookVector * 20
 
-        pcall(function() tgtRoot.CFrame = CFrame.new(holdPos) end)
-
+        -- AlignPosition으로 고정 (매 프레임 위치 업데이트)
         local align = tgtRoot:FindFirstChild("FKeyAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = holdPos
@@ -148,18 +147,17 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            fCounter = fCounter + 1
-            if fCounter % setOwnerRatio == 1 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                end)
-            else
-                pcall(function()
-                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-                end)
-            end
+        -- SetOwner와 DestroyGrabLine 번갈아 전송 (고정력 유지)
+        fCounter = fCounter + 1
+        if fCounter % setOwnerRatio == 1 then
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+            end)
+        else
+            pcall(function()
+                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+            end)
         end
     end)
 end
@@ -208,7 +206,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행",
+    Name = "카메라 조준 킥 그랩 실행 (고정력 강화)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -223,7 +221,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥
+-- [KICK 탭] - 블롭맨 오너 킥 (고정력 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -455,7 +453,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (안티그랩 유지, X=7, Y=20)",
+    Name = "블롭맨 오너 킥 실행 (고정력 강화, X=7, Y=20)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -470,10 +468,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - Massless 제거, 90도 회전]
+-- [팔레트 레그돌 (Invis) - 처음 버전으로 원복 (위아래 번갈아 강타)]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 90도 세워서 꽂기 (Massless 제거)",
+    Name = "Pallet Ragdoll (Invis) - 원복 버전 (위아래 번갈아)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -529,13 +527,14 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5   -- 50% 투명도 (내 시점)
-                            -- Massless 제거
+                            v.Transparency = 0.5   -- 50% 투명도
                         end
                     end
 
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
+
+                    local strikePhase = false
 
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
@@ -552,11 +551,14 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 타겟의 HRP 위치로 순간이동 + 90도 회전 (수직)
-                                soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e6, 0)
-                                soundPart.CanCollide = false
-                                -- Massless 제거됨
+                                strikePhase = not strikePhase
+                                if strikePhase then
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
+                                else
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
+                                end
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
