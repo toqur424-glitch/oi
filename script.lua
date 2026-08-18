@@ -278,9 +278,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 (정밀 타이머, 350Hz, 1:1 번갈아)
+    -- 2. 리모트 호출 (정밀 타이머, 550Hz, 1:1 번갈아)
     remoteTask = task.spawn(function()
-        local interval = 0.002857 -- 350Hz
+        local interval = 0.00181818 -- 550Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -554,4 +554,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz 정밀 타이머", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 550Hz 정밀 타이머", Duration = 3})
