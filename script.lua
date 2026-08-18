@@ -223,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (내가 가서 걸고 돌아오기)
+-- [KICK 탭] - 블롭맨 오너 킥 (상대 뒤로 룹텔)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -347,11 +347,12 @@ local function startKickLoop()
         end
 
         -- ==========================================================
-        -- 1단계: 내가 상대한테 룹텔 (가서 셋오너 걸고 돌아오기)
+        -- 1단계: 내가 상대한테 룹텔 (상대 기준 뒤쪽으로 가서 셋오너 걸고 돌아오기)
         -- ==========================================================
         if kickState == "teleport" then
-            local targetPos = tHRP.CFrame
-            myHRP.CFrame = targetPos  -- 내가 상대 위치로 감
+            -- [수정] 상대방의 정면 기준 "뒤쪽"으로 약간 이동 (Z축 -4)
+            local targetPos = tHRP.CFrame * CFrame.new(0, 0, -4)
+            myHRP.CFrame = targetPos  -- 내가 상대 위치 뒤로 감
             task.wait(0.05)           -- 잠시 머물러 소유권 획득 시도
 
             pcall(function()
@@ -480,7 +481,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (내가 가서 걸고 돌아오기)",
+    Name = "블롭맨 오너 킥 (상대 뒤로 룹텔)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -697,4 +698,4 @@ end
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 내가 가서 걸고 돌아오기, 550Hz 정밀 타이머", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 상대 뒤로 룹텔, 550Hz 정밀 타이머", Duration = 3})
