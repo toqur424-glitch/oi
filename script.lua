@@ -470,7 +470,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - XOCU 이식]
+-- [팔레트 레그돌 (Invis) - 고정력 강화 버전]
 --=============================================
 do
     local RS = game:GetService("ReplicatedStorage")
@@ -478,10 +478,17 @@ do
     local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
     local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
     local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
+    local SpawnToy = RS:WaitForChild("MenuToys"):WaitForChild("SpawnToyRemoteFunction")
     local toysFolder = workspace:WaitForChild(plr.Name .. "SpawnedInToys")
     local lpName = plr.Name
 
-    -- Clean up existing frame connections
+    -- 공유 변수
+    getgenv().palletRagdollActive = false
+    getgenv().PalletForRagdoll = nil
+    getgenv().palletCacheConn = nil
+    getgenv().ragdollSteppedConn = nil
+    getgenv().spawnNewPallet = nil
+
     local function clearAttackLoop()
         if getgenv().ragdollSteppedConn then
             getgenv().ragdollSteppedConn:Disconnect()
@@ -490,13 +497,13 @@ do
     end
 
     KickTab:CreateToggle({
-        Name = "Pallet Ragdoll (Invis) - 위아래 강타",
+        Name = "Pallet Ragdoll (Invis) - 고정력 강화",
         Flag = "Ragdoll Target",
         Default = false,
         Callback = function(Value)
             if Value then
                 if not selectedKickPlayer then
-                    Rayfield:Notify({Title = "알림", Content = "Select target first (타겟을 먼저 입력해주세요)", Duration = 3})
+                    Rayfield:Notify({Title = "알림", Content = "타겟을 먼저 입력해주세요!", Duration = 3})
                     return
                 end
 
@@ -513,6 +520,7 @@ do
                     return
                 end
 
+                -- 팔레트가 생성될 때마다 실행
                 getgenv().palletCacheConn = toysFolder.ChildAdded:Connect(function(child)
                     if not getgenv().palletRagdollActive then return end
                     if child.Name ~= "PalletLightBrown" and child.Name ~= "PalletForRagdoll" then return end
@@ -520,13 +528,18 @@ do
                     local soundPart = child:WaitForChild("SoundPart", 3)
                     if not soundPart then return end
 
-                    pcall(function()
-                        SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                        DestroyLine:FireServer(soundPart)
-                    end)
+                    -- 소유권 강제 획득 (3번 반복)
+                    for i = 1, 3 do
+                        pcall(function()
+                            SetNetOwner:FireServer(soundPart, soundPart.CFrame)
+                            DestroyLine:FireServer(soundPart)
+                        end)
+                        task.wait(0.05)
+                    end
 
-                    local partOwner = soundPart:WaitForChild("PartOwner", 1)
+                    local partOwner = soundPart:WaitForChild("PartOwner", 2)
                     if partOwner and partOwner.Value == lpName then
+                        -- 팔레트 투명화 및 충돌 해제
                         for _, v in pairs(child:GetChildren()) do
                             if v:IsA("BasePart") then
                                 v.CanCollide = false
@@ -538,8 +551,20 @@ do
                         child.Name = "PalletForRagdoll"
                         getgenv().PalletForRagdoll = child
 
+                        -- 타겟 고정을 위한 AlignPosition 추가
+                        local att0 = Instance.new("Attachment", soundPart)
+                        att0.Name = "PalletAttach"
+                        local align = Instance.new("AlignPosition")
+                        align.Name = "PalletAlign"
+                        align.Attachment0 = att0
+                        align.MaxForce = math.huge
+                        align.Responsiveness = math.huge
+                        align.RigidityEnabled = true
+                        align.Parent = soundPart
+
                         local strikePhase = false
 
+                        -- 메인 루프 (Stepped에서 실행)
                         getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                             if not getgenv().palletRagdollActive or not child.Parent then 
                                 clearAttackLoop()
@@ -553,6 +578,11 @@ do
                             if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
                                 local ragdolledVal = tHum:FindFirstChild("Ragdolled")
                                 local isRagdolled = ragdolledVal and ragdolledVal.Value or false
+
+                                -- 소유권 유지 (지속적으로 갱신)
+                                pcall(function()
+                                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
+                                end)
 
                                 if not isRagdolled then
                                     strikePhase = not strikePhase
@@ -573,12 +603,13 @@ do
                             end
                         end)
 
+                        -- 팔레트가 사라지면 자동 재스폰
                         child.AncestryChanged:Connect(function()
                             if not child.Parent then
                                 clearAttackLoop()
                                 getgenv().PalletForRagdoll = nil
                                 if getgenv().palletRagdollActive then
-                                    task.wait(0.03)
+                                    task.wait(0.1)
                                     if getgenv().spawnNewPallet then getgenv().spawnNewPallet() end
                                 end
                             end
@@ -588,6 +619,7 @@ do
                     end
                 end)
 
+                -- 팔레트 스폰 함수
                 getgenv().spawnNewPallet = function()
                     if not getgenv().palletRagdollActive then return end
                     if getgenv().PalletForRagdoll and getgenv().PalletForRagdoll.Parent then return end
@@ -598,7 +630,7 @@ do
 
                     task.spawn(function()
                         pcall(function()
-                            RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
+                            SpawnToy:InvokeServer(
                                 "PalletLightBrown",
                                 h.CFrame * CFrame.new(0, 10, 20),
                                 Vector3.zero
@@ -607,8 +639,10 @@ do
                     end)
                 end
 
+                -- 최초 스폰
                 getgenv().spawnNewPallet()
             else
+                -- 종료 시 정리
                 getgenv().palletRagdollActive = false
                 clearAttackLoop()
 
