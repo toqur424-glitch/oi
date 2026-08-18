@@ -223,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (룹텔 + 셋오너 드래그)
+-- [KICK 탭] - 블롭맨 오너 킥 (룹텔 + 즉시 킥)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -313,7 +313,7 @@ local function startKickLoop()
     end
     local anchorPos = myHRP.CFrame
 
-    -- 상태 관리: "teleport" (내가 상대에게 가는 단계), "drag" (상대를 끌어당기는 단계), "kick" (고정 단계)
+    -- 상태 관리: "teleport" (내가 상대에게 가는 단계), "kick" (고정 단계)
     local kickState = "teleport"
 
     if selectedKickPlayer then
@@ -367,44 +367,13 @@ local function startKickLoop()
             end)
 
             if isOwner then
-                Rayfield:Notify({Title = "성공", Content = "셋오너 소유권 획득! 드래그 시작", Duration = 2})
-                kickState = "drag"
-            end
-        end
-
-        -- ==========================================================
-        -- 2단계: 셋오너로 상대를 내 위치로 끌어당기기 (드래그)
-        -- ==========================================================
-        if kickState == "drag" then
-            -- 상대를 내 위치(anchorPos)로 0.5초 동안 점진적으로 이동
-            local startPos = tHRP.Position
-            local endPos = anchorPos.Position + Vector3.new(7, 20, 0)
-            local duration = 0.5
-            local startTime = tick()
-
-            while tick() - startTime < duration and kickLoopRunning and kickState == "drag" do
-                local alpha = (tick() - startTime) / duration
-                local currentPos = startPos:Lerp(endPos, alpha)
-                tHRP.CFrame = CFrame.new(currentPos)
-                tHRP.AssemblyLinearVelocity = Vector3.zero
-                tHRP.AssemblyAngularVelocity = Vector3.zero
-
-                -- 드래그 중에도 소유권 유지
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
-                task.wait()
-            end
-
-            -- 드래그 완료 후 킥 상태로 전환
-            if kickLoopRunning and kickState == "drag" then
-                Rayfield:Notify({Title = "드래그 완료", Content = "이제 고정 시작", Duration = 2})
+                Rayfield:Notify({Title = "성공", Content = "셋오너 소유권 획득! 킥 시작", Duration = 2})
                 kickState = "kick"
             end
         end
 
         -- ==========================================================
-        -- 3단계: 본격적인 셋오너 킥 실행 (AlignPosition + SetOwner 유지)
+        -- 2단계: 본격적인 셋오너 킥 실행 (AlignPosition + SetOwner 유지)
         -- ==========================================================
         if kickState == "kick" then
             if not steppedConn then
@@ -462,7 +431,7 @@ local function startKickLoop()
                             end)
                         end
 
-                        -- 4단계: 상대가 범위 20 이상으로 튀면 다시 1단계로
+                        -- 3단계: 상대가 범위 20 이상으로 튀면 다시 1단계로
                         if tHum and tHum.Health > 0 then
                             local dist = (tHRP.Position - anchorPos.Position).Magnitude
                             if dist > 20 then
@@ -515,7 +484,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (룹텔 + 셋오너 드래그)",
+    Name = "블롭맨 오너 킥 (룹텔 + 즉시 킥)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -732,4 +701,4 @@ end
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 룹텔 + 셋오너 드래그, 550Hz 정밀 타이머", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 룹텔 + 즉시 킥, 550Hz 정밀 타이머", Duration = 3})
