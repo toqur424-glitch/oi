@@ -78,56 +78,12 @@ local fAttackTarget = nil
 local fCounter = 0
 local selectedGrabPlayer = nil  -- Grab 탭 전용 타겟
 
--- F키 공격용 Align 생성 함수
-local function setupFKeyAlign(targetPlayer)
-    local tChar = targetPlayer and targetPlayer.Character
-    local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-    if not tHRP then return end
-
-    -- 기존 FKey Align 제거 (중복 방지)
-    for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
-        if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
-    end
-
-    -- Attachment0 (대상)
-    local att0 = Instance.new("Attachment", tHRP)
-    att0.Name = "FKeyAtt0"
-
-    -- Attachment1 (고정 위치용, Terrain에 생성)
-    local att1 = Instance.new("Attachment", workspace.Terrain)
-    att1.Name = "FKeyAtt1"
-
-    -- AlignPosition
-    local alignPos = Instance.new("AlignPosition")
-    alignPos.Name = "FKeyAlign"
-    alignPos.Attachment0 = att0
-    alignPos.Attachment1 = att1
-    alignPos.MaxForce = math.huge
-    alignPos.MaxVelocity = math.huge
-    alignPos.Responsiveness = math.huge
-    alignPos.RigidityEnabled = true
-    alignPos.Parent = tHRP
-
-    -- AlignOrientation (회전 0도 고정)
-    local alignRot = Instance.new("AlignOrientation")
-    alignRot.Name = "FKeyRot"
-    alignRot.Attachment0 = att0
-    alignRot.MaxTorque = math.huge
-    alignRot.Responsiveness = math.huge
-    alignRot.RigidityEnabled = true
-    alignRot.Parent = tHRP
-end
-
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
     fCounter = 0
 
-    -- Align 초기화
-    setupFKeyAlign(targetPlayer)
-
-    -- 기존 Heartbeat 대신 10,000Hz 고주파 루프 사용
+    -- 10,000Hz 고주파 루프 (고정법 없이 원격 호출만)
     fAttackConnection = task.spawn(function()
         local interval = 1 / 10000  -- 10,000Hz
         local nextTime = tick() + interval
@@ -139,28 +95,8 @@ local function startFKeyAttack(targetPlayer)
             local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             local tgtChar = fAttackTarget.Character
             local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
-            local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
 
             if myRoot and tgtRoot then
-                tgtRoot.AssemblyLinearVelocity = Vector3.zero
-                if tgtHum then tgtHum.PlatformStand = true end
-
-                local camCF = camera.CFrame
-                local holdPos = camCF.Position + camCF.LookVector * 20
-
-                -- 텔레포트 (1회성) + Align으로 지속 고정
-                pcall(function() tgtRoot.CFrame = CFrame.new(holdPos) end)
-
-                -- Align 갱신
-                local align = tgtRoot:FindFirstChild("FKeyAlign")
-                if align and align.Attachment1 then
-                    align.Attachment1.WorldPosition = holdPos
-                end
-                local rot = tgtRoot:FindFirstChild("FKeyRot")
-                if rot then
-                    rot.CFrame = CFrame.Angles(0, 0, 0)
-                end
-
                 if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
                     fCounter = fCounter + 1
                     if fCounter % 2 == 0 then
@@ -184,17 +120,6 @@ local function stopFKeyAttack()
     if fAttackConnection then
         task.cancel(fAttackConnection)
         fAttackConnection = nil
-    end
-
-    -- Align 정리
-    if fAttackTarget and fAttackTarget.Character then
-        local tHRP = fAttackTarget.Character:FindFirstChild("HumanoidRootPart")
-        if tHRP then
-            for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
-                if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
-            end
-        end
     end
     fAttackTarget = nil
 end
