@@ -223,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 유지, X=7, Y=20)
+-- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 유지, 위치 기억 + 데려오기)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -303,6 +303,16 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
+    -- [1] 내 현재 위치를 기억 (고정할 지점)
+    local myChar = plr.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then
+        Rayfield:Notify({Title = "오류", Content = "캐릭터가 없습니다.", Duration = 2})
+        kickLoopRunning = false
+        return
+    end
+    local anchorPos = myHRP.CFrame  -- 이 위치가 기준점이 됨
+
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
@@ -311,15 +321,13 @@ local function startKickLoop()
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
                 setupAlignForTarget()
-                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                    end)
-                end
+                -- 리스폰 시에도 기준점으로 데려옴
+                local targetPos = anchorPos.Position + Vector3.new(7, 20, 0)
+                pcall(function()
+                    hrp.CFrame = CFrame.new(targetPos)
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                end)
             end
         end)
     end
@@ -335,12 +343,14 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        -- [2] 기준점(anchorPos)을 기준으로 위치 계산
+        local targetPos = anchorPos.Position + Vector3.new(7, 20, 0)
         
         if not tHRP:FindFirstChild("KickAlign") then
             setupAlignForTarget()
         end
         
+        -- [3] AlignPosition으로 위치 고정
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = targetPos
@@ -353,6 +363,7 @@ local function startKickLoop()
         
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
+        
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
@@ -381,46 +392,22 @@ local function startKickLoop()
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
             
-            local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-            
-            if not tHRP:FindFirstChild("KickAlign") then
-                setupAlignForTarget()
+            -- [4] 소유권 강제 갱신 (0.05초마다)
+            kickCounter = kickCounter + 1
+            if kickCounter % 2 == 1 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
             end
             
-            local align = tHRP:FindFirstChild("KickAlign")
-            if align and align.Attachment1 then
-                align.Attachment1.WorldPosition = targetPos
-            end
-            
-            local rot = tHRP:FindFirstChild("KickRot")
-            if rot then
-                rot.CFrame = CFrame.Angles(0, 0, 0)
-            end
-            
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-            if tHum then
-                tHum.PlatformStand = true
-                tHum:ChangeState(Enum.HumanoidStateType.Physics)
-            end
-            
+            -- [5] 기준점에서 너무 멀리 떨어지면 텔레포트 (안전장치)
             if tHum and tHum.Health > 0 then
-                local dist = (tHRP.Position - myHRP.Position).Magnitude
+                local dist = (tHRP.Position - anchorPos.Position).Magnitude
                 if dist > 30 then
                     pcall(function()
-                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                    end)
-                end
-                
-                kickCounter = kickCounter + 1
-                if kickCounter % setOwnerRatio == 1 then  -- SetOwner 1번 → Destroy 2번
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                else
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                        tHRP.CFrame = anchorPos * CFrame.new(7, 20, 0)
+                        tHRP.AssemblyLinearVelocity = Vector3.zero
+                        tHRP.AssemblyAngularVelocity = Vector3.zero
                     end)
                 end
             end
@@ -455,7 +442,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (안티그랩 유지, X=7, Y=20)",
+    Name = "블롭맨 오너 킥 실행 (위치 기억 + 데려오기)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -672,4 +659,4 @@ end
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 550Hz 정밀 타이머, SetOwner 1:Destroy 2 (순서: SetOwner → Destroy → Destroy)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 위치 기억 + 데려오기, 550Hz 정밀 타이머, SetOwner 1:Destroy 2 (순서: SetOwner → Destroy → Destroy)", Duration = 3})
