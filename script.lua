@@ -127,9 +127,9 @@ local function startFKeyAttack(targetPlayer)
     -- Align 초기화
     setupFKeyAlign(targetPlayer)
 
-    -- 1000Hz 고주파 루프 (고정 방식 + 원격 호출)
+    -- 300Hz 고주파 루프 (고정 방식 + 원격 호출)
     fAttackConnection = task.spawn(function()
-        local interval = 1 / 1000  -- 1000Hz
+        local interval = 1 / 300  -- 300Hz
         local nextTime = tick() + interval
 
         while getgenv().FKeyAttackActive and fAttackTarget do
