@@ -470,10 +470,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 높이 20스터드, 한 번에 내리찍기]
+-- [팔레트 레그돌 (Invis) - 초고속, 깊숙이 찍기]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 높이 20, 깊숙이 찍기",
+    Name = "Pallet Ragdoll (Invis) - 초고속 깊숙이 찍기",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -530,6 +530,7 @@ KickTab:CreateToggle({
                             v.CanCollide = false
                             v.CanQuery = false
                             v.Transparency = 0.5   -- 50% 투명도 (내 시점)
+                            v.Massless = true
                         end
                     end
 
@@ -551,10 +552,11 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 20스터드 위로 올렸다가 한 번에 내리찍기 (깊숙이)
-                                local abovePos = tRoot.Position + Vector3.new(0, 20, 0)
-                                soundPart.CFrame = CFrame.new(abovePos) * CFrame.Angles(math.rad(90), 0, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
+                                -- 타겟의 HRP 위치로 순간이동 (깊숙이 꽂힘)
+                                soundPart.CFrame = tRoot.CFrame
+                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e6, 0)
+                                soundPart.CanCollide = false
+                                soundPart.Massless = true
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
