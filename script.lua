@@ -127,48 +127,52 @@ local function startFKeyAttack(targetPlayer)
     -- Align 초기화
     setupFKeyAlign(targetPlayer)
 
-    fAttackConnection = RunService.Heartbeat:Connect(function()
-        if not getgenv().FKeyAttackActive or not fAttackTarget then return end
-        
-        local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        local tgtChar = fAttackTarget.Character
-        local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
-        local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
-        
-        if not myRoot or not tgtRoot then return end
-        
-        tgtRoot.AssemblyLinearVelocity = Vector3.zero
-        if tgtHum then tgtHum.PlatformStand = true end
-        
-        local camCF = camera.CFrame
-        local holdPos = camCF.Position + camCF.LookVector * 20
+    -- 기존 Heartbeat 대신 10,000Hz 고주파 루프 사용
+    fAttackConnection = task.spawn(function()
+        local interval = 1 / 10000  -- 10,000Hz
+        local nextTime = tick() + interval
 
-        -- 텔레포트 (1회성) + Align으로 지속 고정
-        pcall(function() tgtRoot.CFrame = CFrame.new(holdPos) end)
+        while getgenv().FKeyAttackActive and fAttackTarget do
+            while tick() < nextTime do task.wait() end
+            nextTime = nextTime + interval
 
-        -- Align 갱신
-        local align = tgtRoot:FindFirstChild("FKeyAlign")
-        if align and align.Attachment1 then
-            align.Attachment1.WorldPosition = holdPos
-        end
-        local rot = tgtRoot:FindFirstChild("FKeyRot")
-        if rot then
-            rot.CFrame = CFrame.Angles(0, 0, 0)
-        end
+            local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+            local tgtChar = fAttackTarget.Character
+            local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
+            local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
 
-        if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
-            -- ★★★ 30,000Hz (60fps 기준 프레임당 500회) ★★★
-            for i = 1, 500 do
-                fCounter = fCounter + 1
-                if fCounter % 2 == 0 then
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                    end)
-                else
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-                    end)
+            if myRoot and tgtRoot then
+                tgtRoot.AssemblyLinearVelocity = Vector3.zero
+                if tgtHum then tgtHum.PlatformStand = true end
+
+                local camCF = camera.CFrame
+                local holdPos = camCF.Position + camCF.LookVector * 20
+
+                -- 텔레포트 (1회성) + Align으로 지속 고정
+                pcall(function() tgtRoot.CFrame = CFrame.new(holdPos) end)
+
+                -- Align 갱신
+                local align = tgtRoot:FindFirstChild("FKeyAlign")
+                if align and align.Attachment1 then
+                    align.Attachment1.WorldPosition = holdPos
+                end
+                local rot = tgtRoot:FindFirstChild("FKeyRot")
+                if rot then
+                    rot.CFrame = CFrame.Angles(0, 0, 0)
+                end
+
+                if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
+                    fCounter = fCounter + 1
+                    if fCounter % 2 == 0 then
+                        pcall(function()
+                            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                        end)
+                    else
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                            rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                        end)
+                    end
                 end
             end
         end
@@ -178,7 +182,7 @@ end
 local function stopFKeyAttack()
     getgenv().FKeyAttackActive = false
     if fAttackConnection then
-        fAttackConnection:Disconnect()
+        task.cancel(fAttackConnection)
         fAttackConnection = nil
     end
 
@@ -382,7 +386,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 (정밀 타이머, 550Hz, 1:1 번갈아) -- ★ 셋오너킥은 그대로 550Hz 유지
+    -- 2. 리모트 호출 (정밀 타이머, 550Hz, 1:1 번갈아)
     remoteTask = task.spawn(function()
         local interval = 0.00181818 -- 550Hz
         local nextTime = tick() + interval
