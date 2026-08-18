@@ -150,7 +150,7 @@ local function startFKeyAttack(targetPlayer)
 
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % setOwnerRatio == 0 then
+            if fCounter % setOwnerRatio == 1 then  -- SetOwner 1번 → Destroy 2번
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
@@ -413,7 +413,7 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                if kickCounter % setOwnerRatio == 0 then
+                if kickCounter % setOwnerRatio == 1 then  -- SetOwner 1번 → Destroy 2번
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
@@ -635,4 +635,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 550Hz 정밀 타이머, SetOwner 1:Destroy 2", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 550Hz 정밀 타이머, SetOwner 1:Destroy 2 (순서: SetOwner → Destroy → Destroy)", Duration = 3})
