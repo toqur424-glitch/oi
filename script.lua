@@ -470,10 +470,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 높이 20 제거, 몸속 정중앙 꽂기]
+-- [팔레트 레그돌 (Invis) - Massless 제거, 90도 회전]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 몸속 정중앙 꽂기",
+    Name = "Pallet Ragdoll (Invis) - 90도 세워서 꽂기 (Massless 제거)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -530,7 +530,7 @@ KickTab:CreateToggle({
                             v.CanCollide = false
                             v.CanQuery = false
                             v.Transparency = 0.5   -- 50% 투명도 (내 시점)
-                            v.Massless = true
+                            -- Massless 제거
                         end
                     end
 
@@ -552,11 +552,11 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 타겟의 HRP 위치로 순간이동 (몸속 깊숙이)
-                                soundPart.CFrame = tRoot.CFrame
+                                -- 타겟의 HRP 위치로 순간이동 + 90도 회전 (수직)
+                                soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e6, 0)
                                 soundPart.CanCollide = false
-                                soundPart.Massless = true
+                                -- Massless 제거됨
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
