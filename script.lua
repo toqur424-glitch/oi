@@ -470,10 +470,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 위에서 아래로만 강력하게 찍기]
+-- [팔레트 레그돌 (Invis) - 높이 20스터드, 한 번에 내리찍기]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 위에서 아래로 찍기",
+    Name = "Pallet Ragdoll (Invis) - 높이 20, 깊숙이 찍기",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -551,8 +551,8 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 위에서 아래로만 강력하게 찍기 (단일 방향)
-                                local abovePos = tRoot.Position + Vector3.new(0, 5, 0)
+                                -- 20스터드 위로 올렸다가 한 번에 내리찍기 (깊숙이)
+                                local abovePos = tRoot.Position + Vector3.new(0, 20, 0)
                                 soundPart.CFrame = CFrame.new(abovePos) * CFrame.Angles(math.rad(90), 0, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
                             else
