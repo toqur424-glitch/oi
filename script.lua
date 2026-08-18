@@ -470,10 +470,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 초고속, 깊숙이 찍기]
+-- [팔레트 레그돌 (Invis) - 높이 20 제거, 몸속 정중앙 꽂기]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 초고속 깊숙이 찍기",
+    Name = "Pallet Ragdoll (Invis) - 몸속 정중앙 꽂기",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -552,7 +552,7 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 타겟의 HRP 위치로 순간이동 (깊숙이 꽂힘)
+                                -- 타겟의 HRP 위치로 순간이동 (몸속 깊숙이)
                                 soundPart.CFrame = tRoot.CFrame
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e6, 0)
                                 soundPart.CanCollide = false
