@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지 (자기 레그돌 방지 제외)]
+-- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -69,7 +69,7 @@ end
 local setOwnerRatio = 3  -- 1:2 비율 (SetOwner 1번, Destroy 2번)
 
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩 (버튼식)
+-- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -150,7 +150,7 @@ local function startFKeyAttack(targetPlayer)
 
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % setOwnerRatio == 1 then  -- SetOwner 1번 → Destroy 2번
+            if fCounter % setOwnerRatio == 1 then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
@@ -223,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 유지, X=7, Y=20)
+-- [KICK 탭] - 블롭맨 오너 킥
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -413,7 +413,7 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                if kickCounter % setOwnerRatio == 1 then  -- SetOwner 1번 → Destroy 2번
+                if kickCounter % setOwnerRatio == 1 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
@@ -470,10 +470,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - XOCU 완전 이식, Stepped 유지, 투명도 50%]
+-- [팔레트 레그돌 (Invis) - 90도 세워서 강타]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 위아래 강타",
+    Name = "Pallet Ragdoll (Invis) - 90도 세워서 강타",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -485,7 +485,6 @@ KickTab:CreateToggle({
         local lpName = plr.Name
         local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
 
-        -- 클린업 함수
         local function clearAttackLoop()
             if getgenv().ragdollSteppedConn then
                 getgenv().ragdollSteppedConn:Disconnect()
@@ -512,7 +511,6 @@ KickTab:CreateToggle({
                 return
             end
 
-            -- 새 팔레트가 생성될 때마다 처리
             getgenv().palletCacheConn = toysFolder.ChildAdded:Connect(function(child)
                 if not getgenv().palletRagdollActive then return end
                 if child.Name ~= "PalletLightBrown" and child.Name ~= "PalletForRagdoll" then return end
@@ -520,7 +518,6 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                -- 네트워크 소유권 획득 시도
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
                     DestroyLine:FireServer(soundPart)
@@ -528,12 +525,11 @@ KickTab:CreateToggle({
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
-                    -- 내 시점에서 팔레트 투명도 50%로 설정 (나머지 부분도 투명하게)
                     for _, v in pairs(child:GetChildren()) do
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5   -- 50% 투명도
+                            v.Transparency = 0.5   -- 50% 투명도 (내 시점)
                         end
                     end
 
@@ -542,7 +538,6 @@ KickTab:CreateToggle({
 
                     local strikePhase = false
 
-                    -- Stepped로 매 프레임 공격 (물리 엔진과 동기화)
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
                             clearAttackLoop()
@@ -558,28 +553,26 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 위/아래 강타 교차
                                 strikePhase = not strikePhase
                                 if strikePhase then
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
+                                    -- 90도 세워서 위에서 아래로 찍기
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, 2, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
                                 else
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
+                                    -- 90도 세워서 아래에서 위로 올리기
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, -1, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
                                 end
                             else
-                                -- 이미 레그돌 상태면 멀리 치우기
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
                             end
                         else
-                            -- 타겟 없거나 죽었으면 팔레트 치우기
                             soundPart.CFrame = CFrame.new(0, 9e9, 0)
                             soundPart.AssemblyLinearVelocity = Vector3.zero
                         end
                     end)
 
-                    -- 팔레트가 삭제되면 재소환
                     child.AncestryChanged:Connect(function()
                         if not child.Parent then
                             clearAttackLoop()
@@ -591,12 +584,10 @@ KickTab:CreateToggle({
                         end
                     end)
                 else
-                    -- 소유권 실패 시 파기
                     pcall(function() DestroyToy:FireServer(child) end)
                 end
             end)
 
-            -- 팔레트 소환 함수
             getgenv().spawnNewPallet = function()
                 if not getgenv().palletRagdollActive then return end
                 if getgenv().PalletForRagdoll and getgenv().PalletForRagdoll.Parent then return end
@@ -616,10 +607,8 @@ KickTab:CreateToggle({
                 end)
             end
 
-            -- 최초 소환
             getgenv().spawnNewPallet()
         else
-            -- 끄기: 모든 정리
             getgenv().palletRagdollActive = false
             clearAttackLoop()
 
@@ -643,7 +632,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭들 유지]
+-- [나머지 필수 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
