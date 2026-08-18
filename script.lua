@@ -470,10 +470,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 90도 세워서 강타]
+-- [팔레트 레그돌 (Invis) - 위에서 아래로만 강력하게 찍기]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 90도 세워서 강타",
+    Name = "Pallet Ragdoll (Invis) - 위에서 아래로 찍기",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -536,8 +536,6 @@ KickTab:CreateToggle({
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
 
-                    local strikePhase = false
-
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
                             clearAttackLoop()
@@ -553,16 +551,10 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                strikePhase = not strikePhase
-                                if strikePhase then
-                                    -- 90도 세워서 위에서 아래로 찍기
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, 2, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
-                                else
-                                    -- 90도 세워서 아래에서 위로 올리기
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, -1, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
-                                end
+                                -- 위에서 아래로만 강력하게 찍기 (단일 방향)
+                                local abovePos = tRoot.Position + Vector3.new(0, 5, 0)
+                                soundPart.CFrame = CFrame.new(abovePos) * CFrame.Angles(math.rad(90), 0, 0)
+                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
