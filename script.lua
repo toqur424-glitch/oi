@@ -66,7 +66,7 @@ if BeingHeld then
 end
 
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩 (버튼식, Align 고정)
+-- [GRAB 탭] - 카메라 조준 킥 그랩 (버튼식)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -75,6 +75,7 @@ getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
+local fCounter = 0
 local selectedGrabPlayer = nil  -- Grab 탭 전용 타겟
 
 -- F키 공격용 Align 생성 함수
@@ -121,6 +122,7 @@ end
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
+    fCounter = 0
 
     -- Align 초기화
     setupFKeyAlign(targetPlayer)
@@ -144,7 +146,7 @@ local function startFKeyAttack(targetPlayer)
         -- 텔레포트 (1회성) + Align으로 지속 고정
         pcall(function() tgtRoot.CFrame = CFrame.new(holdPos) end)
 
-        -- Align 갱신 (오직 Align으로만 고정)
+        -- Align 갱신
         local align = tgtRoot:FindFirstChild("FKeyAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = holdPos
@@ -152,6 +154,23 @@ local function startFKeyAttack(targetPlayer)
         local rot = tgtRoot:FindFirstChild("FKeyRot")
         if rot then
             rot.CFrame = CFrame.Angles(0, 0, 0)
+        end
+
+        if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
+            -- ★★★ 30,000Hz (60fps 기준 프레임당 500회) ★★★
+            for i = 1, 500 do
+                fCounter = fCounter + 1
+                if fCounter % 2 == 0 then
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                    end)
+                else
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                    end)
+                end
+            end
         end
     end)
 end
@@ -203,7 +222,7 @@ GrabTab:CreateInput({
 
 -- 토글 버튼
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (Align 전용)",
+    Name = "카메라 조준 킥 그랩 실행",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -218,7 +237,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (Align 전용 고정, 30000Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 유지, X=7, Y=20)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -227,7 +246,7 @@ local kickCounter = 0
 
 -- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
--- 리모트 호출 없이 Align만 갱신하는 고속 루프
+-- 리모트 호출: 정밀 타이머 (별도 루프)
 local remoteTask = nil
 -- 리스폰 감지
 local respawnConn = nil
@@ -363,14 +382,15 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 고속 Align 갱신 루프 (30000Hz 목표, 실제로는 엔진 한계)
+    -- 2. 리모트 호출 (정밀 타이머, 550Hz, 1:1 번갈아) -- ★ 셋오너킥은 그대로 550Hz 유지
     remoteTask = task.spawn(function()
-        local interval = 0.00003333 -- 1 / 30000
+        local interval = 0.00181818 -- 550Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
-            -- 최대한 빠르게 반복 (task.wait() 없이)
-            while tick() < nextTime do end
+            while tick() < nextTime do
+                task.wait()
+            end
             nextTime = nextTime + interval
             
             if not selectedKickPlayer then continue end
@@ -406,6 +426,27 @@ local function startKickLoop()
                 tHum.PlatformStand = true
                 tHum:ChangeState(Enum.HumanoidStateType.Physics)
             end
+            
+            if tHum and tHum.Health > 0 then
+                local dist = (tHRP.Position - myHRP.Position).Magnitude
+                if dist > 30 then
+                    pcall(function()
+                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                    end)
+                end
+                
+                kickCounter = kickCounter + 1
+                if kickCounter % 2 == 0 then
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
+                else
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                end
+            end
         end
     end)
 end
@@ -437,7 +478,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (Align 전용, 30000Hz)",
+    Name = "블롭맨 오너 킥 실행 (안티그랩 유지, X=7, Y=20)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -617,4 +658,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, Align 전용 고정, 30000Hz 목표", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 550Hz 정밀 타이머", Duration = 3})
