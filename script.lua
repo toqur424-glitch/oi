@@ -468,10 +468,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 처음 버전으로 원복 (위아래 번갈아 강타)]
+-- [팔레트 레그돌 (Invis) - 90도 세우고 중심 정확히 타격]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 원복 버전 (위아래 번갈아)",
+    Name = "Pallet Ragdoll (Invis) - 90도 세워서 중심 타격",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -553,10 +553,12 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 strikePhase = not strikePhase
                                 if strikePhase then
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
+                                    -- 90도 세워서 타겟 중심에 위치 (위로 2스터드)
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, 2, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
                                 else
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
+                                    -- 90도 세워서 타겟 중심에 위치 (아래로 1스터드)
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, -1, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
                                 end
                             else
