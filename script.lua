@@ -100,7 +100,7 @@ local function setupGrabAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "GrabAtt0"
-    local att1 = Instance.new("Attachment", camera) -- [강화] 카메라에 연결
+    local att1 = Instance.new("Attachment", camera)
     att1.Name = "GrabAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -283,7 +283,6 @@ KickTab:CreateInput({
     end
 })
 
--- [KICK] AlignPosition + AlignOrientation (고정력 극대화)
 local function setupKickAlign(targetPlayer)
     local tChar = targetPlayer and targetPlayer.Character
     if not tChar then return end
@@ -302,7 +301,7 @@ local function setupKickAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", camera) -- [강화] 카메라에 연결
+    local att1 = Instance.new("Attachment", camera)
     att1.Name = "KickAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -323,7 +322,6 @@ local function setupKickAlign(targetPlayer)
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 
-    -- [강화] 즉시 고정 위치로 이동 (카메라 기준)
     local camCF = camera.CFrame
     local targetPos = camCF.Position + camCF.LookVector * 5 + Vector3.new(0, 0, 0)
     pcall(function()
@@ -373,7 +371,6 @@ local function startKickLoop()
             return
         end
         
-        -- [강화] 카메라 기준 고정 위치 (정중앙 앞 5스터드)
         local camCF = camera.CFrame
         local targetPos = camCF.Position + camCF.LookVector * 5
         
@@ -396,7 +393,6 @@ local function startKickLoop()
         end
     end)
 
-    -- 400Hz 정밀 타이머
     remoteTask = task.spawn(function()
         local interval = 0.0025 -- 400Hz
         local nextTime = tick() + interval
@@ -421,7 +417,6 @@ local function startKickLoop()
                 continue
             end
             
-            -- [강화] 카메라 기준 고정 위치 유지
             local camCF = camera.CFrame
             local targetPos = camCF.Position + camCF.LookVector * 5
             
@@ -493,10 +488,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 - 투명50%, 90도 세움, 몸 정중앙 박힘]
+-- [팔레트 레그돌 - 투명50%, 90도 세움, 멀리서 날아와 때림]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll - 투명50% 90도 정중앙",
+    Name = "Pallet Ragdoll - 투명50% 90도 날아와 때림",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -543,7 +538,7 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5 -- [수정] 투명도 50%
+                            v.Transparency = 0.5 -- 투명도 50%
                         end
                     end
 
@@ -571,12 +566,14 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 strikePhase = not strikePhase
                                 if strikePhase then
-                                    -- [수정] 판자 중심이 상대 몸 정중앙에 박히도록 위치 조정
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 0, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
+                                    -- [수정] 멀리서 날아와 때림 (90도 세움)
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 0, -30) -- 뒤에서 날아옴
+                                    soundPart.CFrame = soundPart.CFrame * CFrame.Angles(0, math.rad(90), 0) -- 90도 회전
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 0, 9e5) -- 앞으로 돌진
                                 else
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 0, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 0, -30) -- 뒤에서 날아옴
+                                    soundPart.CFrame = soundPart.CFrame * CFrame.Angles(0, math.rad(90), 0) -- 90도 회전
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 0, 9e5) -- 앞으로 돌진
                                 end
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
@@ -658,4 +655,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "카메라 고정, 400Hz, SetOwner 1:Destroy 3, 판자 투명50% 90도 정중앙", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "카메라 고정, 400Hz, SetOwner 1:Destroy 3, 판자 투명50% 90도 날아와 때림", Duration = 3})
