@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, Destroy 3번)
+local cycleState = 0 -- 0: SetOwner 1번, 1: Destroy 2번, 2: SetOwner 1번, 3: Destroy 3번
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (Align 고정 강화)
@@ -100,7 +100,7 @@ local function setupGrabAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "GrabAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain) -- 원복: Terrain
+    local att1 = Instance.new("Attachment", workspace.Terrain)
     att1.Name = "GrabAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -170,7 +170,7 @@ local function startGrabAttack(targetPlayer)
 
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % setOwnerRatio == 1 then
+            if fCounter % 2 == 1 then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
@@ -248,7 +248,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (원래 좌표 X=7, Y=20 복원)
+-- [KICK 탭] - 블롭맨 오너 킥 (SetOwner 1→Destroy2→SetOwner1→Destroy3 반복, 500Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -301,7 +301,7 @@ local function setupKickAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain) -- 원복: Terrain
+    local att1 = Instance.new("Attachment", workspace.Terrain)
     att1.Name = "KickAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -322,7 +322,6 @@ local function setupKickAlign(targetPlayer)
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 
-    -- [원복] 내 캐릭터 기준 X=7, Y=20 좌표
     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if myHRP then
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
@@ -341,6 +340,7 @@ local function startKickLoop()
     
     kickLoopRunning = true
     kickCounter = 0
+    cycleState = 0 -- 0: SetOwner 1번, 1: Destroy 2번, 2: SetOwner 1번, 3: Destroy 3번
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -374,7 +374,6 @@ local function startKickLoop()
             return
         end
         
-        -- [원복] 내 캐릭터 기준 X=7, Y=20 좌표
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
         local align = tHRP:FindFirstChild("KickAlign")
@@ -396,8 +395,9 @@ local function startKickLoop()
         end
     end)
 
+    -- [수정] 500Hz 정밀 타이머 (간격 0.002초)
     remoteTask = task.spawn(function()
-        local interval = 0.0025 -- 400Hz
+        local interval = 0.002 -- 500Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -420,7 +420,6 @@ local function startKickLoop()
                 continue
             end
             
-            -- [원복] 내 캐릭터 기준 X=7, Y=20 좌표
             local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
             
             local align = tHRP:FindFirstChild("KickAlign")
@@ -441,16 +440,45 @@ local function startKickLoop()
             end
             
             if tHum and tHum.Health > 0 then
-                kickCounter = kickCounter + 1
-                if kickCounter % setOwnerRatio == 1 then
+                -- [수정] SetOwner 1번 → Destroy 2번 → SetOwner 1번 → Destroy 3번 반복
+                if cycleState == 0 then
+                    -- SetOwner 1번
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
-                else
+                    cycleState = 1
+                elseif cycleState == 1 then
+                    -- Destroy 2번
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                    cycleState = 2
+                elseif cycleState == 2 then
+                    -- SetOwner 1번
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
+                    cycleState = 3
+                elseif cycleState == 3 then
+                    -- Destroy 3번
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                    cycleState = 0 -- 다시 처음으로
                 end
             end
         end
@@ -476,7 +504,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (X=7,Y=20, 400Hz)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner1→Destroy2→SetOwner1→Destroy3, 500Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -569,7 +597,6 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 strikePhase = not strikePhase
                                 if strikePhase then
-                                    -- [수정] 멀리서 날아와 때림 (90도 세움)
                                     soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 0, -30) -- 뒤에서 날아옴
                                     soundPart.CFrame = soundPart.CFrame * CFrame.Angles(0, math.rad(90), 0) -- 90도 회전
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, 0, 9e5) -- 앞으로 돌진
@@ -658,4 +685,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "X=7,Y=20 복원, 400Hz, SetOwner 1:Destroy 3, 판자 투명50% 90도 날아와 때림", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "X=7,Y=20, 500Hz, SetOwner1→Destroy2→SetOwner1→Destroy3 반복, 판자 투명50% 90도 날아와 때림", Duration = 3})
