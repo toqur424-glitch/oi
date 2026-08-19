@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 1:3 / 350Hz + 내 앞으로 고정 + 거리 15 이하 텔레포트
+-- [KICK 탭] - 1:3 / 350Hz / (X=7, Y=20) 고정
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -320,7 +320,8 @@ local function startKickLoop()
                     setupAlignForTarget()
                     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                     if myHRP then
-                        hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(0, 0, 4)) -- 내 앞 4스터드
+                        -- ★ 리스폰 시 (X=7, Y=20) 위치에 배치
+                        hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(7, 20, 0))
                         hrp.AssemblyLinearVelocity = Vector3.zero
                     end
                 end)
@@ -345,8 +346,8 @@ local function startKickLoop()
             if not tHRP then return end
         end
 
-        -- ★ 수정: 내 앞 4스터드로 고정 (발로 차기 좋은 위치)
-        local targetPos = myHRP.Position + Vector3.new(0, 0, 4)
+        -- ★ 고정 위치: (X=7, Y=20, Z=0) (내 위치 기준)
+        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
         if targetAttach1 then
             targetAttach1.WorldPosition = targetPos
@@ -363,11 +364,11 @@ local function startKickLoop()
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
         end
 
-        -- ★ 수정: 거리가 15스터드 이상 벌어지면 바로 순간이동
+        -- ★ 거리 15 이상 벌어지면 상대 바로 앞으로 순간이동 (공격 가능하게)
         local dist = (tHRP.Position - myHRP.Position).Magnitude
         if dist > 15 then
             pcall(function()
-                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 0, -4))
+                myChar:PivotTo(CFrame.new(tHRP.Position + Vector3.new(0, 0, 4)))
             end)
         end
     end)
@@ -441,7 +442,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 내 앞 고정)",
+    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / X=7 Y=20 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -618,4 +619,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 내 앞 고정 / 거리 15이상 텔레포트 / 리스폰 0.01초 대응", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / X=7 Y=20 고정 / 거리 15 텔레포트 / 리스폰 0.01초 대응", Duration = 3})
