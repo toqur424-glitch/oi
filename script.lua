@@ -29,20 +29,22 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지]
+-- [안티그랩 차단: Struggle / RagdollRemote 완전 무력화]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
-local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 5)
-local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
+local RagdollRemote = CharacterEvents and CharacterEvents:FindFirstChild("RagdollRemote")
 
 if StruggleEvent then
-    StruggleEvent.OnClientEvent:Connect(function(...) return end)
+    StruggleEvent.OnClientEvent:Connect(function(...) return end)  -- 모든 Struggle 차단
 end
-if ReleaseGrab then
-    ReleaseGrab.OnClientEvent:Connect(function(...) return end)
+if RagdollRemote then
+    RagdollRemote.OnClientEvent:Connect(function(...) return end)  -- 모든 RagdollRemote 차단
 end
 
+--=============================================
+-- [IsHeld 감시용 더미 (안티그랩 유인용)]
+--=============================================
 local BeingHeld = plr:WaitForChild("IsHeld", 10)
 if BeingHeld then
     BeingHeld:GetPropertyChangedSignal("Value"):Connect(function()
@@ -131,7 +133,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 1:3, 씹힘 제거)
+-- [KICK 탭] - 완전 고정 (IsHeld 트리거 없음 + 리모트 차단)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -139,8 +141,10 @@ local kickLoopRunning = false
 local kickCounter = 0
 
 local steppedConn = nil
-local heartbeatConn = nil
+local remoteTask = nil
 local respawnConn = nil
+local targetBP = nil
+local targetBG = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -166,19 +170,21 @@ KickTab:CreateInput({
     end
 })
 
-local function setupAlignForTarget()
+local function setupLockForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
-    
+
+    -- 기존 Align 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyGyro") then
             v:Destroy()
         end
     end
-    
+
+    -- AlignPosition (위치 고정, IsHeld 미트리거)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -194,6 +200,7 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
+    -- AlignOrientation (회전 0도 고정)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
@@ -204,8 +211,8 @@ local function setupAlignForTarget()
 end
 
 local function startKickLoop()
+    if remoteTask then task.cancel(remoteTask) end
     if steppedConn then steppedConn:Disconnect() end
-    if heartbeatConn then heartbeatConn:Disconnect() end
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
@@ -218,10 +225,8 @@ local function startKickLoop()
             if hrp and hum then
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
-                
-                setupAlignForTarget()
+                setupLockForTarget()
                 kickCounter = 0
-                
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
@@ -235,7 +240,7 @@ local function startKickLoop()
         end)
     end
 
-    -- [1] 위치 고정 및 물리 업데이트 (Stepped, 부드럽게)
+    -- 1. Stepped: AlignPosition 갱신 (매 프레임 위치 강제 고정)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -250,7 +255,7 @@ local function startKickLoop()
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
         if not tHRP:FindFirstChild("KickAlign") then
-            setupAlignForTarget()
+            setupLockForTarget()
         end
         
         local align = tHRP:FindFirstChild("KickAlign")
@@ -272,33 +277,37 @@ local function startKickLoop()
         end
     end)
 
-    -- [2] 정밀 350Hz 리모트 전송 (Heartbeat + 누적 타이머) - 씹힘 방지
-    local targetHz = 350
-    local lastTime = tick()
-    local accumulated = 0
-
-    heartbeatConn = RunService.Heartbeat:Connect(function()
-        if not kickLoopRunning or not selectedKickPlayer then return end
-
-        local now = tick()
-        local dt = now - lastTime
-        lastTime = now
-
-        -- 이 프레임에서 보내야 할 패킷 수 계산 (정밀 350Hz)
-        local packetsToSend = math.floor(targetHz * dt + accumulated)
-        accumulated = (targetHz * dt + accumulated) - packetsToSend
-
-        for i = 1, packetsToSend do
+    -- 2. 리모트 호출 (350Hz, 1:3 비율 - 소유권 압도 및 라인 유지)
+    remoteTask = task.spawn(function()
+        local interval = 1 / 350
+        local nextTime = tick() + interval
+        
+        while kickLoopRunning do
+            while tick() < nextTime do
+                task.wait()
+            end
+            nextTime = nextTime + interval
+            
+            if not selectedKickPlayer then continue end
+            
             local tChar = selectedKickPlayer.Character
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             local tHum = tChar and tChar:FindFirstChild("Humanoid")
             local myChar = plr.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-
-            if myHRP and tHRP and tHum and tHum.Health > 0 then
-                kickCounter = kickCounter + 1
+            
+            if not (myChar and myHRP) then continue end
+            if not (tChar and tHRP) then continue end
+            
+            if tHum and tHum.Health > 0 then
+                local dist = (tHRP.Position - myHRP.Position).Magnitude
+                if dist > 30 then
+                    pcall(function()
+                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                    end)
+                end
                 
-                -- 1:3 비율 (SetOwner 1번, DestroyGrabLine 3번)
+                kickCounter = kickCounter + 1
                 if kickCounter % 4 == 1 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
@@ -320,9 +329,9 @@ local function stopKickLoop()
         steppedConn:Disconnect()
         steppedConn = nil
     end
-    if heartbeatConn then
-        heartbeatConn:Disconnect()
-        heartbeatConn = nil
+    if remoteTask then
+        task.cancel(remoteTask)
+        remoteTask = nil
     end
     if respawnConn then
         respawnConn:Disconnect()
@@ -332,16 +341,18 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyGyro") then
                     v:Destroy()
                 end
             end
         end
     end
+    targetBP = nil
+    targetBG = nil
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (350Hz 정밀, 1:3 비율, 씹힘 제거)",
+    Name = "블롭맨 오너 킥 실행 (안티그랩 완전 뚫기, 350Hz, 1:3)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -356,10 +367,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 90도 수직, 50Hz 고속]
+-- [팔레트 레그돌 (Invis) - 사인파, 90도 수직, 50Hz]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 90도 수직, 50Hz 고속 진동",
+    Name = "Pallet Ragdoll (Invis) - 90도 수직, 50Hz",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -415,7 +426,7 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5   -- 0.5 투명
+                            v.Transparency = 0.5
                             v.Massless = true
                         end
                     end
@@ -438,7 +449,7 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                local t = tick() * 50  -- 50Hz 고속
+                                local t = tick() * 50
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, math.rad(90), 0) * CFrame.new(0, offsetY, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
@@ -518,4 +529,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 350Hz 정밀(누적 타이머), 1:3 비율, Align 고정 분리, 씹힘 제거", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 완전 뚫기, IsHeld 미트리거, Struggle/Ragdoll 차단, 350Hz, 1:3", Duration = 3})
