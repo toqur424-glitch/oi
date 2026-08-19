@@ -29,14 +29,13 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지 (자기 레그돌 방지 제외)]
+-- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
 local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 5)
 local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
 
--- 1. StruggleEvent / ReleaseGrab 완전 차단 (핵 탈출 신호 무효화)
 if StruggleEvent then
     StruggleEvent.OnClientEvent:Connect(function(...) return end)
 end
@@ -44,7 +43,6 @@ if ReleaseGrab then
     ReleaseGrab.OnClientEvent:Connect(function(...) return end)
 end
 
--- 2. BeingHeld 감지 시 SetNetworkOwner를 5회 연속 발사 (소유권 강제 유지)
 local BeingHeld = plr:WaitForChild("IsHeld", 10)
 if BeingHeld then
     BeingHeld:GetPropertyChangedSignal("Value"):Connect(function()
@@ -140,11 +138,8 @@ local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
--- 리모트 호출: 정밀 타이머 (별도 루프)
 local remoteTask = nil
--- 리스폰 감지
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -178,14 +173,12 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 Align 제거
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
         end
     end
     
-    -- AlignPosition (위치 고정, 성능 최대)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -201,7 +194,6 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
-    -- AlignOrientation (회전 0도 고정)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
@@ -219,7 +211,6 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 20으로 텔레포트 후 Align 설정
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
@@ -227,7 +218,10 @@ local function startKickLoop()
             if hrp and hum then
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
+                
                 setupAlignForTarget()
+                kickCounter = 0
+                
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
@@ -241,7 +235,6 @@ local function startKickLoop()
         end)
     end
 
-    -- 1. Stepped: AlignPosition 갱신 (물리 직전)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -278,7 +271,6 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 (정밀 타이머, 350Hz, 1:3 비율 적용 - SetOwner 1회, Destroy 3회)
     remoteTask = task.spawn(function()
         local interval = 0.002857 -- 350Hz
         local nextTime = tick() + interval
@@ -332,8 +324,6 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                
-                -- ★ 여기가 수정된 부분입니다 (1:3 비율) ★
                 if kickCounter % 4 == 1 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
@@ -344,7 +334,6 @@ local function startKickLoop()
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
                 end
-                -- ★ 수정 끝 ★
             end
         end
     end)
@@ -392,10 +381,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - XOCU 완전 이식, Stepped 유지]
+-- [팔레트 레그돌 (Invis) - 사인파, 판자 90도 수직 세움 ★수정됨★]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 위아래 강타",
+    Name = "Pallet Ragdoll (Invis) - 사인파, 90도 수직 세움",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -416,7 +405,7 @@ KickTab:CreateToggle({
 
         if Value then
             if not selectedKickPlayer then
-                Rayfield:Notify({Title = "알림", Content = "Select target first (타겟을 먼저 입력해주세요)", Duration = 3})
+                Rayfield:Notify({Title = "알림", Content = "타겟을 먼저 입력해주세요!", Duration = 3})
                 return
             end
 
@@ -451,14 +440,13 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 1 
+                            v.Transparency = 0.5   -- 0.5 투명도
+                            v.Massless = true       -- 몸통 통과
                         end
                     end
 
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
-
-                    local strikePhase = false
 
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
@@ -475,14 +463,13 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                strikePhase = not strikePhase
-                                if strikePhase then
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
-                                else
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
-                                end
+                                -- 사인파 진동 + 판자 90도 수직 세움 (Y축 피치 회전)
+                                local t = tick() * 20
+                                local offsetY = 15 * math.sin(t)
+                                soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, math.rad(90), 0) * CFrame.new(0, offsetY, 0)
+                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
+                                soundPart.CanCollide = false
+                                soundPart.Massless = true
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
@@ -552,9 +539,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭들 유지]
+-- [나머지 필수 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz 정밀 타이머, SetOwner 1:Destroy 3 비율", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, 1:3 비율, 리스폰 고정력 보정, 사인파 레그돌 + 판자 90도 수직 세움", Duration = 3})
