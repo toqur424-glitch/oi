@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 3  -- 1:2 비율 (SetOwner 1번, Destroy 2번)
+local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, Destroy 3번)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -147,7 +147,7 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- SetOwner와 DestroyGrabLine 번갈아 전송 (고정력 유지)
+        -- SetOwner와 DestroyGrabLine 번갈아 전송 (1:3 비율)
         fCounter = fCounter + 1
         if fCounter % setOwnerRatio == 1 then
             pcall(function()
@@ -631,4 +631,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 550Hz 정밀 타이머, SetOwner 1:Destroy 2 (순서: SetOwner → Destroy → Destroy)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 550Hz 정밀 타이머, SetOwner 1:Destroy 3 (순서: SetOwner → Destroy → Destroy → Destroy)", Duration = 3})
