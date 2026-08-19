@@ -381,10 +381,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 사인파, 판자 90도 수직 세움 ★수정됨★]
+-- [팔레트 레그돌 (Invis) - 사인파, 90도 수직 세움 + 50Hz 고속 진동 ★수정됨★]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 사인파, 90도 수직 세움",
+    Name = "Pallet Ragdoll (Invis) - 90도 수직, 50Hz 고속 진동",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -463,8 +463,8 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 진동 + 판자 90도 수직 세움 (Y축 피치 회전)
-                                local t = tick() * 20
+                                -- ★ 수정: 90도 수직 + 50Hz 고속 진동 (기존 20Hz에서 증가) ★
+                                local t = tick() * 50  -- 50Hz (빠른 속도)
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, math.rad(90), 0) * CFrame.new(0, offsetY, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
@@ -544,4 +544,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, 1:3 비율, 리스폰 고정력 보정, 사인파 레그돌 + 판자 90도 수직 세움", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, 1:3 비율, 리스폰 고정력 보정, 판자 90도 수직 + 50Hz 고속 진동", Duration = 3})
