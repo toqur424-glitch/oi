@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Hybrid Lock Hub",
+    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -29,22 +29,20 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩 완전 차단]
+-- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지 (자기 레그돌 방지 제외)]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
-local RagdollRemote = CharacterEvents and CharacterEvents:FindFirstChild("RagdollRemote")
+local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 5)
+local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
 
 if StruggleEvent then
     StruggleEvent.OnClientEvent:Connect(function(...) return end)
 end
-if RagdollRemote then
-    RagdollRemote.OnClientEvent:Connect(function(...) return end)
+if ReleaseGrab then
+    ReleaseGrab.OnClientEvent:Connect(function(...) return end)
 end
 
---=============================================
--- [IsHeld 감시용 더미]
---=============================================
 local BeingHeld = plr:WaitForChild("IsHeld", 10)
 if BeingHeld then
     BeingHeld:GetPropertyChangedSignal("Value"):Connect(function()
@@ -66,7 +64,12 @@ if BeingHeld then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩
+-- [공통 변수]
+--=============================================
+local setOwnerRatio = 3  -- 1:2 비율 (SetOwner 1번, Destroy 2번)
+
+--=============================================
+-- [GRAB 탭] - 카메라 조준 킥 그랩 (Align 고정 강화)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -76,12 +79,65 @@ getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
 local fCounter = 0
+local selectedGrabPlayer = nil
+local grabRespawnConn = nil
 
-local function startFKeyAttack(targetPlayer)
+-- [GRAB] AlignPosition + AlignOrientation 설정
+local function setupGrabAlign(targetPlayer)
+    local tChar = targetPlayer and targetPlayer.Character
+    if not tChar then return end
+    local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+    if not tHRP then return end
+
+    -- 이미 있으면 재생성 안 함
+    if tHRP:FindFirstChild("GrabAlign") and tHRP:FindFirstChild("GrabRot") then
+        return
+    end
+
+    for _, v in pairs(tHRP:GetChildren()) do
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+            v:Destroy()
+        end
+    end
+
+    local att0 = Instance.new("Attachment", tHRP)
+    att0.Name = "GrabAtt0"
+    local att1 = Instance.new("Attachment", workspace.Terrain)
+    att1.Name = "GrabAtt1"
+
+    local alignPos = Instance.new("AlignPosition")
+    alignPos.Name = "GrabAlign"
+    alignPos.Attachment0 = att0
+    alignPos.Attachment1 = att1
+    alignPos.MaxForce = math.huge
+    alignPos.MaxVelocity = math.huge
+    alignPos.Responsiveness = math.huge
+    alignPos.RigidityEnabled = true
+    alignPos.Parent = tHRP
+
+    local alignRot = Instance.new("AlignOrientation")
+    alignRot.Name = "GrabRot"
+    alignRot.Attachment0 = att0
+    alignRot.MaxTorque = math.huge
+    alignRot.Responsiveness = math.huge
+    alignRot.RigidityEnabled = true
+    alignRot.Parent = tHRP
+end
+
+local function startGrabAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
     fCounter = 0
-    
+    setupGrabAlign(targetPlayer)
+
+    if grabRespawnConn then grabRespawnConn:Disconnect() end
+    grabRespawnConn = targetPlayer.CharacterAdded:Connect(function(newChar)
+        task.wait(0.5)
+        if getgenv().FKeyAttackActive and fAttackTarget then
+            setupGrabAlign(fAttackTarget)
+        end
+    end)
+
     fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
         
@@ -91,16 +147,33 @@ local function startFKeyAttack(targetPlayer)
         local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
         
         if not myRoot or not tgtRoot then return end
+
+        -- Align이 없으면 즉시 재생성
+        if not tgtRoot:FindFirstChild("GrabAlign") or not tgtRoot:FindFirstChild("GrabRot") then
+            setupGrabAlign(fAttackTarget)
+            return
+        end
         
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
         
         local camCF = camera.CFrame
-        pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
-        
+        local holdPos = camCF.Position + camCF.LookVector * 20
+
+        pcall(function() tgtRoot.CFrame = CFrame.new(holdPos) end)
+
+        local align = tgtRoot:FindFirstChild("GrabAlign")
+        if align and align.Attachment1 then
+            align.Attachment1.WorldPosition = holdPos
+        end
+        local rot = tgtRoot:FindFirstChild("GrabRot")
+        if rot then
+            rot.CFrame = CFrame.Angles(0, 0, 0)
+        end
+
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % 2 == 0 then
+            if fCounter % setOwnerRatio == 1 then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
@@ -114,26 +187,71 @@ local function startFKeyAttack(targetPlayer)
     end)
 end
 
-GrabTab:CreateKeybind({
-    Name = "F키 조준 킥 그랩",
-    CurrentKeybind = "F",
-    Callback = function()
-        if not getgenv().KickGrabActive then getgenv().KickGrabActive = true end
-        if getgenv().FKeyAttackActive then 
-            getgenv().FKeyAttackActive = false
-            if fAttackConnection then fAttackConnection:Disconnect() end
+local function stopGrabAttack()
+    getgenv().FKeyAttackActive = false
+    if fAttackConnection then
+        fAttackConnection:Disconnect()
+        fAttackConnection = nil
+    end
+    if grabRespawnConn then
+        grabRespawnConn:Disconnect()
+        grabRespawnConn = nil
+    end
+
+    if fAttackTarget and fAttackTarget.Character then
+        local tHRP = fAttackTarget.Character:FindFirstChild("HumanoidRootPart")
+        if tHRP then
+            for _, v in pairs(tHRP:GetChildren()) do
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                    v:Destroy()
+                end
+            end
+        end
+    end
+    fAttackTarget = nil
+end
+
+GrabTab:CreateInput({
+    Name = "타겟 닉네임 입력",
+    PlaceholderText = "예: Player1",
+    RemoveTextAfterFocusLost = true,
+    Callback = function(v)
+        if v == "" then return end
+        local found = nil
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
+                found = p
+                break
+            end
+        end
+        
+        if not found then 
+            Rayfield:Notify({Title = "오류", Content = "해당 유저를 찾을 수 없습니다.", Duration = 2})
             return 
         end
-        local target = nil 
-        for _, p in pairs(Players:GetPlayers()) do 
-            if p ~= plr and p.Character then target = p break end 
+        
+        selectedGrabPlayer = found
+        Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
+    end
+})
+
+GrabTab:CreateToggle({
+    Name = "카메라 조준 킥 그랩 실행 (Align 고정)",
+    Callback = function(v)
+        if v and not selectedGrabPlayer then
+            Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
+            return
         end
-        if target then startFKeyAttack(target) end
+        if v then
+            startGrabAttack(selectedGrabPlayer)
+        else
+            stopGrabAttack()
+        end
     end
 })
 
 --=============================================
--- [KICK 탭] - AlignPosition + BodyPosition + Y축 BodyVelocity
+-- [KICK 탭] - 블롭맨 오너 킥 (Align 고정 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -168,87 +286,55 @@ KickTab:CreateInput({
     end
 })
 
-local function setupHybridLockForTarget()
-    if not selectedKickPlayer then return end
-    local tChar = selectedKickPlayer.Character
+-- [KICK] AlignPosition + AlignOrientation 설정
+local function setupKickAlign(targetPlayer)
+    local tChar = targetPlayer and targetPlayer.Character
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
 
-    -- 기존 모든 고정 장치 제거
+    if tHRP:FindFirstChild("KickAlign") and tHRP:FindFirstChild("KickRot") then
+        return
+    end
+
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") 
-           or v:IsA("BodyPosition") or v:IsA("BodyGyro") 
-           or v:IsA("BodyVelocity") then
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
         end
     end
 
-    -- 1. AlignPosition (빠른 위치 추적)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
     att1.Name = "KickAtt1"
-    
+
     local alignPos = Instance.new("AlignPosition")
     alignPos.Name = "KickAlign"
     alignPos.Attachment0 = att0
     alignPos.Attachment1 = att1
-    alignPos.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    alignPos.MaxForce = math.huge
     alignPos.MaxVelocity = math.huge
-    alignPos.Responsiveness = 1000
+    alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
 
-    -- 2. AlignOrientation (회전 0도 고정)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
-    alignRot.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-    alignRot.Responsiveness = 1000
+    alignRot.MaxTorque = math.huge
+    alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
-    alignRot.CFrame = CFrame.Angles(0, 0, 0)
     alignRot.Parent = tHRP
 
-    -- 3. BodyPosition (물리 힘으로 강제 고정)
-    local bp = Instance.new("BodyPosition")
-    bp.Name = "KickBP"
-    bp.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-    bp.P = 1000000
-    bp.D = 10000
-    bp.Position = tHRP.Position
-    bp.Parent = tHRP
-
-    -- 4. BodyGyro (회전 물리 고정)
-    local bg = Instance.new("BodyGyro")
-    bg.Name = "KickBG"
-    bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-    bg.P = 1000000
-    bg.D = 10000
-    bg.CFrame = CFrame.Angles(0, 0, 0)
-    bg.Parent = tHRP
-
-    -- 5. ★ 추가: BodyVelocity (Y축 전용, 중력 완전 차단 + 살짝 위로)
-    local bv = Instance.new("BodyVelocity")
-    bv.Name = "KickBV"
-    bv.MaxForce = Vector3.new(0, 1e9, 0)
-    bv.Velocity = Vector3.new(0, 0.1, 0)  -- 0.1만큼 위로 (중력 상쇄)
-    bv.Parent = tHRP
-
-    -- 충돌 및 움직임 완전 차단
-    for _, part in pairs(tChar:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-            part.CanTouch = false
-            part.CanQuery = false
-        end
-    end
-    local tHum = tChar:FindFirstChild("Humanoid")
-    if tHum then
-        tHum.WalkSpeed = 0
-        tHum.JumpPower = 0
-        tHum.PlatformStand = true
-        tHum.Sit = true
+    -- 즉시 고정 위치로 이동
+    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+    if myHRP then
+        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+        end)
     end
 end
 
@@ -262,27 +348,20 @@ local function startKickLoop()
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
+            task.wait(0.3)
+            if not kickLoopRunning then return end
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
-            local hum = newChar:WaitForChild("Humanoid", 5)
-            if hrp and hum then
-                while hum.Health <= 0 do task.wait(0.1) end
-                task.wait(0.2)
-                setupHybridLockForTarget()
-                kickCounter = 0
-                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                    end)
+            if hrp then
+                for _, v in pairs(hrp:GetChildren()) do
+                    if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                        v:Destroy()
+                    end
                 end
+                setupKickAlign(selectedKickPlayer)
             end
         end)
     end
 
-    -- Stepped: 하이브리드 고정 장치 업데이트 + CFrame 직접 강제 덮어쓰기
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -294,56 +373,38 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-        
-        -- 고정 장치가 없으면 재생성
-        if not tHRP:FindFirstChild("KickAlign") then
-            setupHybridLockForTarget()
+        if not tHRP:FindFirstChild("KickAlign") or not tHRP:FindFirstChild("KickRot") then
+            setupKickAlign(selectedKickPlayer)
+            return
         end
         
-        -- ★ CFrame 직접 강제 덮어쓰기 (낙하 방지)
-        tHRP.CFrame = CFrame.new(targetPos)
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
+        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- AlignPosition 위치 업데이트
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = targetPos
         end
         
-        -- BodyPosition 위치 업데이트
-        local bp = tHRP:FindFirstChild("KickBP")
-        if bp then
-            bp.Position = targetPos
+        local rot = tHRP:FindFirstChild("KickRot")
+        if rot then
+            rot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        -- BodyGyro 회전 0도 유지
-        local bg = tHRP:FindFirstChild("KickBG")
-        if bg then
-            bg.CFrame = CFrame.Angles(0, 0, 0)
-        end
-        
-        -- 나머지 물리 강제 초기화
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
-            tHum.WalkSpeed = 0
-            tHum.JumpPower = 0
             tHum.PlatformStand = true
-            tHum.Sit = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
         end
     end)
 
-    -- 리모트 호출 (350Hz, 1:3 비율 - 소유권 압도)
     remoteTask = task.spawn(function()
-        local interval = 1 / 350
+        local interval = 0.00181818 -- 550Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
-            while tick() < nextTime do
-                task.wait()
-            end
+            while tick() < nextTime do task.wait() end
             nextTime = nextTime + interval
             
             if not selectedKickPlayer then continue end
@@ -357,6 +418,30 @@ local function startKickLoop()
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
             
+            if not tHRP:FindFirstChild("KickAlign") or not tHRP:FindFirstChild("KickRot") then
+                setupKickAlign(selectedKickPlayer)
+                continue
+            end
+            
+            local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+            
+            local align = tHRP:FindFirstChild("KickAlign")
+            if align and align.Attachment1 then
+                align.Attachment1.WorldPosition = targetPos
+            end
+            
+            local rot = tHRP:FindFirstChild("KickRot")
+            if rot then
+                rot.CFrame = CFrame.Angles(0, 0, 0)
+            end
+            
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+            if tHum then
+                tHum.PlatformStand = true
+                tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            end
+            
             if tHum and tHum.Health > 0 then
                 local dist = (tHRP.Position - myHRP.Position).Magnitude
                 if dist > 30 then
@@ -366,7 +451,7 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                if kickCounter % 4 == 1 then
+                if kickCounter % setOwnerRatio == 1 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
@@ -383,25 +468,15 @@ end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    if steppedConn then
-        steppedConn:Disconnect()
-        steppedConn = nil
-    end
-    if remoteTask then
-        task.cancel(remoteTask)
-        remoteTask = nil
-    end
-    if respawnConn then
-        respawnConn:Disconnect()
-        respawnConn = nil
-    end
+    if steppedConn then steppedConn:Disconnect(); steppedConn = nil end
+    if remoteTask then task.cancel(remoteTask); remoteTask = nil end
+    if respawnConn then respawnConn:Disconnect(); respawnConn = nil end
+    
     if selectedKickPlayer and selectedKickPlayer.Character then
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") 
-                   or v:IsA("BodyPosition") or v:IsA("BodyGyro") 
-                   or v:IsA("BodyVelocity") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                     v:Destroy()
                 end
             end
@@ -410,7 +485,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "하이브리드 고정 (Align + Body + Y축 BV)",
+    Name = "블롭맨 오너 킥 실행 (Align 고정 강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -425,10 +500,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 사인파, 90도 수직, 50Hz]
+-- [팔레트 레그돌 (Invis) - XOCU 완전 이식, Stepped 유지]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 90도 수직, 50Hz",
+    Name = "Pallet Ragdoll (Invis) - 위아래 강타",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -449,7 +524,7 @@ KickTab:CreateToggle({
 
         if Value then
             if not selectedKickPlayer then
-                Rayfield:Notify({Title = "알림", Content = "타겟을 먼저 입력해주세요!", Duration = 3})
+                Rayfield:Notify({Title = "알림", Content = "Select target first (타겟을 먼저 입력해주세요)", Duration = 3})
                 return
             end
 
@@ -484,13 +559,14 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5
-                            v.Massless = true
+                            v.Transparency = 1 
                         end
                     end
 
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
+
+                    local strikePhase = false
 
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
@@ -507,12 +583,14 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                local t = tick() * 50
-                                local offsetY = 15 * math.sin(t)
-                                soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, math.rad(90), 0) * CFrame.new(0, offsetY, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
-                                soundPart.CanCollide = false
-                                soundPart.Massless = true
+                                strikePhase = not strikePhase
+                                if strikePhase then
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
+                                else
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
+                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
+                                end
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
@@ -582,9 +660,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭]
+-- [나머지 필수 탭들 유지]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "Align+Body+Y축 BV, CFrame 강제 덮어쓰기, 안티그랩 완전 차단, 350Hz", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 550Hz 정밀 타이머, SetOwner 1:Destroy 2 (순서: SetOwner → Destroy → Destroy)", Duration = 3})
