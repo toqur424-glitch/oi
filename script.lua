@@ -137,7 +137,6 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         local holdPos = camCF.Position + camCF.LookVector * 20
 
-        -- AlignPosition으로 고정 (매 프레임 위치 업데이트)
         local align = tgtRoot:FindFirstChild("FKeyAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = holdPos
@@ -147,7 +146,6 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- SetOwner와 DestroyGrabLine 번갈아 전송 (1:3 비율)
         fCounter = fCounter + 1
         if fCounter % setOwnerRatio == 1 then
             pcall(function()
@@ -221,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (리스폰 강화, 350Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (리셋 절대 안 풀림, 350Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -265,22 +263,21 @@ local function setupBodiesForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
 
-    -- 기존 BodyPosition/BodyGyro 제거
     if targetBP then targetBP:Destroy(); targetBP = nil end
     if targetBG then targetBG:Destroy(); targetBG = nil end
 
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 500000  -- 고정력 증가
-    targetBP.D = 5000
+    targetBP.P = 1000000
+    targetBP.D = 10000
     targetBP.Parent = tHRP
 
     targetBG = Instance.new("BodyGyro")
     targetBG.Name = "KickBG"
     targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG.P = 500000
-    targetBG.D = 5000
+    targetBG.P = 1000000
+    targetBG.D = 10000
     targetBG.CFrame = CFrame.Angles(0, 0, 0)
     targetBG.Parent = tHRP
 
@@ -296,26 +293,31 @@ local function startKickLoop()
     kickCounter = 0
 
     if selectedKickPlayer then
-        -- 리셋 감지 및 자동 재부착 (강화)
+        -- 리셋 감지 및 자동 재부착 (절대 안 풀림)
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
             if hrp and hum then
-                -- 완전히 살아날 때까지 대기
-                while hum.Health <= 0 do task.wait(0.1) end
-                -- 캐릭터가 물리적으로 완전히 스폰될 때까지 추가 대기
-                task.wait(0.3) 
+                -- 정확한 사망 판정 및 완전 부활 대기
+                while hum:GetState() == Enum.HumanoidStateType.Dead do
+                    task.wait(0.1)
+                end
                 
-                -- 기존 BodyPosition/BodyGyro 강제 제거 및 초기화
+                -- 3프레임 동안 물리 엔진 동기화 (완전 부활 보장)
+                for i = 1, 3 do
+                    RunService.Stepped:Wait()
+                end
+
+                -- 기존 BodyPosition 완전 제거
                 if targetBP then targetBP:Destroy(); targetBP = nil end
                 if targetBG then targetBG:Destroy(); targetBG = nil end
+                task.wait(0.05)
                 
-                -- 새로 생성
+                -- 새로 생성 및 즉시 위치 고정
                 setupBodiesForTarget()
                 
-                -- 즉시 위치 고정 및 속도 제거
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP then
+                if myHRP and hrp then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
                     pcall(function()
                         hrp.CFrame = CFrame.new(targetPos)
@@ -328,7 +330,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 위치 업데이트 (BodyPosition 사용)
+    -- 매 프레임 위치 업데이트 (물리 고정)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -342,17 +344,12 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- BodyPosition이 없거나 잘못된 참조면 재생성
         if not targetBP or targetBP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
         
-        if targetBP then
-            targetBP.Position = targetPos
-        end
-        if targetBG then
-            targetBG.CFrame = CFrame.Angles(0, 0, 0)
-        end
+        if targetBP then targetBP.Position = targetPos end
+        if targetBG then targetBG.CFrame = CFrame.Angles(0, 0, 0) end
         
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
@@ -365,13 +362,11 @@ local function startKickLoop()
 
     -- 350Hz로 SetOwner/DestroyGrabLine 전송
     remoteTask = task.spawn(function()
-        local interval = 0.002857142857  -- 350Hz (1/350)
+        local interval = 0.002857142857  -- 350Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
-            while tick() < nextTime do
-                task.wait()
-            end
+            while tick() < nextTime do task.wait() end
             nextTime = nextTime + interval
             
             if not selectedKickPlayer then continue end
@@ -411,18 +406,9 @@ end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    if steppedConn then
-        steppedConn:Disconnect()
-        steppedConn = nil
-    end
-    if remoteTask then
-        task.cancel(remoteTask)
-        remoteTask = nil
-    end
-    if respawnConn then
-        respawnConn:Disconnect()
-        respawnConn = nil
-    end
+    if steppedConn then steppedConn:Disconnect() end
+    if remoteTask then task.cancel(remoteTask) end
+    if respawnConn then respawnConn:Disconnect() end
     if targetBP then targetBP:Destroy(); targetBP = nil end
     if targetBG then targetBG:Destroy(); targetBG = nil end
     
@@ -430,16 +416,14 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
-                    v:Destroy()
-                end
+                if v:IsA("BodyPosition") or v:IsA("BodyGyro") then v:Destroy() end
             end
         end
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (리스폰 강화, 350Hz)",
+    Name = "블롭맨 오너 킥 실행 (리셋 절대 안 풀림, 극한 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -454,10 +438,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 초고속 출입 (40Hz, 20스터드)]
+-- [팔레트 레그돌 (Invis) - 초고속 출입 (60Hz, 30스터드, -5e6)]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 초고속 출입 (40Hz, 20스터드)",
+    Name = "Pallet Ragdoll (Invis) - 극한 속도 (60Hz, 30스터드)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -513,8 +497,8 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5   -- 50% 투명도
-                            v.Massless = true       -- 몸통 통과
+                            v.Transparency = 0.5
+                            v.Massless = true
                         end
                     end
 
@@ -536,13 +520,11 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 진동: 위아래 20스터드, 40Hz, 속도 2,000,000
-                                local t = tick() * 40
-                                local offsetY = 20 * math.sin(t)
+                                -- 60Hz, 30스터드, 속도 500만
+                                local t = tick() * 60
+                                local offsetY = 30 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -2e6 * math.cos(t), 0)
-                                soundPart.CanCollide = false
-                                soundPart.Massless = true
+                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -5e6 * math.cos(t), 0)
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
@@ -617,4 +599,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition, 리스폰 강화, SetOwner 1:Destroy 3", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 350Hz, 극한 고정 (P=100만), 리셋 완전 차단, 판자 60Hz/30스터드/500만 속도", Duration = 3})
