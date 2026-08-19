@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Ultimate Quad-Lock Hub",
+    Name = "🔥 FSOF Ultimate Anti-Fall Lock Hub",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩 완전 차단: Struggle / RagdollRemote 무력화]
+-- [안티그랩 완전 차단]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -43,7 +43,7 @@ if RagdollRemote then
 end
 
 --=============================================
--- [IsHeld 감시용 더미 (안티그랩 유인용)]
+-- [IsHeld 감시용 더미]
 --=============================================
 local BeingHeld = plr:WaitForChild("IsHeld", 10)
 if BeingHeld then
@@ -66,7 +66,7 @@ if BeingHeld then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (1:1 번갈아)
+-- [GRAB 탭] - F키 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -133,7 +133,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 4중 고정 (Align + BodyPosition + BodyGyro + BodyVelocity)
+-- [KICK 탭] - 4중 고정 + 낙하 방지
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -228,11 +228,11 @@ local function setupQuadLockForTarget()
     bg.CFrame = CFrame.Angles(0, 0, 0)
     bg.Parent = tHRP
 
-    -- 5. BodyVelocity (Y축 중력 차단)
+    -- 5. BodyVelocity (Y축 중력 차단 + 위로 살짝 띄우기)
     local bv = Instance.new("BodyVelocity")
     bv.Name = "KickBV"
     bv.MaxForce = Vector3.new(0, 1e9, 0)
-    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.Velocity = Vector3.new(0, 0.1, 0)  -- 0.1만큼 위로 올리기 (중력 완전 상쇄)
     bv.Parent = tHRP
 
     -- 충돌 및 움직임 완전 차단
@@ -282,7 +282,7 @@ local function startKickLoop()
         end)
     end
 
-    -- Stepped: 4중 고정 장치 업데이트 (매 프레임)
+    -- Stepped: 4중 고정 장치 업데이트 + 낙하 방지 강제 CFrame 덮어쓰기
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -300,6 +300,11 @@ local function startKickLoop()
         if not tHRP:FindFirstChild("KickAlign") then
             setupQuadLockForTarget()
         end
+        
+        -- ★ CFrame 직접 강제 덮어쓰기 (낙하 방지)
+        tHRP.CFrame = CFrame.new(targetPos)
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
         
         -- AlignPosition 위치 업데이트
         local align = tHRP:FindFirstChild("KickAlign")
@@ -320,8 +325,6 @@ local function startKickLoop()
         end
         
         -- 나머지 물리 강제 초기화
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.WalkSpeed = 0
@@ -407,7 +410,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "4중 고정 킥 실행 (안티그랩 완전 뚫기)",
+    Name = "4중 고정 + 낙하 방지 킥 (안티그랩 완전 뚫기)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -584,4 +587,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "4중 고정(Align+BodyPosition+BodyGyro+BodyVelocity), 안티그랩 완전 차단, 350Hz", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "4중 고정 + CFrame 직접 강제 덮어쓰기, BodyVelocity Y=0.1, 낙하 완전 방지", Duration = 3})
