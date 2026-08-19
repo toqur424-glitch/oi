@@ -438,10 +438,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 초고속 출입 (60Hz, 30스터드, -5e6)]
+-- [팔레트 레그돌 (Invis) - 와리가리 거리 10스터드]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 극한 속도 (60Hz, 30스터드)",
+    Name = "Pallet Ragdoll (Invis) - 거리 10, 60Hz",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -520,9 +520,9 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 60Hz, 30스터드, 속도 500만
+                                -- 60Hz, 10스터드 진폭, 속도 500만
                                 local t = tick() * 60
-                                local offsetY = 30 * math.sin(t)
+                                local offsetY = 10 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -5e6 * math.cos(t), 0)
                             else
@@ -599,4 +599,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 350Hz, 극한 고정 (P=100만), 리셋 완전 차단, 판자 60Hz/30스터드/500만 속도", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 350Hz, 극한 고정 (P=100만), 리셋 완전 차단, 판자 60Hz/10스터드/500만 속도", Duration = 3})
