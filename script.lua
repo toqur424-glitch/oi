@@ -248,7 +248,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (SetOwner 1:Destroy 3, 350Hz 정밀)
+-- [KICK 탭] - 블롭맨 오너 킥 (SetOwner 1:Destroy 3, 400Hz 정밀)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -394,9 +394,9 @@ local function startKickLoop()
         end
     end)
 
-    -- [수정] 350Hz 정밀 타이머 (간격 0.002857142857초)
+    -- [수정] 400Hz 정밀 타이머 (간격 0.0025초)
     remoteTask = task.spawn(function()
-        local interval = 0.002857142857 -- 350Hz
+        local interval = 0.0025 -- 400Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -447,7 +447,6 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                -- [수정] SetOwner 1번 : Destroy 3번 (1,2,3,4 순환)
                 if kickCounter % setOwnerRatio == 1 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
@@ -482,7 +481,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, SetOwner 1:Destroy 3)",
+    Name = "블롭맨 오너 킥 실행 (400Hz, SetOwner 1:Destroy 3)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -497,10 +496,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 원본(처음) 버전으로 복원]
+-- [팔레트 레그돌 (Invis) - 투명도 50%, 90도 세움]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 원본 버전",
+    Name = "Pallet Ragdoll (Invis) - 투명50% 90도세움",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -547,14 +546,13 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 1 
+                            v.Transparency = 0.5 -- [수정] 투명도 50%
                         end
                     end
 
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
 
-                    -- [원본] Stepped를 사용한 위아래 강타 (변경 없음)
                     local strikePhase = false
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
@@ -662,4 +660,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz 정밀 타이머, SetOwner 1:Destroy 3 (순서: SetOwner → Destroy → Destroy → Destroy)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 400Hz 정밀 타이머, SetOwner 1:Destroy 3, 판자 투명50% 90도세움", Duration = 3})
