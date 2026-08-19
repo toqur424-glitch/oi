@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 1:3 / 350Hz / 높이 23 / 원래 고정 방식 + Massless 제외
+-- [KICK 탭] - 1:3 / 350Hz / 높이 23 / 리스폰 고정 유지 (Massless 제외)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -259,8 +259,23 @@ KickTab:CreateInput({
 })
 
 -- =========================================================================
--- [고정 방식: 원래대로 AlignPosition + AlignOrientation + Massless 제외]
+-- [고정 방식: 원래대로 AlignPosition + AlignOrientation + Massless 제외 + 리스폰 강화]
 -- =========================================================================
+
+-- 소유권 강제 탈취 + Align 재설정 헬퍼 함수
+local function forceOwnershipAndAlign(tHRP)
+    if not tHRP then return end
+    -- 10회 연속 SetNetworkOwner로 소유권 완전 탈취
+    for i = 1, 10 do
+        pcall(function()
+            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.new())
+        end)
+        task.wait(0.001) -- 매우 짧은 간격
+    end
+    -- Align 재설정
+    setupAlignForTarget()
+end
+
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -304,15 +319,14 @@ local function setupAlignForTarget()
     targetAttach0 = att0
     targetAttach1 = att1
 
-    -- [수정] 흔들림 방지: 타겟의 모든 파트 충돌 해제 (Massless는 제거)
+    -- 흔들림 방지: 타겟의 모든 파트 충돌 해제 (Massless는 제거)
     for _, part in ipairs(tChar:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CanCollide = false
-            -- Massless는 제거함 (PCLD 문제 해결)
         end
     end
 
-    -- 생성 직후 네트워크 소유권 강제 탈취
+    -- 생성 직후 네트워크 소유권 강제 탈취 (한 번 더)
     pcall(function()
         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.new())
     end)
@@ -330,25 +344,34 @@ local function startKickLoop()
     local tpRange = 25
 
     if selectedKickPlayer then
-        -- 리스폰 감지: 0.01초 대기 후 재부착 (높이 23)
+        -- 리스폰 감지: 0.01초 대기 후 재부착 (높이 23) + 소유권 강제 탈취
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 2)
             if hrp then
                 task.wait(0.01)
+                -- 1) 소유권 강제 탈취 (10회)
+                for i = 1, 10 do
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(hrp, CFrame.new())
+                    end)
+                    task.wait(0.001)
+                end
+                -- 2) Align 재설정
                 pcall(function()
                     setupAlignForTarget()
-                    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                    if myHRP then
-                        hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(0, 23, 0))  -- 머리 위 23스터드
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.Velocity = Vector3.zero
-                    end
                 end)
+                -- 3) 위치 강제 이동 (머리 위 23)
+                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(0, 23, 0))
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.Velocity = Vector3.zero
+                end
             end
         end)
     end
 
-    -- 매 프레임 타겟 위치 업데이트 (AlignPosition의 Attachment1 위치만 변경)
+    -- 매 프레임 타겟 위치 업데이트 + Align 재부착 감시
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -367,9 +390,9 @@ local function startKickLoop()
             myHRP.AssemblyLinearVelocity = Vector3.zero
         end
 
-        -- AlignPosition이 없으면 재생성
+        -- AlignPosition이 없으면 재생성 + 소유권 탈취
         if not tHRP:FindFirstChild("KickAlignPos") then
-            pcall(setupAlignForTarget)
+            forceOwnershipAndAlign(tHRP)
             tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             if not tHRP then return end
         end
@@ -469,7 +492,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / Massless 제외)",
+    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / 리스폰 고정 유지)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -649,4 +672,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / Massless 제거 (CanCollide false 유지)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / 리스폰 고정 유지 (Massless 제외)", Duration = 3})
