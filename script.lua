@@ -430,7 +430,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition, 최적화)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition, SetOwner 1:Destroy 3)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -445,10 +445,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 사인파로 부드럽게 출입]
+-- [팔레트 레그돌 (Invis) - 초고속 출입 (40Hz, 20스터드)]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 사인파 출입 (몸통 관통)",
+    Name = "Pallet Ragdoll (Invis) - 초고속 출입 (40Hz, 20스터드)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -527,11 +527,11 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 진동: 위아래 15스터드, 20Hz
-                                local t = tick() * 20
-                                local offsetY = 15 * math.sin(t)
+                                -- 사인파 진동: 위아래 20스터드, 40Hz, 속도 2,000,000
+                                local t = tick() * 40
+                                local offsetY = 20 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
+                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -2e6 * math.cos(t), 0)
                                 soundPart.CanCollide = false
                                 soundPart.Massless = true
                             else
@@ -608,4 +608,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 사용, 핑 최적화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition, SetOwner 1:Destroy 3, 판자 40Hz/200만 속도", Duration = 3})
