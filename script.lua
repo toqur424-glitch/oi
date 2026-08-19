@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 완전 재설계: 1:3 / 350Hz + 리스폰 0.001초 감지
+-- [KICK 탭] - 완전 재설계: 1:3 / 350Hz + 리스폰 0.001초 감지 + 범위 이탈 1회 TP
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -259,7 +259,7 @@ KickTab:CreateInput({
 })
 
 -- =========================================================================
--- [수정된 부분] AlignPosition/AlignOrientation을 추가한 강력한 킥 루프
+-- [수정된 부분] AlignPosition/AlignOrientation을 추가한 강력한 킥 루프 + 1회 TP
 -- =========================================================================
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
@@ -317,6 +317,9 @@ local function startKickLoop()
     
     kickLoopRunning = true
     kickCounter = 0
+    
+    -- [추가] TP를 실행할 거리 기준 (35스터드)
+    local tpRange = 35
 
     if selectedKickPlayer then
         -- 리스폰 감지: 0.01초 대기 후 재부착
@@ -336,7 +339,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 타겟 위치 업데이트 (AlignPosition의 Attachment1 위치를 내 위치로)
+    -- 매 프레임 타겟 위치 업데이트 + [추가] 거리 체크 및 TP
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -347,6 +350,15 @@ local function startKickLoop()
         
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
+
+        -- [추가] 범위 이탈 시 타겟에게 1회 TP
+        local distance = (myHRP.Position - tHRP.Position).Magnitude
+        if distance > tpRange then
+            -- 내 캐릭터를 타겟 위치 바로 옆으로 순간이동 (1회 TP)
+            myHRP.CFrame = tHRP.CFrame * CFrame.new(0, 3, 5)
+            myHRP.AssemblyLinearVelocity = Vector3.zero
+            -- TP 후 즉시 AlignPosition이 타겟을 붙잡음
+        end
 
         -- AlignPosition이 없으면 재생성 (리스폰 직후 대응)
         if not tHRP:FindFirstChild("KickAlignPos") then
@@ -374,7 +386,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz (1:3 비율) 리모트 스팸 (기존 그대로)
+    -- 350Hz (1:3 비율) 리모트 스팸 (기존 그대로 유지)
     remoteTask = task.spawn(function()
         local interval = 0.002857142857
         local nextTime = tick() + interval
