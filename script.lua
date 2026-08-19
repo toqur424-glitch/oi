@@ -64,9 +64,9 @@ if BeingHeld then
 end
 
 --=============================================
--- [공통 변수]
+-- [공통 변수] - 리스폰 후 고정을 위해 비율 1로 강제 변경
 --=============================================
-local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, Destroy 3번)
+local setOwnerRatio = 1  -- 1:0 비율 (모든 프레임 SetOwner 전송)로 변경하여 네트워크 권한 완전 장악
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -137,7 +137,6 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         local holdPos = camCF.Position + camCF.LookVector * 20
 
-        -- AlignPosition으로 고정 (매 프레임 위치 업데이트)
         local align = tgtRoot:FindFirstChild("FKeyAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = holdPos
@@ -147,7 +146,6 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- SetOwner와 DestroyGrabLine 번갈아 전송 (1:3 비율)
         fCounter = fCounter + 1
         if fCounter % setOwnerRatio == 1 then
             pcall(function()
@@ -221,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - AlignPosition/AlignOrientation 사용 (고정력 최상)
+-- [KICK 탭] - AlignPosition/AlignOrientation 사용 + 전용 앵커 파트
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -235,6 +233,21 @@ local targetAlignPos = nil
 local targetAlignRot = nil
 local targetAttach0 = nil
 local targetAttach1 = nil
+
+-- 리스폰 후에도 유지되는 전용 앵커 파트 생성
+local function getKickAnchor()
+    local anchor = workspace:FindFirstChild("KickAnchor")
+    if not anchor then
+        anchor = Instance.new("Part")
+        anchor.Name = "KickAnchor"
+        anchor.Anchored = true
+        anchor.CanCollide = false
+        anchor.Transparency = 1
+        anchor.Size = Vector3.new(1, 1, 1)
+        anchor.Parent = workspace
+    end
+    return anchor
+end
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -279,12 +292,13 @@ local function setupAlignForTarget()
     att0.Name = "KickAtt0"
     att0.Parent = tHRP
 
-    -- Attachment1 (월드 공간에 고정, 위치는 매 프레임 업데이트)
+    -- Attachment1 (전용 앵커 파트에 부착)
+    local anchor = getKickAnchor()
     local att1 = Instance.new("Attachment")
     att1.Name = "KickAtt1"
-    att1.Parent = workspace.Terrain
+    att1.Parent = anchor
 
-    -- AlignPosition
+    -- AlignPosition (MaxForce 무한대)
     targetAlignPos = Instance.new("AlignPosition")
     targetAlignPos.Name = "KickAlignPos"
     targetAlignPos.Attachment0 = att0
@@ -302,7 +316,7 @@ local function setupAlignForTarget()
     targetAlignRot.MaxTorque = math.huge
     targetAlignRot.Responsiveness = math.huge
     targetAlignRot.RigidityEnabled = true
-    targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)  -- 기본 회전
+    targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
     targetAlignRot.Parent = tHRP
 
     targetAttach0 = att0
@@ -320,28 +334,36 @@ local function startKickLoop()
     kickCounter = 0
 
     if selectedKickPlayer then
-        -- 리셋 감지 및 자동 재부착
+        -- 리셋 감지 및 안정화 후 재부착 (0.5초 대기 추가)
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
             if hrp and hum then
                 while hum.Health <= 0 do task.wait(0.1) end
-                task.wait(0.2)
-                setupAlignForTarget()
-                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    pcall(function()
+                task.wait(0.5) -- 캐릭터가 완전히 로드될 때까지 대기
+                
+                -- 강제로 재설정
+                local success = pcall(function()
+                    setupAlignForTarget()
+                    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                    if myHRP then
+                        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
                         hrp.CFrame = CFrame.new(targetPos)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
-                    end)
+                    end
+                end)
+                
+                -- 만약 실패하면 0.2초 후 재시도
+                if not success then
+                    task.wait(0.2)
+                    pcall(setupAlignForTarget)
                 end
             end
         end)
     end
 
-    -- 매 프레임 위치 업데이트 (AlignPosition의 Attachment1 위치 변경)
+    -- 매 프레임 위치 업데이트
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -355,17 +377,17 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- AlignPosition/AlignOrientation이 없으면 생성
-        if not targetAlignPos or targetAlignPos.Parent ~= tHRP then
-            setupAlignForTarget()
+        -- Align/Attachment가 없으면 즉시 재생성
+        if not targetAlignPos or targetAlignPos.Parent ~= tHRP or not targetAttach1 then
+            pcall(setupAlignForTarget)
         end
         
-        -- 위치 고정 (Attachment1의 WorldPosition 업데이트)
+        -- 위치 고정 (전용 앵커 파트의 Attachment1 위치 업데이트)
         if targetAttach1 then
             targetAttach1.WorldPosition = targetPos
         end
         
-        -- 회전 고정 (원하는 각도로 설정, 여기서는 0,0,0)
+        -- 회전 고정
         if targetAlignRot then
             targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
         end
@@ -380,7 +402,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz로 SetOwner/DestroyGrabLine 전송 (기존과 동일)
+    -- 350Hz로 SetOwner/DestroyGrabLine 전송 (비율 1로 모든 프레임 SetOwner 전송)
     remoteTask = task.spawn(function()
         local interval = 0.002857142857  -- 350Hz
         local nextTime = tick() + interval
@@ -411,16 +433,15 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                if kickCounter % setOwnerRatio == 1 then
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                else
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                    end)
-                end
+                -- 모든 프레임에 SetNetworkOwner 전송 (비율 1)
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+                -- DestroyGrabLine도 함께 전송
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                end)
             end
         end
     end)
@@ -457,7 +478,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (AlignPosition, 최고 고정력)",
+    Name = "블롭맨 오너 킥 실행 (AlignPosition, 리스폰 완전 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -531,8 +552,8 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5   -- 50% 투명도
-                            v.Massless = true       -- 몸통 통과
+                            v.Transparency = 0.5
+                            v.Massless = true
                         end
                     end
 
@@ -554,7 +575,6 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 진동: 위아래 15스터드, 20Hz
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
@@ -635,4 +655,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, AlignPosition 사용, 핑 최적화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 전용 앵커파트, 리스폰 0.5초 대기, 350Hz SetOwner 전체 전송", Duration = 3})
