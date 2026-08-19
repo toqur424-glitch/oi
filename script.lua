@@ -64,12 +64,12 @@ if BeingHeld then
 end
 
 --=============================================
--- [공통 변수] - 원래 방식 1:3 비율 유지
+-- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- SetOwner 1번, Destroy 3번 (1:3)
+local setOwnerRatio = 1  -- 모든 프레임 SetOwner 전송
 
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩
+-- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -147,16 +147,15 @@ local function startFKeyAttack(targetPlayer)
         end
 
         fCounter = fCounter + 1
-        if fCounter % setOwnerRatio == 1 then
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-            end)
-        else
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
-        end
+        -- SetOwner 매 프레임 전송
+        pcall(function()
+            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+        end)
+        -- DestroyGrabLine도 매 프레임 전송
+        pcall(function()
+            rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+            rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+        end)
     end)
 end
 
@@ -219,7 +218,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 1:3 / 350Hz / (X=7, Y=20) 고정
+-- [KICK 탭] - 원본 AlignPosition + 리스폰 완전 대비
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -265,17 +264,24 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
 
+    -- 기존 Align/Attachment 제거 (중복 방지)
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("Attachment") then
             v:Destroy()
         end
     end
 
-    local att0 = Instance.new("Attachment", tHRP)
+    -- Attachment0 (타겟 HRP에 부착)
+    local att0 = Instance.new("Attachment")
     att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
-    att1.Name = "KickAtt1"
+    att0.Parent = tHRP
 
+    -- Attachment1 (Terrain에 부착 - 영구적)
+    local att1 = Instance.new("Attachment")
+    att1.Name = "KickAtt1"
+    att1.Parent = workspace.Terrain
+
+    -- AlignPosition
     targetAlignPos = Instance.new("AlignPosition")
     targetAlignPos.Name = "KickAlignPos"
     targetAlignPos.Attachment0 = att0
@@ -286,6 +292,7 @@ local function setupAlignForTarget()
     targetAlignPos.RigidityEnabled = true
     targetAlignPos.Parent = tHRP
 
+    -- AlignOrientation (회전 고정)
     targetAlignRot = Instance.new("AlignOrientation")
     targetAlignRot.Name = "KickAlignRot"
     targetAlignRot.Attachment0 = att0
@@ -297,10 +304,8 @@ local function setupAlignForTarget()
 
     targetAttach0 = att0
     targetAttach1 = att1
-    
-    pcall(function()
-        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.new())
-    end)
+
+    return targetAlignPos, targetAlignRot
 end
 
 local function startKickLoop()
@@ -312,23 +317,30 @@ local function startKickLoop()
     kickCounter = 0
 
     if selectedKickPlayer then
+        -- 리스폰 감지: 안정화 후 재부착 (0.3초 대기)
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
-            local hrp = newChar:WaitForChild("HumanoidRootPart", 2)
-            if hrp then
-                task.wait(0.01)
+            local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
+            local hum = newChar:WaitForChild("Humanoid", 5)
+            if hrp and hum then
+                while hum.Health <= 0 do task.wait(0.1) end
+                task.wait(0.3) -- 캐릭터 완전 로드 대기
+                
+                -- 강제 재설정
                 pcall(function()
                     setupAlignForTarget()
                     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                     if myHRP then
-                        -- ★ 리스폰 시 (X=7, Y=20) 위치에 배치
-                        hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(7, 20, 0))
+                        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+                        hrp.CFrame = CFrame.new(targetPos)
                         hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
                     end
                 end)
             end
         end)
     end
 
+    -- 매 프레임 실행: 위치 업데이트 + Align 재생성 + 권한 전송
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -339,23 +351,24 @@ local function startKickLoop()
         
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
-
-        if not tHRP:FindFirstChild("KickAlignPos") then
-            pcall(setupAlignForTarget)
-            tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-            if not tHRP then return end
-        end
-
-        -- ★ 고정 위치: (X=7, Y=20, Z=0) (내 위치 기준)
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
+        -- Align/Attachment가 없으면 즉시 재생성
+        if not targetAlignPos or targetAlignPos.Parent ~= tHRP or not targetAttach1 then
+            pcall(setupAlignForTarget)
+        end
+        
+        -- 위치 고정 (Terrain의 Attachment1 위치 업데이트)
+        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         if targetAttach1 then
             targetAttach1.WorldPosition = targetPos
         end
+        
+        -- 회전 고정
         if targetAlignRot then
             targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
+        -- 물리 완전 정지
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         local tHum = tChar:FindFirstChild("Humanoid")
@@ -364,17 +377,18 @@ local function startKickLoop()
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
         end
 
-        -- ★ 거리 15 이상 벌어지면 상대 바로 앞으로 순간이동 (공격 가능하게)
+        -- 거리 유지 (멀어지면 순간이동)
         local dist = (tHRP.Position - myHRP.Position).Magnitude
-        if dist > 15 then
+        if dist > 30 then
             pcall(function()
-                myChar:PivotTo(CFrame.new(tHRP.Position + Vector3.new(0, 0, 4)))
+                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
             end)
         end
     end)
 
+    -- 별도 루프: 매 프레임 SetNetworkOwner + DestroyGrabLine 전송 (350Hz)
     remoteTask = task.spawn(function()
-        local interval = 0.002857142857
+        local interval = 0.002857142857  -- 350Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -395,17 +409,15 @@ local function startKickLoop()
             if not (tChar and tHRP) then continue end
             
             if tHum and tHum.Health > 0 then
-                kickCounter = kickCounter + 1
-                if kickCounter % setOwnerRatio == 1 then
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                else
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                    end)
-                end
+                -- SetOwner 매 프레임
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+                -- DestroyGrabLine 매 프레임
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                end)
             end
         end
     end)
@@ -442,7 +454,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / X=7 Y=20 고정)",
+    Name = "블롭맨 오너 킥 실행 (원본 Align, 리스폰 완전 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -457,7 +469,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis)] - 기존과 동일
+-- [팔레트 레그돌 (Invis) - 사인파로 부드럽게 출입]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 사인파 출입 (몸통 관통)",
@@ -468,155 +480,4 @@ KickTab:CreateToggle({
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
-        local lpName = plr.Name
-        local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
-
-        local function clearAttackLoop()
-            if getgenv().ragdollSteppedConn then
-                getgenv().ragdollSteppedConn:Disconnect()
-                getgenv().ragdollSteppedConn = nil
-            end
-        end
-
-        if Value then
-            if not selectedKickPlayer then
-                Rayfield:Notify({Title = "알림", Content = "타겟을 먼저 입력해주세요!", Duration = 3})
-                return
-            end
-
-            getgenv().palletRagdollActive = true
-            getgenv().PalletForRagdoll = nil
-            
-            if getgenv().palletCacheConn then
-                getgenv().palletCacheConn:Disconnect()
-            end
-            clearAttackLoop()
-
-            if not toysFolder then
-                Rayfield:Notify({Title = "오류", Content = "토이 폴더 없음 (캐릭터 재생성 후 시도)", Duration = 3})
-                return
-            end
-
-            getgenv().palletCacheConn = toysFolder.ChildAdded:Connect(function(child)
-                if not getgenv().palletRagdollActive then return end
-                if child.Name ~= "PalletLightBrown" and child.Name ~= "PalletForRagdoll" then return end
-
-                local soundPart = child:WaitForChild("SoundPart", 3)
-                if not soundPart then return end
-
-                pcall(function()
-                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine:FireServer(soundPart)
-                end)
-
-                local partOwner = soundPart:WaitForChild("PartOwner", 1)
-                if partOwner and partOwner.Value == lpName then
-                    for _, v in pairs(child:GetChildren()) do
-                        if v:IsA("BasePart") then
-                            v.CanCollide = false
-                            v.CanQuery = false
-                            v.Transparency = 0.5
-                            v.Massless = true
-                        end
-                    end
-
-                    child.Name = "PalletForRagdoll"
-                    getgenv().PalletForRagdoll = child
-
-                    getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
-                        if not getgenv().palletRagdollActive or not child.Parent then 
-                            clearAttackLoop()
-                            return 
-                        end
-
-                        local tChar = selectedKickPlayer and selectedKickPlayer.Character
-                        local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                        local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-
-                        if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
-                            local ragdolledVal = tHum:FindFirstChild("Ragdolled")
-                            local isRagdolled = ragdolledVal and ragdolledVal.Value or false
-
-                            if not isRagdolled then
-                                local t = tick() * 20
-                                local offsetY = 15 * math.sin(t)
-                                soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
-                                soundPart.CanCollide = false
-                                soundPart.Massless = true
-                            else
-                                soundPart.CFrame = CFrame.new(0, 9e9, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.zero
-                            end
-                        else
-                            soundPart.CFrame = CFrame.new(0, 9e9, 0)
-                            soundPart.AssemblyLinearVelocity = Vector3.zero
-                        end
-                    end)
-
-                    child.AncestryChanged:Connect(function()
-                        if not child.Parent then
-                            clearAttackLoop()
-                            getgenv().PalletForRagdoll = nil
-                            if getgenv().palletRagdollActive then
-                                task.wait(0.03)
-                                if getgenv().spawnNewPallet then getgenv().spawnNewPallet() end
-                            end
-                        end
-                    end)
-                else
-                    pcall(function() DestroyToy:FireServer(child) end)
-                end
-            end)
-
-            getgenv().spawnNewPallet = function()
-                if not getgenv().palletRagdollActive then return end
-                if getgenv().PalletForRagdoll and getgenv().PalletForRagdoll.Parent then return end
-                
-                local c = plr.Character
-                local h = c and c:FindFirstChild("HumanoidRootPart")
-                if not h then return end
-
-                task.spawn(function()
-                    pcall(function()
-                        RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
-                            "PalletLightBrown",
-                            h.CFrame * CFrame.new(0, 10, 20),
-                            Vector3.zero
-                        )
-                    end)
-                end)
-            end
-
-            getgenv().spawnNewPallet()
-        else
-            getgenv().palletRagdollActive = false
-            clearAttackLoop()
-
-            if getgenv().palletCacheConn then
-                getgenv().palletCacheConn:Disconnect()
-                getgenv().palletCacheConn = nil
-            end
-
-            local pallet = getgenv().PalletForRagdoll
-            if pallet and pallet.Parent then
-                pcall(function() DestroyToy:FireServer(pallet) end)
-            end
-
-            getgenv().PalletForRagdoll = nil
-
-            if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
-                pcall(function() DestroyToy:FireServer(toysFolder.PalletForRagdoll) end)
-            end
-        end
-    end,
-})
-
---=============================================
--- [나머지 필수 탭]
---=============================================
-local SettingsTab = Window:CreateTab("Settings", nil)
-SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
-
-Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / X=7 Y=20 고정 / 거리 15 텔레포트 / 리스폰 0.01초 대응", Duration = 3})
+        local DestroyLine = RS
