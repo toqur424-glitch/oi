@@ -468,10 +468,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 위아래 15스터드로 빠르게 왔다 갔다]
+-- [팔레트 레그돌 (Invis) - 사인파로 부드럽게 출입]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 빠른 출입 (15스터드)",
+    Name = "Pallet Ragdoll (Invis) - 사인파 출입 (몸통 관통)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -528,13 +528,12 @@ KickTab:CreateToggle({
                             v.CanCollide = false
                             v.CanQuery = false
                             v.Transparency = 0.5   -- 50% 투명도
+                            v.Massless = true       -- 몸통 통과
                         end
                     end
 
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
-
-                    local strikePhase = false
 
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
@@ -551,11 +550,13 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                strikePhase = not strikePhase
-                                -- 위아래 15스터드로 크게 왔다 갔다 (빠르게)
-                                local offsetY = strikePhase and 15 or -15
+                                -- 사인파 진동: 위아래 15스터드, 20Hz
+                                local t = tick() * 20
+                                local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
-                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e6, 0)
+                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
+                                soundPart.CanCollide = false
+                                soundPart.Massless = true
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
