@@ -100,7 +100,7 @@ local function setupGrabAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "GrabAtt0"
-    local att1 = Instance.new("Attachment", camera)
+    local att1 = Instance.new("Attachment", workspace.Terrain) -- 원복: Terrain
     att1.Name = "GrabAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -248,7 +248,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (고정력 극대화, 400Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (원래 좌표 X=7, Y=20 복원)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -301,7 +301,7 @@ local function setupKickAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", camera)
+    local att1 = Instance.new("Attachment", workspace.Terrain) -- 원복: Terrain
     att1.Name = "KickAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -322,13 +322,16 @@ local function setupKickAlign(targetPlayer)
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 
-    local camCF = camera.CFrame
-    local targetPos = camCF.Position + camCF.LookVector * 5 + Vector3.new(0, 0, 0)
-    pcall(function()
-        tHRP.CFrame = CFrame.new(targetPos)
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
-    end)
+    -- [원복] 내 캐릭터 기준 X=7, Y=20 좌표
+    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+    if myHRP then
+        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+        end)
+    end
 end
 
 local function startKickLoop()
@@ -371,8 +374,8 @@ local function startKickLoop()
             return
         end
         
-        local camCF = camera.CFrame
-        local targetPos = camCF.Position + camCF.LookVector * 5
+        -- [원복] 내 캐릭터 기준 X=7, Y=20 좌표
+        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
@@ -417,8 +420,8 @@ local function startKickLoop()
                 continue
             end
             
-            local camCF = camera.CFrame
-            local targetPos = camCF.Position + camCF.LookVector * 5
+            -- [원복] 내 캐릭터 기준 X=7, Y=20 좌표
+            local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
             
             local align = tHRP:FindFirstChild("KickAlign")
             if align and align.Attachment1 then
@@ -473,7 +476,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (카메라 고정, 400Hz)",
+    Name = "블롭맨 오너 킥 실행 (X=7,Y=20, 400Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -655,4 +658,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "카메라 고정, 400Hz, SetOwner 1:Destroy 3, 판자 투명50% 90도 날아와 때림", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "X=7,Y=20 복원, 400Hz, SetOwner 1:Destroy 3, 판자 투명50% 90도 날아와 때림", Duration = 3})
