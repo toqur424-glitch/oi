@@ -100,7 +100,7 @@ local function setupGrabAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "GrabAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
+    local att1 = Instance.new("Attachment", camera) -- [강화] 카메라에 연결
     att1.Name = "GrabAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -248,7 +248,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (SetOwner 1:Destroy 3, 400Hz 정밀)
+-- [KICK 탭] - 블롭맨 오너 킥 (고정력 극대화, 400Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -283,6 +283,7 @@ KickTab:CreateInput({
     end
 })
 
+-- [KICK] AlignPosition + AlignOrientation (고정력 극대화)
 local function setupKickAlign(targetPlayer)
     local tChar = targetPlayer and targetPlayer.Character
     if not tChar then return end
@@ -301,7 +302,7 @@ local function setupKickAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
+    local att1 = Instance.new("Attachment", camera) -- [강화] 카메라에 연결
     att1.Name = "KickAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -322,15 +323,14 @@ local function setupKickAlign(targetPlayer)
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 
-    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-    if myHRP then
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-        pcall(function()
-            tHRP.CFrame = CFrame.new(targetPos)
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-        end)
-    end
+    -- [강화] 즉시 고정 위치로 이동 (카메라 기준)
+    local camCF = camera.CFrame
+    local targetPos = camCF.Position + camCF.LookVector * 5 + Vector3.new(0, 0, 0)
+    pcall(function()
+        tHRP.CFrame = CFrame.new(targetPos)
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
+    end)
 end
 
 local function startKickLoop()
@@ -373,7 +373,9 @@ local function startKickLoop()
             return
         end
         
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        -- [강화] 카메라 기준 고정 위치 (정중앙 앞 5스터드)
+        local camCF = camera.CFrame
+        local targetPos = camCF.Position + camCF.LookVector * 5
         
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
@@ -394,7 +396,7 @@ local function startKickLoop()
         end
     end)
 
-    -- [수정] 400Hz 정밀 타이머 (간격 0.0025초)
+    -- 400Hz 정밀 타이머
     remoteTask = task.spawn(function()
         local interval = 0.0025 -- 400Hz
         local nextTime = tick() + interval
@@ -419,7 +421,9 @@ local function startKickLoop()
                 continue
             end
             
-            local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+            -- [강화] 카메라 기준 고정 위치 유지
+            local camCF = camera.CFrame
+            local targetPos = camCF.Position + camCF.LookVector * 5
             
             local align = tHRP:FindFirstChild("KickAlign")
             if align and align.Attachment1 then
@@ -439,13 +443,6 @@ local function startKickLoop()
             end
             
             if tHum and tHum.Health > 0 then
-                local dist = (tHRP.Position - myHRP.Position).Magnitude
-                if dist > 30 then
-                    pcall(function()
-                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                    end)
-                end
-                
                 kickCounter = kickCounter + 1
                 if kickCounter % setOwnerRatio == 1 then
                     pcall(function()
@@ -481,7 +478,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (400Hz, SetOwner 1:Destroy 3)",
+    Name = "블롭맨 오너 킥 실행 (카메라 고정, 400Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -496,10 +493,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 투명도 50%, 90도 세움]
+-- [팔레트 레그돌 - 투명50%, 90도 세움, 몸 정중앙 박힘]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 투명50% 90도세움",
+    Name = "Pallet Ragdoll - 투명50% 90도 정중앙",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -512,7 +509,7 @@ KickTab:CreateToggle({
 
         if Value then
             if not selectedKickPlayer then
-                Rayfield:Notify({Title = "알림", Content = "Select target first (타겟을 먼저 입력해주세요)", Duration = 3})
+                Rayfield:Notify({Title = "알림", Content = "Select target first", Duration = 3})
                 return
             end
 
@@ -524,7 +521,7 @@ KickTab:CreateToggle({
             end
 
             if not toysFolder then
-                Rayfield:Notify({Title = "오류", Content = "토이 폴더 없음 (캐릭터 재생성 후 시도)", Duration = 3})
+                Rayfield:Notify({Title = "오류", Content = "토이 폴더 없음", Duration = 3})
                 return
             end
 
@@ -574,10 +571,11 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 strikePhase = not strikePhase
                                 if strikePhase then
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 2, 0)
+                                    -- [수정] 판자 중심이 상대 몸 정중앙에 박히도록 위치 조정
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 0, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
                                 else
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, -1, 0)
+                                    soundPart.CFrame = tRoot.CFrame * CFrame.new(0, 0, 0)
                                     soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
                                 end
                             else
@@ -660,4 +658,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 400Hz 정밀 타이머, SetOwner 1:Destroy 3, 판자 투명50% 90도세움", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "카메라 고정, 400Hz, SetOwner 1:Destroy 3, 판자 투명50% 90도 정중앙", Duration = 3})
