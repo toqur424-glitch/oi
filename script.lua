@@ -64,7 +64,7 @@ if BeingHeld then
 end
 
 --=============================================
--- [공통 변수] - 원래 방식 1:3 비율 유지
+-- [공통 변수] - 1:3 비율 (SetOwner 1번, Destroy 3번)
 --=============================================
 local setOwnerRatio = 4  -- SetOwner 1번, Destroy 3번 (1:3)
 
@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 완전 재설계: 1:3 / 350Hz + 리스폰 0.001초 감지 + 범위 이탈 1회 TP
+-- [KICK 탭] - 완전 재설계: 1:3 / 350Hz + 리스폰 0.01초 감지 + 범위 이탈 1회 TP
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -259,7 +259,7 @@ KickTab:CreateInput({
 })
 
 -- =========================================================================
--- [수정된 부분] AlignPosition/AlignOrientation을 추가한 강력한 킥 루프 + 1회 TP
+-- [고정력 초강력 + 1:3 비율 유지 버전]
 -- =========================================================================
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
@@ -298,7 +298,7 @@ local function setupAlignForTarget()
     targetAlignRot.MaxTorque = math.huge
     targetAlignRot.Responsiveness = math.huge
     targetAlignRot.RigidityEnabled = true
-    targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
+    targetAlignRot.CFrame = CFrame.new()  -- 회전 완전 초기화
     targetAlignRot.Parent = tHRP
 
     targetAttach0 = att0
@@ -318,8 +318,8 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
     
-    -- [추가] TP를 실행할 거리 기준 (35스터드)
-    local tpRange = 35
+    -- TP 거리 기준 25스터드
+    local tpRange = 25
 
     if selectedKickPlayer then
         -- 리스폰 감지: 0.01초 대기 후 재부착
@@ -331,7 +331,7 @@ local function startKickLoop()
                     setupAlignForTarget()
                     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                     if myHRP then
-                        hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(7, 20, 0))
+                        hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(0, 15, 0))  -- 머리 위 15스터드
                         hrp.AssemblyLinearVelocity = Vector3.zero
                     end
                 end)
@@ -339,7 +339,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 타겟 위치 업데이트 + [추가] 거리 체크 및 TP
+    -- 매 프레임 타겟 위치 업데이트 + 강제 고정
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -351,42 +351,47 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
 
-        -- [추가] 범위 이탈 시 타겟에게 1회 TP
+        -- 거리 체크 및 1회 TP (25스터드 이탈 시)
         local distance = (myHRP.Position - tHRP.Position).Magnitude
         if distance > tpRange then
-            -- 내 캐릭터를 타겟 위치 바로 옆으로 순간이동 (1회 TP)
             myHRP.CFrame = tHRP.CFrame * CFrame.new(0, 3, 5)
             myHRP.AssemblyLinearVelocity = Vector3.zero
-            -- TP 후 즉시 AlignPosition이 타겟을 붙잡음
         end
 
-        -- AlignPosition이 없으면 재생성 (리스폰 직후 대응)
+        -- AlignPosition이 없으면 재생성
         if not tHRP:FindFirstChild("KickAlignPos") then
             pcall(setupAlignForTarget)
             tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             if not tHRP then return end
         end
 
-        -- 위치 고정: 내 HRP 기준 (7,20,0) 만큼 위
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        -- 고정 위치: 머리 위 15스터드
+        local targetPos = myHRP.Position + Vector3.new(0, 15, 0)
+        
+        -- AlignPosition에 타겟 위치 강제 설정
         if targetAttach1 then
             targetAttach1.WorldPosition = targetPos
         end
         if targetAlignRot then
-            targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
+            targetAlignRot.CFrame = CFrame.new()  -- 회전 완전 고정
         end
 
-        -- 물리 초기화
+        -- 매 프레임 타겟의 실제 CFrame을 강제로 덮어씀 (초강력)
+        tHRP.CFrame = CFrame.new(targetPos)
+        
+        -- 물리 속도 완전 제거
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
+        
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            tHum.AutoRotate = false  -- 회전 완전 차단
         end
     end)
 
-    -- 350Hz (1:3 비율) 리모트 스팸 (기존 그대로 유지)
+    -- 350Hz (1:3 비율) 리모트 스팸
     remoteTask = task.spawn(function()
         local interval = 0.002857142857
         local nextTime = tick() + interval
@@ -456,7 +461,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 초고속 리스폰 대응)",
+    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 초고정력)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -636,4 +641,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 리스폰 0.01초 감지 & 재부착 / 고정력 최강", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 리스폰 0.01초 감지 & 재부착 / CFrame 강제 설정 / 회전 완전 봉쇄", Duration = 3})
