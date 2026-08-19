@@ -104,6 +104,8 @@ local function setupFKeyAlign(targetPlayer)
     alignPos.MaxVelocity = math.huge
     alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
+    alignPos.ReactionForceEnabled = true
+    alignPos.ApplyAtCenterOfMass = false
     alignPos.Parent = tHRP
 
     local alignRot = Instance.new("AlignOrientation")
@@ -112,6 +114,7 @@ local function setupFKeyAlign(targetPlayer)
     alignRot.MaxTorque = math.huge
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
+    alignRot.ReactionTorqueEnabled = true
     alignRot.Parent = tHRP
 end
 
@@ -208,7 +211,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (350Hz, SetOwner 1:Destroy 3)",
+    Name = "카메라 조준 킥 그랩 실행 (강화된 Align)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -223,7 +226,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, SetOwner 1:Destroy 3)
+-- [KICK 탭] - 블롭맨 오너 킥 (강화된 Align, 350Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -284,6 +287,8 @@ local function setupAlignForTarget()
     alignPos.MaxVelocity = math.huge
     alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
+    alignPos.ReactionForceEnabled = true
+    alignPos.ApplyAtCenterOfMass = false
     alignPos.Parent = tHRP
     
     local alignRot = Instance.new("AlignOrientation")
@@ -292,6 +297,7 @@ local function setupAlignForTarget()
     alignRot.MaxTorque = math.huge
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
+    alignRot.ReactionTorqueEnabled = true
     alignRot.Parent = tHRP
 end
 
@@ -309,7 +315,7 @@ local function startKickLoop()
             local hum = newChar:WaitForChild("Humanoid", 5)
             if hrp and hum then
                 while hum.Health <= 0 do task.wait(0.1) end
-                task.wait(0.2)
+                task.wait(0.3)  -- 물리 안정화 대기
                 setupAlignForTarget()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
@@ -455,7 +461,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, SetOwner 1:Destroy 3)",
+    Name = "블롭맨 오너 킥 실행 (강화 Align, 350Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -635,4 +641,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1:Destroy 3 (순서: SetOwner → Destroy → Destroy → Destroy)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, 강화 Align (ReactionForce/ReactionTorque), SetOwner 1:Destroy 3", Duration = 3})
