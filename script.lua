@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (AlignPosition, 리셋 완전 차단)
+-- [KICK 탭] - 블롭맨 오너 킥 (AlignPosition, 리셋 방지 없음, 350Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -228,9 +228,6 @@ local kickCounter = 0
 
 local steppedConn = nil
 local remoteTask = nil
-local respawnConn = nil
-local targetAlign = nil
-local targetRot = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -292,58 +289,18 @@ local function setupAlignForTarget()
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 
-    targetAlign = alignPos
-    targetRot = alignRot
     return alignPos, alignRot
 end
 
 local function startKickLoop()
     if remoteTask then task.cancel(remoteTask) end
     if steppedConn then steppedConn:Disconnect() end
-    if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
     kickCounter = 0
 
-    if selectedKickPlayer then
-        -- 리셋 감지 및 자동 재부착 (강화)
-        respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
-            local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
-            local hum = newChar:WaitForChild("Humanoid", 5)
-            if hrp and hum then
-                -- 정확한 사망 판정 및 완전 부활 대기
-                while hum:GetState() == Enum.HumanoidStateType.Dead do
-                    task.wait(0.1)
-                end
-                
-                -- 3프레임 동안 물리 엔진 동기화 (완전 부활 보장)
-                for i = 1, 3 do
-                    RunService.Stepped:Wait()
-                end
-
-                -- 기존 Align 완전 제거
-                if targetAlign then targetAlign:Destroy(); targetAlign = nil end
-                if targetRot then targetRot:Destroy(); targetRot = nil end
-                task.wait(0.05)
-                
-                -- 새로 생성 및 즉시 위치 고정
-                setupAlignForTarget()
-                
-                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP and hrp then
-                    local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                        if targetAlign and targetAlign.Attachment1 then
-                            targetAlign.Attachment1.WorldPosition = targetPos
-                        end
-                    end)
-                end
-            end
-        end)
-    end
+    -- 최초 한 번만 설정 (리셋 감지 없음)
+    setupAlignForTarget()
 
     -- 매 프레임 위치 업데이트 (AlignPosition)
     steppedConn = RunService.Stepped:Connect(function()
@@ -359,16 +316,18 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- Align이 없으면 재생성
-        if not targetAlign or targetAlign.Parent ~= tHRP then
+        -- Align이 없으면 재생성 (혹시 파괴됐을 때 대비)
+        local align = tHRP:FindFirstChild("KickAlign")
+        if not align then
             setupAlignForTarget()
         end
         
-        if targetAlign and targetAlign.Attachment1 then
-            targetAlign.Attachment1.WorldPosition = targetPos
+        if align and align.Attachment1 then
+            align.Attachment1.WorldPosition = targetPos
         end
-        if targetRot then
-            targetRot.CFrame = CFrame.Angles(0, 0, 0)
+        local rot = tHRP:FindFirstChild("KickRot")
+        if rot then
+            rot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
         tHRP.AssemblyLinearVelocity = Vector3.zero
@@ -428,9 +387,6 @@ local function stopKickLoop()
     kickLoopRunning = false
     if steppedConn then steppedConn:Disconnect() end
     if remoteTask then task.cancel(remoteTask) end
-    if respawnConn then respawnConn:Disconnect() end
-    if targetAlign then targetAlign:Destroy(); targetAlign = nil end
-    if targetRot then targetRot:Destroy(); targetRot = nil end
     
     if selectedKickPlayer and selectedKickPlayer.Character then
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -444,7 +400,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (AlignPosition, 리셋 완전 차단)",
+    Name = "블롭맨 오너 킥 실행 (AlignPosition, 350Hz, SetOwner 1:Destroy 3)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -620,4 +576,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 350Hz, AlignPosition 방식 (초기 방식), 리셋 완전 차단, 판자 60Hz/10스터드", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 350Hz, AlignPosition, SetOwner 1:Destroy 3, 리셋 방지 로직 제거", Duration = 3})
