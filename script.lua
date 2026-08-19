@@ -258,7 +258,9 @@ KickTab:CreateInput({
     end
 })
 
--- 리스폰 순간에도 즉시 재부착하는 강력한 함수
+-- =========================================================================
+-- [수정된 부분] AlignPosition/AlignOrientation을 추가한 강력한 킥 루프
+-- =========================================================================
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -266,13 +268,14 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
 
-    -- 기존거 완전 삭제 (강제 초기화)
+    -- 기존 Align 및 Attachment 완전 삭제 (재설정)
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("Attachment") then
             v:Destroy()
         end
     end
 
+    -- AlignPosition 생성 (위치 고정)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -288,6 +291,7 @@ local function setupAlignForTarget()
     targetAlignPos.RigidityEnabled = true
     targetAlignPos.Parent = tHRP
 
+    -- AlignOrientation 생성 (회전 고정)
     targetAlignRot = Instance.new("AlignOrientation")
     targetAlignRot.Name = "KickAlignRot"
     targetAlignRot.Attachment0 = att0
@@ -299,8 +303,8 @@ local function setupAlignForTarget()
 
     targetAttach0 = att0
     targetAttach1 = att1
-    
-    -- 부착하자마자 네트워크 소유권 강제 탈취 (0.001초만에 선점)
+
+    -- 생성 직후 네트워크 소유권 강제 탈취
     pcall(function()
         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.new())
     end)
@@ -315,11 +319,11 @@ local function startKickLoop()
     kickCounter = 0
 
     if selectedKickPlayer then
-        -- 리스폰 감지: 0.01초 대기하고 무조건 재부착 (죽는 중에도 감지)
+        -- 리스폰 감지: 0.01초 대기 후 재부착
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 2)
             if hrp then
-                task.wait(0.01) -- 캐릭터 스폰 순간 대기 (최소화)
+                task.wait(0.01)
                 pcall(function()
                     setupAlignForTarget()
                     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
@@ -332,7 +336,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 업데이트 (빈틈없이 감시)
+    -- 매 프레임 타겟 위치 업데이트 (AlignPosition의 Attachment1 위치를 내 위치로)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -344,22 +348,23 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
 
-        -- 만약 AlignPosition이 없거나, 다른 파트에 붙어있으면 즉시 재생성 (리스폐 직후 대응)
+        -- AlignPosition이 없으면 재생성 (리스폰 직후 대응)
         if not tHRP:FindFirstChild("KickAlignPos") then
             pcall(setupAlignForTarget)
-            tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart") -- 다시 가져오기
+            tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             if not tHRP then return end
         end
 
+        -- 위치 고정: 내 HRP 기준 (7,20,0) 만큼 위
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-        
         if targetAttach1 then
             targetAttach1.WorldPosition = targetPos
         end
         if targetAlignRot then
             targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
         end
-        
+
+        -- 물리 초기화
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         local tHum = tChar:FindFirstChild("Humanoid")
@@ -369,7 +374,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz (1:3 비율) 정확하게 유지
+    -- 350Hz (1:3 비율) 리모트 스팸 (기존 그대로)
     remoteTask = task.spawn(function()
         local interval = 0.002857142857
         local nextTime = tick() + interval
@@ -452,9 +457,12 @@ KickTab:CreateToggle({
         end
     end
 })
+-- =========================================================================
+-- [수정 끝] 
+-- =========================================================================
 
 --=============================================
--- [팔레트 레그돌 (Invis)]
+-- [팔레트 레그돌 (Invis)] - 원본 그대로
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 사인파 출입 (몸통 관통)",
