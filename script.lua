@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 1:3 / 350Hz / 높이 23 / 원래 고정 방식
+-- [KICK 탭] - 1:3 / 350Hz / 높이 23 / 원래 고정 방식 + 흔들림 방지
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -259,7 +259,7 @@ KickTab:CreateInput({
 })
 
 -- =========================================================================
--- [고정 방식: 원래대로 AlignPosition + AlignOrientation (CFrame 강제 덮어쓰기 제거)]
+-- [고정 방식: 원래대로 AlignPosition + AlignOrientation + 흔들림 방지]
 -- =========================================================================
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
@@ -304,6 +304,14 @@ local function setupAlignForTarget()
     targetAttach0 = att0
     targetAttach1 = att1
 
+    -- [추가] 흔들림 방지: 타겟의 모든 파트 충돌 해제, 질량 0
+    for _, part in ipairs(tChar:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+            part.Massless = true
+        end
+    end
+
     -- 생성 직후 네트워크 소유권 강제 탈취
     pcall(function()
         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.new())
@@ -333,13 +341,14 @@ local function startKickLoop()
                     if myHRP then
                         hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(0, 23, 0))  -- 머리 위 23스터드
                         hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.Velocity = Vector3.zero
                     end
                 end)
             end
         end)
     end
 
-    -- 매 프레임 타겟 위치 업데이트 (원래 방식: AlignPosition의 Attachment1 위치만 변경)
+    -- 매 프레임 타겟 위치 업데이트 (AlignPosition의 Attachment1 위치만 변경)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -376,15 +385,17 @@ local function startKickLoop()
             targetAlignRot.CFrame = CFrame.new()  -- 회전 완전 고정
         end
 
-        -- 물리 속도 초기화 (기존 방식: AssemblyLinearVelocity/AssemblyAngularVelocity만)
+        -- [추가] 잔여 속도 완전 제거 (흔들림 방지)
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
+        tHRP.Velocity = Vector3.zero
+        tHRP.RotVelocity = Vector3.zero
         
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
-            tHum.AutoRotate = false  -- 회전 차단
+            tHum.AutoRotate = false
         end
     end)
 
@@ -458,7 +469,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / 원래 고정 방식)",
+    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / 흔들림 방지)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -638,4 +649,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / 원래 고정 방식 (Align only)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / 흔들림 방지 (Align only + CanCollide=false + Massless)", Duration = 3})
