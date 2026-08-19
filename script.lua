@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (AlignPosition 방식, 리셋 완전 차단)
+-- [KICK 탭] - 블롭맨 오너 킥 (AlignPosition, 리셋 완전 차단)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -620,4 +620,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 350Hz, AlignPosition 방식 (이전 방식), 리셋 완전 차단, 판자 60Hz/10스터드", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 350Hz, AlignPosition 방식 (초기 방식), 리셋 완전 차단, 판자 60Hz/10스터드", Duration = 3})
