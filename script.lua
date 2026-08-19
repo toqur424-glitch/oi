@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Ultimate Anti-Fall Lock Hub",
+    Name = "🔥 FSOF Triple-Body Lock Hub",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -133,7 +133,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 4중 고정 + 낙하 방지
+-- [KICK 탭] - 3중 BodyPosition 고정 (AlignPosition 제거)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -168,14 +168,14 @@ KickTab:CreateInput({
     end
 })
 
-local function setupQuadLockForTarget()
+local function setupTripleBodyLockForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
 
-    -- 기존 모든 고정 장치 제거
+    -- 기존 모든 고정 장치 제거 (AlignPosition 포함)
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") 
            or v:IsA("BodyPosition") or v:IsA("BodyGyro") 
@@ -184,33 +184,7 @@ local function setupQuadLockForTarget()
         end
     end
 
-    -- 1. AlignPosition (빠른 위치 추적)
-    local att0 = Instance.new("Attachment", tHRP)
-    att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
-    att1.Name = "KickAtt1"
-    
-    local alignPos = Instance.new("AlignPosition")
-    alignPos.Name = "KickAlign"
-    alignPos.Attachment0 = att0
-    alignPos.Attachment1 = att1
-    alignPos.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-    alignPos.MaxVelocity = math.huge
-    alignPos.Responsiveness = 1000
-    alignPos.RigidityEnabled = true
-    alignPos.Parent = tHRP
-
-    -- 2. AlignOrientation (회전 0도 고정)
-    local alignRot = Instance.new("AlignOrientation")
-    alignRot.Name = "KickRot"
-    alignRot.Attachment0 = att0
-    alignRot.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-    alignRot.Responsiveness = 1000
-    alignRot.RigidityEnabled = true
-    alignRot.CFrame = CFrame.Angles(0, 0, 0)
-    alignRot.Parent = tHRP
-
-    -- 3. BodyPosition (물리 힘으로 강제 고정)
+    -- 1. BodyPosition (일반) - 위치를 목표 지점으로 강제 이동
     local bp = Instance.new("BodyPosition")
     bp.Name = "KickBP"
     bp.MaxForce = Vector3.new(1e9, 1e9, 1e9)
@@ -219,7 +193,14 @@ local function setupQuadLockForTarget()
     bp.Position = tHRP.Position
     bp.Parent = tHRP
 
-    -- 4. BodyGyro (회전 물리 고정)
+    -- 2. BodyVelocity (Y축 전용) - 중력 완전 차단 + 위로 살짝 띄우기
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "KickBV"
+    bv.MaxForce = Vector3.new(0, 1e9, 0)
+    bv.Velocity = Vector3.new(0, 0.1, 0)  -- 0.1만큼 위로 (중력 상쇄)
+    bv.Parent = tHRP
+
+    -- 3. BodyGyro - 회전 0도 고정
     local bg = Instance.new("BodyGyro")
     bg.Name = "KickBG"
     bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
@@ -227,13 +208,6 @@ local function setupQuadLockForTarget()
     bg.D = 10000
     bg.CFrame = CFrame.Angles(0, 0, 0)
     bg.Parent = tHRP
-
-    -- 5. BodyVelocity (Y축 중력 차단 + 위로 살짝 띄우기)
-    local bv = Instance.new("BodyVelocity")
-    bv.Name = "KickBV"
-    bv.MaxForce = Vector3.new(0, 1e9, 0)
-    bv.Velocity = Vector3.new(0, 0.1, 0)  -- 0.1만큼 위로 올리기 (중력 완전 상쇄)
-    bv.Parent = tHRP
 
     -- 충돌 및 움직임 완전 차단
     for _, part in pairs(tChar:GetDescendants()) do
@@ -267,7 +241,7 @@ local function startKickLoop()
             if hrp and hum then
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
-                setupQuadLockForTarget()
+                setupTripleBodyLockForTarget()
                 kickCounter = 0
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
@@ -282,7 +256,7 @@ local function startKickLoop()
         end)
     end
 
-    -- Stepped: 4중 고정 장치 업데이트 + 낙하 방지 강제 CFrame 덮어쓰기
+    -- Stepped: 3중 BodyPosition 업데이트 + CFrame 직접 강제 덮어쓰기
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -297,20 +271,14 @@ local function startKickLoop()
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
         -- 고정 장치가 없으면 재생성
-        if not tHRP:FindFirstChild("KickAlign") then
-            setupQuadLockForTarget()
+        if not tHRP:FindFirstChild("KickBP") then
+            setupTripleBodyLockForTarget()
         end
         
         -- ★ CFrame 직접 강제 덮어쓰기 (낙하 방지)
         tHRP.CFrame = CFrame.new(targetPos)
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
-        
-        -- AlignPosition 위치 업데이트
-        local align = tHRP:FindFirstChild("KickAlign")
-        if align and align.Attachment1 then
-            align.Attachment1.WorldPosition = targetPos
-        end
         
         -- BodyPosition 위치 업데이트
         local bp = tHRP:FindFirstChild("KickBP")
@@ -410,7 +378,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "4중 고정 + 낙하 방지 킥 (안티그랩 완전 뚫기)",
+    Name = "3중 BodyPosition 고정 (Align 제거, 절대 낙하 없음)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -587,4 +555,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "4중 고정 + CFrame 직접 강제 덮어쓰기, BodyVelocity Y=0.1, 낙하 완전 방지", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "3중 BodyPosition (Align 제거), CFrame 강제 덮어쓰기, 절대 낙하 없음", Duration = 3})
