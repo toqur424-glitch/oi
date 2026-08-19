@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 1:3 / 350Hz / 높이 23 / 초고정력
+-- [KICK 탭] - 1:3 / 350Hz / 높이 23 / 원래 고정 방식
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -259,7 +259,7 @@ KickTab:CreateInput({
 })
 
 -- =========================================================================
--- [고정력 초강력 + 높이 23 + 1:3 비율 + 350Hz]
+-- [고정 방식: 원래대로 AlignPosition + AlignOrientation (CFrame 강제 덮어쓰기 제거)]
 -- =========================================================================
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
@@ -333,14 +333,13 @@ local function startKickLoop()
                     if myHRP then
                         hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(0, 23, 0))  -- 머리 위 23스터드
                         hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.Velocity = Vector3.zero
                     end
                 end)
             end
         end)
     end
 
-    -- 매 프레임 타겟 위치 업데이트 + 강제 고정 (높이 23)
+    -- 매 프레임 타겟 위치 업데이트 (원래 방식: AlignPosition의 Attachment1 위치만 변경)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -366,10 +365,10 @@ local function startKickLoop()
             if not tHRP then return end
         end
 
-        -- [수정] 고정 위치: 머리 위 23스터드
+        -- 고정 위치: 머리 위 23스터드
         local targetPos = myHRP.Position + Vector3.new(0, 23, 0)
         
-        -- AlignPosition에 타겟 위치 강제 설정
+        -- AlignPosition의 Attachment1 위치를 targetPos로 설정 (당기는 힘만 사용)
         if targetAttach1 then
             targetAttach1.WorldPosition = targetPos
         end
@@ -377,20 +376,15 @@ local function startKickLoop()
             targetAlignRot.CFrame = CFrame.new()  -- 회전 완전 고정
         end
 
-        -- 매 프레임 타겟의 실제 CFrame을 강제로 덮어씀 (초강력)
-        tHRP.CFrame = CFrame.new(targetPos)
-        
-        -- 물리 속도 완전 제거 (고정력 극대화)
+        -- 물리 속도 초기화 (기존 방식: AssemblyLinearVelocity/AssemblyAngularVelocity만)
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
-        tHRP.Velocity = Vector3.zero
-        tHRP.RotVelocity = Vector3.zero
         
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
-            tHum.AutoRotate = false  -- 회전 완전 차단
+            tHum.AutoRotate = false  -- 회전 차단
         end
     end)
 
@@ -464,7 +458,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / 초고정력)",
+    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / 원래 고정 방식)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -644,4 +638,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / 리스폰 0.01초 / 초고정력 (Velocity 0)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / 원래 고정 방식 (Align only)", Duration = 3})
