@@ -355,9 +355,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz로 SetOwner/DestroyGrabLine 전송
+    -- 350Hz로 SetOwner + DestroyGrabLine 전송 (수정됨)
     remoteTask = task.spawn(function()
-        local interval = 0.002857142857  -- 350Hz (1/350)
+        local interval = 1/350  -- 350Hz로 변경
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -385,17 +385,12 @@ local function startKickLoop()
                     end)
                 end
                 
-                kickCounter = kickCounter + 1
-                if kickCounter % setOwnerRatio == 1 then
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                else
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                    end)
-                end
+                -- 매 틱마다 SetOwner + DestroyGrabLine 전송 (350Hz)
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                end)
             end
         end
     end)
@@ -430,7 +425,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition, 최적화)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition, 핑 최적화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -608,4 +603,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 사용, 핑 최적화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz SetOwner, BodyPosition 사용, 핀 최적화", Duration = 3})
