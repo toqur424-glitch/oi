@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 1:3 / 350Hz / 높이 23 / 리스폰 완전 내성 (CharacterAdded 제거)
+-- [KICK 탭] - 1:3 / 350Hz / 높이 23 / CFrame 제거 + Align 초강력 + 리스폰 완전 내성
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -254,7 +254,7 @@ KickTab:CreateInput({
 })
 
 -- =========================================================================
--- [고정 방식: 매 프레임 캐릭터 감지 + Align 재생성 (리스폰 무관)]
+-- [고정 방식: CFrame 제거, AlignPosition/AligOrientation 초강력 설정]
 -- =========================================================================
 local function setupAlignForTarget(tHRP)
     if not tHRP then return end
@@ -268,7 +268,7 @@ local function setupAlignForTarget(tHRP)
         end
     end
 
-    -- AlignPosition 생성
+    -- AlignPosition 생성 (초강력)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -284,6 +284,7 @@ local function setupAlignForTarget(tHRP)
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
 
+    -- AlignOrientation 생성 (회전 완전 고정)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickAlignRot"
     alignRot.Attachment0 = att0
@@ -315,7 +316,7 @@ local function startKickLoop()
     
     local tpRange = 25
 
-    -- 매 프레임 캐릭터 감지 및 고정
+    -- 매 프레임 캐릭터 감지 및 Align 업데이트 (CFrame 직접 설정 제거)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -323,7 +324,6 @@ local function startKickLoop()
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
         if not myHRP then return end
 
-        -- 타겟 캐릭터가 없으면 다음 프레임까지 기다림
         local tChar = selectedKickPlayer.Character
         if not tChar then return end
         local tHRP = tChar:FindFirstChild("HumanoidRootPart")
@@ -344,10 +344,7 @@ local function startKickLoop()
         -- 고정 위치: 머리 위 23스터드
         local targetPos = myHRP.Position + Vector3.new(0, 23, 0)
 
-        -- [초강력] 매 프레임 CFrame 강제 설정
-        tHRP.CFrame = CFrame.new(targetPos)
-
-        -- Align의 Attachment1 위치도 동시에 업데이트
+        -- Align의 Attachment1 위치 업데이트 (당기는 힘만 사용)
         local alignPos = tHRP:FindFirstChild("KickAlignPos")
         if alignPos and alignPos.Attachment1 then
             alignPos.Attachment1.WorldPosition = targetPos
@@ -433,7 +430,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / 리스폰 내성)",
+    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / CFrame 제거 + 초강력 Align)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -613,4 +610,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / 리스폰 완전 내성 (CharacterAdded 제거)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / CFrame 제거 + 초강력 Align (Rigidity=true)", Duration = 3})
