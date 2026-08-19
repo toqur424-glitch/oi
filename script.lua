@@ -468,10 +468,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 90도 세우고 중심 정확히 타격]
+-- [팔레트 레그돌 (Invis) - 위아래 15스터드로 빠르게 왔다 갔다]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 90도 세워서 중심 타격",
+    Name = "Pallet Ragdoll (Invis) - 빠른 출입 (15스터드)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -552,15 +552,10 @@ KickTab:CreateToggle({
 
                             if not isRagdolled then
                                 strikePhase = not strikePhase
-                                if strikePhase then
-                                    -- 90도 세워서 타겟 중심에 위치 (위로 2스터드)
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, 2, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5, 0)
-                                else
-                                    -- 90도 세워서 타겟 중심에 위치 (아래로 1스터드)
-                                    soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, -1, 0)
-                                    soundPart.AssemblyLinearVelocity = Vector3.new(0, 9e5, 0)
-                                end
+                                -- 위아래 15스터드로 크게 왔다 갔다 (빠르게)
+                                local offsetY = strikePhase and 15 or -15
+                                soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
+                                soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e6, 0)
                             else
                                 soundPart.CFrame = CFrame.new(0, 9e9, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.zero
