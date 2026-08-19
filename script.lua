@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 완전 재설계: 1:3 / 350Hz + 리스폰 0.001초 감지
+-- [KICK 탭] - 1:3 / 350Hz + 내 앞으로 고정 + 거리 15 이하 텔레포트
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -258,7 +258,6 @@ KickTab:CreateInput({
     end
 })
 
--- 리스폰 순간에도 즉시 재부착하는 강력한 함수
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -266,7 +265,6 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
 
-    -- 기존거 완전 삭제 (강제 초기화)
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("Attachment") then
             v:Destroy()
@@ -300,7 +298,6 @@ local function setupAlignForTarget()
     targetAttach0 = att0
     targetAttach1 = att1
     
-    -- 부착하자마자 네트워크 소유권 강제 탈취 (0.001초만에 선점)
     pcall(function()
         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.new())
     end)
@@ -315,16 +312,15 @@ local function startKickLoop()
     kickCounter = 0
 
     if selectedKickPlayer then
-        -- 리스폰 감지: 0.01초 대기하고 무조건 재부착 (죽는 중에도 감지)
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 2)
             if hrp then
-                task.wait(0.01) -- 캐릭터 스폰 순간 대기 (최소화)
+                task.wait(0.01)
                 pcall(function()
                     setupAlignForTarget()
                     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                     if myHRP then
-                        hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(7, 20, 0))
+                        hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(0, 0, 4)) -- 내 앞 4스터드
                         hrp.AssemblyLinearVelocity = Vector3.zero
                     end
                 end)
@@ -332,7 +328,6 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 업데이트 (빈틈없이 감시)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -344,14 +339,14 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
 
-        -- 만약 AlignPosition이 없거나, 다른 파트에 붙어있으면 즉시 재생성 (리스폐 직후 대응)
         if not tHRP:FindFirstChild("KickAlignPos") then
             pcall(setupAlignForTarget)
-            tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart") -- 다시 가져오기
+            tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             if not tHRP then return end
         end
 
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        -- ★ 수정: 내 앞 4스터드로 고정 (발로 차기 좋은 위치)
+        local targetPos = myHRP.Position + Vector3.new(0, 0, 4)
         
         if targetAttach1 then
             targetAttach1.WorldPosition = targetPos
@@ -367,9 +362,16 @@ local function startKickLoop()
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
         end
+
+        -- ★ 수정: 거리가 15스터드 이상 벌어지면 바로 순간이동
+        local dist = (tHRP.Position - myHRP.Position).Magnitude
+        if dist > 15 then
+            pcall(function()
+                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 0, -4))
+            end)
+        end
     end)
 
-    -- 350Hz (1:3 비율) 정확하게 유지
     remoteTask = task.spawn(function()
         local interval = 0.002857142857
         local nextTime = tick() + interval
@@ -439,7 +441,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 초고속 리스폰 대응)",
+    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 내 앞 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -454,7 +456,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis)]
+-- [팔레트 레그돌 (Invis)] - 기존과 동일
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 사인파 출입 (몸통 관통)",
@@ -616,4 +618,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 리스폰 0.01초 감지 & 재부착 / 고정력 최강", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 내 앞 고정 / 거리 15이상 텔레포트 / 리스폰 0.01초 대응", Duration = 3})
