@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 3  -- 1:2 비율 (SetOwner 1번, Destroy 2번)
+local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, Destroy 3번)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (Align 고정 강화)
@@ -82,14 +82,12 @@ local fCounter = 0
 local selectedGrabPlayer = nil
 local grabRespawnConn = nil
 
--- [GRAB] AlignPosition + AlignOrientation 설정
 local function setupGrabAlign(targetPlayer)
     local tChar = targetPlayer and targetPlayer.Character
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
 
-    -- 이미 있으면 재생성 안 함
     if tHRP:FindFirstChild("GrabAlign") and tHRP:FindFirstChild("GrabRot") then
         return
     end
@@ -148,7 +146,6 @@ local function startGrabAttack(targetPlayer)
         
         if not myRoot or not tgtRoot then return end
 
-        -- Align이 없으면 즉시 재생성
         if not tgtRoot:FindFirstChild("GrabAlign") or not tgtRoot:FindFirstChild("GrabRot") then
             setupGrabAlign(fAttackTarget)
             return
@@ -251,7 +248,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (Align 고정 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (SetOwner 1:Destroy 3, 350Hz 정밀)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -286,7 +283,6 @@ KickTab:CreateInput({
     end
 })
 
--- [KICK] AlignPosition + AlignOrientation 설정
 local function setupKickAlign(targetPlayer)
     local tChar = targetPlayer and targetPlayer.Character
     if not tChar then return end
@@ -326,7 +322,6 @@ local function setupKickAlign(targetPlayer)
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 
-    -- 즉시 고정 위치로 이동
     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if myHRP then
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
@@ -399,8 +394,9 @@ local function startKickLoop()
         end
     end)
 
+    -- [수정] 350Hz 정밀 타이머 (간격 0.002857142857초)
     remoteTask = task.spawn(function()
-        local interval = 0.00181818 -- 550Hz
+        local interval = 0.002857142857 -- 350Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -451,6 +447,7 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
+                -- [수정] SetOwner 1번 : Destroy 3번 (1,2,3,4 순환)
                 if kickCounter % setOwnerRatio == 1 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
@@ -485,7 +482,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (Align 고정 강화)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, SetOwner 1:Destroy 3)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -500,27 +497,19 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - XOCU 완전 이식, Stepped 유지]
+-- [팔레트 레그돌 (Invis) - 원본(처음) 버전으로 복원]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 위아래 강타",
+    Name = "Pallet Ragdoll (Invis) - 원본 버전",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
         local RS = ReplicatedStorage
-        local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
         local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
         local lpName = plr.Name
         local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
-
-        local function clearAttackLoop()
-            if getgenv().ragdollSteppedConn then
-                getgenv().ragdollSteppedConn:Disconnect()
-                getgenv().ragdollSteppedConn = nil
-            end
-        end
 
         if Value then
             if not selectedKickPlayer then
@@ -530,11 +519,10 @@ KickTab:CreateToggle({
 
             getgenv().palletRagdollActive = true
             getgenv().PalletForRagdoll = nil
-            
+
             if getgenv().palletCacheConn then
                 getgenv().palletCacheConn:Disconnect()
             end
-            clearAttackLoop()
 
             if not toysFolder then
                 Rayfield:Notify({Title = "오류", Content = "토이 폴더 없음 (캐릭터 재생성 후 시도)", Duration = 3})
@@ -566,11 +554,14 @@ KickTab:CreateToggle({
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
 
+                    -- [원본] Stepped를 사용한 위아래 강타 (변경 없음)
                     local strikePhase = false
-
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
-                            clearAttackLoop()
+                            if getgenv().ragdollSteppedConn then
+                                getgenv().ragdollSteppedConn:Disconnect()
+                                getgenv().ragdollSteppedConn = nil
+                            end
                             return 
                         end
 
@@ -603,7 +594,10 @@ KickTab:CreateToggle({
 
                     child.AncestryChanged:Connect(function()
                         if not child.Parent then
-                            clearAttackLoop()
+                            if getgenv().ragdollSteppedConn then
+                                getgenv().ragdollSteppedConn:Disconnect()
+                                getgenv().ragdollSteppedConn = nil
+                            end
                             getgenv().PalletForRagdoll = nil
                             if getgenv().palletRagdollActive then
                                 task.wait(0.03)
@@ -638,7 +632,10 @@ KickTab:CreateToggle({
             getgenv().spawnNewPallet()
         else
             getgenv().palletRagdollActive = false
-            clearAttackLoop()
+            if getgenv().ragdollSteppedConn then
+                getgenv().ragdollSteppedConn:Disconnect()
+                getgenv().ragdollSteppedConn = nil
+            end
 
             if getgenv().palletCacheConn then
                 getgenv().palletCacheConn:Disconnect()
@@ -665,4 +662,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 550Hz 정밀 타이머, SetOwner 1:Destroy 2 (순서: SetOwner → Destroy → Destroy)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz 정밀 타이머, SetOwner 1:Destroy 3 (순서: SetOwner → Destroy → Destroy → Destroy)", Duration = 3})
