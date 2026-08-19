@@ -221,7 +221,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, BodyPosition 사용)
+-- [KICK 탭] - 블롭맨 오너 킥 (리스폰 강화, 350Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -266,24 +266,21 @@ local function setupBodiesForTarget()
     if not tHRP then return end
 
     -- 기존 BodyPosition/BodyGyro 제거
-    for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
-            v:Destroy()
-        end
-    end
+    if targetBP then targetBP:Destroy(); targetBP = nil end
+    if targetBG then targetBG:Destroy(); targetBG = nil end
 
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 100000
-    targetBP.D = 1000
+    targetBP.P = 500000  -- 고정력 증가
+    targetBP.D = 5000
     targetBP.Parent = tHRP
 
     targetBG = Instance.new("BodyGyro")
     targetBG.Name = "KickBG"
     targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG.P = 100000
-    targetBG.D = 1000
+    targetBG.P = 500000
+    targetBG.D = 5000
     targetBG.CFrame = CFrame.Angles(0, 0, 0)
     targetBG.Parent = tHRP
 
@@ -299,14 +296,24 @@ local function startKickLoop()
     kickCounter = 0
 
     if selectedKickPlayer then
-        -- 리셋 감지 및 자동 재부착
+        -- 리셋 감지 및 자동 재부착 (강화)
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
             if hrp and hum then
+                -- 완전히 살아날 때까지 대기
                 while hum.Health <= 0 do task.wait(0.1) end
-                task.wait(0.2)
+                -- 캐릭터가 물리적으로 완전히 스폰될 때까지 추가 대기
+                task.wait(0.3) 
+                
+                -- 기존 BodyPosition/BodyGyro 강제 제거 및 초기화
+                if targetBP then targetBP:Destroy(); targetBP = nil end
+                if targetBG then targetBG:Destroy(); targetBG = nil end
+                
+                -- 새로 생성
                 setupBodiesForTarget()
+                
+                -- 즉시 위치 고정 및 속도 제거
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
@@ -314,6 +321,7 @@ local function startKickLoop()
                         hrp.CFrame = CFrame.new(targetPos)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
+                        if targetBP then targetBP.Position = targetPos end
                     end)
                 end
             end
@@ -334,7 +342,7 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- BodyPosition이 없으면 생성
+        -- BodyPosition이 없거나 잘못된 참조면 재생성
         if not targetBP or targetBP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
@@ -415,6 +423,9 @@ local function stopKickLoop()
         respawnConn:Disconnect()
         respawnConn = nil
     end
+    if targetBP then targetBP:Destroy(); targetBP = nil end
+    if targetBG then targetBG:Destroy(); targetBG = nil end
+    
     if selectedKickPlayer and selectedKickPlayer.Character then
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
@@ -425,12 +436,10 @@ local function stopKickLoop()
             end
         end
     end
-    targetBP = nil
-    targetBG = nil
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition, SetOwner 1:Destroy 3)",
+    Name = "블롭맨 오너 킥 실행 (리스폰 강화, 350Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -608,4 +617,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition, SetOwner 1:Destroy 3, 판자 40Hz/200만 속도", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition, 리스폰 강화, SetOwner 1:Destroy 3", Duration = 3})
