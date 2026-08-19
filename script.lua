@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 1:3 / 350Hz / 높이 23 / 원래 고정 방식 + 흔들림 방지
+-- [KICK 탭] - 1:3 / 350Hz / 높이 23 / 원래 고정 방식 + Massless 제외
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -259,7 +259,7 @@ KickTab:CreateInput({
 })
 
 -- =========================================================================
--- [고정 방식: 원래대로 AlignPosition + AlignOrientation + 흔들림 방지]
+-- [고정 방식: 원래대로 AlignPosition + AlignOrientation + Massless 제외]
 -- =========================================================================
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
@@ -304,11 +304,11 @@ local function setupAlignForTarget()
     targetAttach0 = att0
     targetAttach1 = att1
 
-    -- [추가] 흔들림 방지: 타겟의 모든 파트 충돌 해제, 질량 0
+    -- [수정] 흔들림 방지: 타겟의 모든 파트 충돌 해제 (Massless는 제거)
     for _, part in ipairs(tChar:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CanCollide = false
-            part.Massless = true
+            -- Massless는 제거함 (PCLD 문제 해결)
         end
     end
 
@@ -385,7 +385,7 @@ local function startKickLoop()
             targetAlignRot.CFrame = CFrame.new()  -- 회전 완전 고정
         end
 
-        -- [추가] 잔여 속도 완전 제거 (흔들림 방지)
+        -- 잔여 속도 완전 제거 (흔들림 방지 유지)
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         tHRP.Velocity = Vector3.zero
@@ -469,7 +469,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / 흔들림 방지)",
+    Name = "블롭맨 오너 킥 실행 (1:3 / 350Hz / 높이23 / Massless 제외)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -649,4 +649,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / 흔들림 방지 (Align only + CanCollide=false + Massless)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:3 / 350Hz / 높이23 / Massless 제거 (CanCollide false 유지)", Duration = 3})
