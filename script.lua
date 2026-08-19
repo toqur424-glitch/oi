@@ -131,7 +131,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (안티그랩 유지, X=7, Y=20)
+-- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 1:3, 씹힘 제거)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -139,7 +139,7 @@ local kickLoopRunning = false
 local kickCounter = 0
 
 local steppedConn = nil
-local remoteTask = nil
+local heartbeatConn = nil
 local respawnConn = nil
 
 KickTab:CreateInput({
@@ -204,8 +204,8 @@ local function setupAlignForTarget()
 end
 
 local function startKickLoop()
-    if remoteTask then task.cancel(remoteTask) end
     if steppedConn then steppedConn:Disconnect() end
+    if heartbeatConn then heartbeatConn:Disconnect() end
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
@@ -235,6 +235,7 @@ local function startKickLoop()
         end)
     end
 
+    -- [1] 위치 고정 및 물리 업데이트 (Stepped, 부드럽게)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -271,59 +272,33 @@ local function startKickLoop()
         end
     end)
 
-    remoteTask = task.spawn(function()
-        local interval = 0.002857 -- 350Hz
-        local nextTime = tick() + interval
-        
-        while kickLoopRunning do
-            while tick() < nextTime do
-                task.wait()
-            end
-            nextTime = nextTime + interval
-            
-            if not selectedKickPlayer then continue end
-            
+    -- [2] 정밀 350Hz 리모트 전송 (Heartbeat + 누적 타이머) - 씹힘 방지
+    local targetHz = 350
+    local lastTime = tick()
+    local accumulated = 0
+
+    heartbeatConn = RunService.Heartbeat:Connect(function()
+        if not kickLoopRunning or not selectedKickPlayer then return end
+
+        local now = tick()
+        local dt = now - lastTime
+        lastTime = now
+
+        -- 이 프레임에서 보내야 할 패킷 수 계산 (정밀 350Hz)
+        local packetsToSend = math.floor(targetHz * dt + accumulated)
+        accumulated = (targetHz * dt + accumulated) - packetsToSend
+
+        for i = 1, packetsToSend do
             local tChar = selectedKickPlayer.Character
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             local tHum = tChar and tChar:FindFirstChild("Humanoid")
             local myChar = plr.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            
-            if not (myChar and myHRP) then continue end
-            if not (tChar and tHRP) then continue end
-            
-            local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-            
-            if not tHRP:FindFirstChild("KickAlign") then
-                setupAlignForTarget()
-            end
-            
-            local align = tHRP:FindFirstChild("KickAlign")
-            if align and align.Attachment1 then
-                align.Attachment1.WorldPosition = targetPos
-            end
-            
-            local rot = tHRP:FindFirstChild("KickRot")
-            if rot then
-                rot.CFrame = CFrame.Angles(0, 0, 0)
-            end
-            
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-            if tHum then
-                tHum.PlatformStand = true
-                tHum:ChangeState(Enum.HumanoidStateType.Physics)
-            end
-            
-            if tHum and tHum.Health > 0 then
-                local dist = (tHRP.Position - myHRP.Position).Magnitude
-                if dist > 30 then
-                    pcall(function()
-                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                    end)
-                end
-                
+
+            if myHRP and tHRP and tHum and tHum.Health > 0 then
                 kickCounter = kickCounter + 1
+                
+                -- 1:3 비율 (SetOwner 1번, DestroyGrabLine 3번)
                 if kickCounter % 4 == 1 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
@@ -345,9 +320,9 @@ local function stopKickLoop()
         steppedConn:Disconnect()
         steppedConn = nil
     end
-    if remoteTask then
-        task.cancel(remoteTask)
-        remoteTask = nil
+    if heartbeatConn then
+        heartbeatConn:Disconnect()
+        heartbeatConn = nil
     end
     if respawnConn then
         respawnConn:Disconnect()
@@ -366,7 +341,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (안티그랩 유지, X=7, Y=20, 1:3 비율)",
+    Name = "블롭맨 오너 킥 (350Hz 정밀, 1:3 비율, 씹힘 제거)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -381,7 +356,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 사인파, 90도 수직 세움 + 50Hz 고속 진동 ★수정됨★]
+-- [팔레트 레그돌 (Invis) - 90도 수직, 50Hz 고속]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 90도 수직, 50Hz 고속 진동",
@@ -440,8 +415,8 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5   -- 0.5 투명도
-                            v.Massless = true       -- 몸통 통과
+                            v.Transparency = 0.5   -- 0.5 투명
+                            v.Massless = true
                         end
                     end
 
@@ -463,8 +438,7 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- ★ 수정: 90도 수직 + 50Hz 고속 진동 (기존 20Hz에서 증가) ★
-                                local t = tick() * 50  -- 50Hz (빠른 속도)
+                                local t = tick() * 50  -- 50Hz 고속
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, math.rad(90), 0) * CFrame.new(0, offsetY, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
@@ -544,4 +518,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, 1:3 비율, 리스폰 고정력 보정, 판자 90도 수직 + 50Hz 고속 진동", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 350Hz 정밀(누적 타이머), 1:3 비율, Align 고정 분리, 씹힘 제거", Duration = 3})
