@@ -100,7 +100,7 @@ local function setupGrabAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "GrabAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
+    local att1 = Instance.new("Attachment", camera) -- 카메라 고정
     att1.Name = "GrabAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -233,7 +233,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (Align 고정)",
+    Name = "카메라 조준 킥 그랩 실행 (카메라 고정)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -248,7 +248,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (370Hz, SetOwner1→Destroy2→SetOwner1→Destroy3)
+-- [KICK 탭] - 블롭맨 오너 킥 (X=8, Y=20, 370Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -301,7 +301,7 @@ local function setupKickAlign(targetPlayer)
 
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
+    local att1 = Instance.new("Attachment", workspace.Terrain) -- [원복] Terrain 고정
     att1.Name = "KickAtt1"
 
     local alignPos = Instance.new("AlignPosition")
@@ -322,9 +322,10 @@ local function setupKickAlign(targetPlayer)
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 
+    -- [수정] 내 캐릭터 기준 X=8, Y=20 좌표
     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if myHRP then
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        local targetPos = myHRP.Position + Vector3.new(8, 20, 0)
         pcall(function()
             tHRP.CFrame = CFrame.new(targetPos)
             tHRP.AssemblyLinearVelocity = Vector3.zero
@@ -374,7 +375,8 @@ local function startKickLoop()
             return
         end
         
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        -- [수정] 내 캐릭터 기준 X=8, Y=20 좌표
+        local targetPos = myHRP.Position + Vector3.new(8, 20, 0)
         
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align.Attachment1 then
@@ -395,9 +397,9 @@ local function startKickLoop()
         end
     end)
 
-    -- [수정] 370Hz 정밀 타이머 (간격 0.0027027027초)
+    -- 370Hz 정밀 타이머
     remoteTask = task.spawn(function()
-        local interval = 0.0027027027 -- 370Hz (1/370)
+        local interval = 0.0027027027 -- 370Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -420,7 +422,8 @@ local function startKickLoop()
                 continue
             end
             
-            local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+            -- [수정] 내 캐릭터 기준 X=8, Y=20 좌표
+            local targetPos = myHRP.Position + Vector3.new(8, 20, 0)
             
             local align = tHRP:FindFirstChild("KickAlign")
             if align and align.Attachment1 then
@@ -504,7 +507,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (370Hz, SetOwner1→Destroy2→SetOwner1→Destroy3)",
+    Name = "블롭맨 오너 킥 실행 (X=8,Y=20, 370Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -685,4 +688,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "X=7,Y=20, 370Hz, SetOwner1→Destroy2→SetOwner1→Destroy3 반복, 판자 투명50% 90도 날아와 때림", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "KICK: X=8,Y=20, 370Hz, SetOwner1→Destroy2→SetOwner1→Destroy3, 판자 투명50% 90도 날아와 때림", Duration = 3})
