@@ -3,7 +3,6 @@
 --=============================================
 local Rayfield = nil
 
--- Rayfield 로드 시도 (실패해도 스크립트가 멈추지 않도록)
 local success, result = pcall(function()
     return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 end)
@@ -11,7 +10,6 @@ end)
 if success then
     Rayfield = result
 else
-    -- Rayfield 로드 실패 시 알림 (CoreGui 없이도 가능)
     local Players = game:GetService("Players")
     local player = Players.LocalPlayer
     player:WaitForChild("PlayerGui")
@@ -47,11 +45,8 @@ local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
--- ✅ Destroy 이벤트 자동 감지 (없으면 DestroyGrabLine, 둘 다 없으면 nil 허용)
+-- Destroy 이벤트 자동 감지 (없으면 DestroyGrabLine 사용)
 local DestroyEvent = rs:FindFirstChild("Destroy") or (rs:FindFirstChild("GrabEvents") and rs.GrabEvents:FindFirstChild("DestroyGrabLine"))
-if not DestroyEvent then
-    Rayfield:Notify({Title = "오류", Content = "Destroy 이벤트를 찾을 수 없습니다. 일부 기능이 제한될 수 있습니다.", Duration = 5})
-end
 
 --=============================================
 -- [UI 생성]
@@ -122,13 +117,12 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 고정 + PCld 기능
+-- [KICK 탭] - 통합 셋오너 킥 (PCld 고정 포함)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local recoveringTargets = {} 
 local selectedKickPlayer = nil
-local pcldTargetName = ""
 
 -- 타겟 입력
 KickTab:CreateInput({
@@ -155,15 +149,19 @@ KickTab:CreateInput({
     end
 })
 
--- 블롭맨 오너 킥 루프 (350Hz + 셋오너 1회 + Destroy 3회)
+-- 통합 셋오너 킥 루프 (350Hz, BodyPosition 고정, 셋오너 1회 + Destroy 3회, 이동/복귀 포함)
 function loopPlayerBlobF4()
     local initialized = false
-    
+    local bp = nil
+    local bg = nil
+
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
+            if bp then bp:Destroy() bp = nil end
+            if bg then bg:Destroy() bg = nil end
             task.wait(1/350)
             continue
         end
@@ -177,17 +175,22 @@ function loopPlayerBlobF4()
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
+            -- 최초 실행 또는 거리 벗어남 시 상대 PCld 위치로 이동 후 복귀
+            if (not initialized or currentDist > 15) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true
                 
                 task.spawn(function()
+                    -- 1. 내 원래 위치 저장 (복귀용)
                     local originalCF = myHRP.CFrame
+                    
+                    -- 2. 상대방 PCld 위치로 이동
                     pcall(function()
                         myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
                     end)
                     task.wait(0.15)
                     
+                    -- 3. 셋오너 & 그랩라인 반복 실행 (상대방 위치에서)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
@@ -196,12 +199,14 @@ function loopPlayerBlobF4()
                     end)
                     task.wait(0.05)
                     
+                    -- 4. 상대방을 내 머리 위로 이동 (원래 위치에서 고정 시작)
                     pcall(function()
                         charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
                         myHRP.CFrame = originalCF
                     end)
                     task.wait(0.1)
                     
+                    -- 5. 추가 셋오너 15회 (고정 유지용)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
@@ -213,7 +218,29 @@ function loopPlayerBlobF4()
                     recoveringTargets[name] = nil
                 end)
             end
-            
+
+            -- ★ BodyPosition & BodyGyro 생성/유지 (상대를 Y+20에 강제 고정)
+            if not bp or not bp.Parent then
+                bp = Instance.new("BodyPosition")
+                bp.Name = "KickBodyPos"
+                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bp.D = 200
+                bp.P = 50000
+                bp.Parent = charHRP
+            end
+            if not bg or not bg.Parent then
+                bg = Instance.new("BodyGyro")
+                bg.Name = "KickBodyGyro"
+                bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                bg.D = 200
+                bg.P = 50000
+                bg.Parent = charHRP
+            end
+
+            -- 매 프레임 목표 위치/회전 업데이트
+            bp.Position = targetCF.Position
+            bg.CFrame = targetCF
+
             pcall(function()
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -238,9 +265,9 @@ function loopPlayerBlobF4()
     end
 end
 
--- 블롭맨 오너 킥 토글
+-- 통합 셋오너 킥 토글 (PCld 고정 포함)
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
+    Name = "블롭맨 오너 킥 실행 (PCld 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -249,83 +276,6 @@ KickTab:CreateToggle({
         end
         blobLoopT4 = v
         if v then task.spawn(loopPlayerBlobF4) end
-    end
-})
-
---=============================================
--- [PCld 셋오너 킥 기능]
---=============================================
-KickTab:CreateSection("=== PCld 셋오너 킥 ===")
-
-KickTab:CreateInput({
-    Name = "PCld 타겟 닉네임",
-    PlaceholderText = "예: Player123",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(v)
-        pcldTargetName = v
-    end
-})
-
-KickTab:CreateButton({
-    Name = "PCld 셋오너 킥 실행 (1회)",
-    Callback = function()
-        if pcldTargetName == "" then
-            Rayfield:Notify({Title = "오류", Content = "PCld 닉네임을 입력해주세요!", Duration = 2})
-            return
-        end
-        
-        local found = nil
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p.Name:lower():find(pcldTargetName:lower()) or (p.DisplayName and p.DisplayName:lower():find(pcldTargetName:lower())) then
-                found = p
-                break
-            end
-        end
-        
-        if not found then
-            Rayfield:Notify({Title = "오류", Content = "해당 PCld 유저를 찾을 수 없습니다.", Duration = 2})
-            return
-        end
-        
-        selectedKickPlayer = found
-        blobLoopT4 = true
-        task.spawn(function()
-            task.wait(1)
-            blobLoopT4 = false
-        end)
-        
-        Rayfield:Notify({Title = "PCld 킥", Content = found.Name .. "님에게 셋오너 킥을 실행했습니다.", Duration = 2})
-    end
-})
-
-KickTab:CreateToggle({
-    Name = "PCld 지속 셋오너 킥 (루프)",
-    Callback = function(v)
-        if v then
-            if pcldTargetName == "" then
-                Rayfield:Notify({Title = "오류", Content = "PCld 닉네임을 입력해주세요!", Duration = 2})
-                return
-            end
-            
-            local found = nil
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p.Name:lower():find(pcldTargetName:lower()) or (p.DisplayName and p.DisplayName:lower():find(pcldTargetName:lower())) then
-                    found = p
-                    break
-                end
-            end
-            
-            if not found then
-                Rayfield:Notify({Title = "오류", Content = "해당 PCld 유저를 찾을 수 없습니다.", Duration = 2})
-                return
-            end
-            
-            selectedKickPlayer = found
-            blobLoopT4 = true
-            task.spawn(loopPlayerBlobF4)
-        else
-            blobLoopT4 = false
-        end
     end
 })
 
@@ -500,4 +450,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "PCld 셋오너 킥 + Destroy 방식 적용 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "PCld 고정 통합 + 350Hz 최적화 완료", Duration = 3})
