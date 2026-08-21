@@ -115,7 +115,7 @@ KickTab:CreateInput({
         selectedKickPlayer = found
         Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
-end)
+})
 
 function loopPlayerBlobF4()
     local initialized = false
@@ -145,7 +145,7 @@ function loopPlayerBlobF4()
             -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
-                initialized = true -- [수정 핵심] 포획 성공 처리 후 다시 false로 풀리지 않도록 함
+                initialized = true
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
@@ -177,7 +177,6 @@ function loopPlayerBlobF4()
                     
                     task.wait(0.3)
                     recoveringTargets[name] = nil
-                    -- [수정됨] 무한 반복 버그의 원인인 initialized = false 삭제
                 end)
             end
             
@@ -312,7 +311,7 @@ local function executeSmartKick(targetPlayer)
     end)
 end
 
--- F키 조준 셋오너 킥 (기존 F키와 별개로 동작)
+-- G키 조준 셋오너 킥 (기존 F키와 별개로 동작)
 KickTab:CreateKeybind({
     Name = "G키 셋오너 킥 (조준한 유저)",
     CurrentKeybind = "G",
