@@ -16,8 +16,12 @@ local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
--- Destroy 원격 이벤트 (원래 DestroyGrabLine 대신 사용)
-local DestroyEvent = rs:WaitForChild("Destroy")  -- 만약 실제 이름이 다르면 여기 수정
+-- ✅ Destroy 이벤트 자동 감지 (없으면 DestroyGrabLine 사용)
+local DestroyEvent = rs:FindFirstChild("Destroy") or (rs:FindFirstChild("GrabEvents") and rs.GrabEvents:FindFirstChild("DestroyGrabLine"))
+if not DestroyEvent then
+    Rayfield:Notify({Title = "오류", Content = "Destroy 이벤트를 찾을 수 없습니다. 게임 업데이트 확인 필요.", Duration = 5})
+    return
+end
 
 --=============================================
 -- [UI 생성]
@@ -63,7 +67,7 @@ local function startFKeyAttack(targetPlayer)
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                DestroyEvent:FireServer(tgtRoot)  -- Destroy 사용
+                DestroyEvent:FireServer(tgtRoot)
             end)
         end
     end)
@@ -94,6 +98,7 @@ local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local recoveringTargets = {} 
 local selectedKickPlayer = nil
+local pcldTargetName = ""  -- ✅ PCld 입력값 저장 변수
 
 -- 타겟 입력
 KickTab:CreateInput({
@@ -191,7 +196,9 @@ function loopPlayerBlobF4()
                 
                 -- Destroy 3회
                 for i = 1, 3 do
-                    DestroyEvent:FireServer(charHRP)
+                    pcall(function()
+                        DestroyEvent:FireServer(charHRP)
+                    end)
                 end
             end)
         end
@@ -218,27 +225,26 @@ KickTab:CreateToggle({
 --=============================================
 KickTab:CreateSection("=== PCld 셋오너 킥 ===")
 
-local pcldInput = KickTab:CreateInput({
+KickTab:CreateInput({
     Name = "PCld 타겟 닉네임",
     PlaceholderText = "예: Player123",
     RemoveTextAfterFocusLost = true,
     Callback = function(v)
-        -- 입력만 받고, 버튼으로 실행
+        pcldTargetName = v
     end
 })
 
 KickTab:CreateButton({
     Name = "PCld 셋오너 킥 실행 (1회)",
     Callback = function()
-        local v = pcldInput.CurrentValue or ""
-        if v == "" then
+        if pcldTargetName == "" then
             Rayfield:Notify({Title = "오류", Content = "PCld 닉네임을 입력해주세요!", Duration = 2})
             return
         end
         
         local found = nil
         for _, p in ipairs(Players:GetPlayers()) do
-            if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
+            if p.Name:lower():find(pcldTargetName:lower()) or (p.DisplayName and p.DisplayName:lower():find(pcldTargetName:lower())) then
                 found = p
                 break
             end
@@ -250,10 +256,8 @@ KickTab:CreateButton({
         end
         
         selectedKickPlayer = found
-        -- 기존 블롭맨 루프와 별개로 즉시 1회 킥 실행 (루프를 잠깐 켜고 끄는 방법)
         blobLoopT4 = true
         task.spawn(function()
-            -- 잠시 루프 실행 후 자동 종료 (원하는 만큼 지속)
             task.wait(1)
             blobLoopT4 = false
         end)
@@ -266,15 +270,14 @@ KickTab:CreateToggle({
     Name = "PCld 지속 셋오너 킥 (루프)",
     Callback = function(v)
         if v then
-            local v = pcldInput.CurrentValue or ""
-            if v == "" then
+            if pcldTargetName == "" then
                 Rayfield:Notify({Title = "오류", Content = "PCld 닉네임을 입력해주세요!", Duration = 2})
                 return
             end
             
             local found = nil
             for _, p in ipairs(Players:GetPlayers()) do
-                if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
+                if p.Name:lower():find(pcldTargetName:lower()) or (p.DisplayName and p.DisplayName:lower():find(pcldTargetName:lower())) then
                     found = p
                     break
                 end
@@ -306,7 +309,11 @@ KickTab:CreateToggle({
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        local DestroyEvent = RS:WaitForChild("Destroy")  -- Destroy 사용
+        local DestroyEvent = RS:FindFirstChild("Destroy") or (RS:FindFirstChild("GrabEvents") and RS.GrabEvents:FindFirstChild("DestroyGrabLine"))
+        if not DestroyEvent then
+            Rayfield:Notify({Title = "오류", Content = "Destroy 이벤트를 찾을 수 없습니다.", Duration = 3})
+            return
+        end
         local lpName = plr.Name
 
         local function clearAttackLoop()
