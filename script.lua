@@ -117,7 +117,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 통합 셋오너 킥 (PCld 고정 포함)
+-- [KICK 탭] - 통합 셋오너 킥 (PCld 이동 + 350Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -147,22 +147,20 @@ KickTab:CreateInput({
         selectedKickPlayer = found
         Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
-})
+end)
 
--- 통합 셋오너 킥 루프 (350Hz, BodyPosition 고정, 셋오너 1회 + Destroy 3회, 이동/복귀 포함)
+-- 통합 셋오너 킥 루프 (정확한 350Hz, PCld 이동 후 복귀)
 function loopPlayerBlobF4()
     local initialized = false
-    local bp = nil
-    local bg = nil
+    local nextTime = 0
+    local interval = 1/350  -- 350Hz 간격
 
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            if bp then bp:Destroy() bp = nil end
-            if bg then bg:Destroy() bg = nil end
-            task.wait(1/350)
+            task.wait(interval)
             continue
         end
 
@@ -184,13 +182,26 @@ function loopPlayerBlobF4()
                     -- 1. 내 원래 위치 저장 (복귀용)
                     local originalCF = myHRP.CFrame
                     
-                    -- 2. 상대방 PCld 위치로 이동
-                    pcall(function()
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    end)
+                    -- 2. 상대방 PCld 파트 찾기 (없으면 캐릭터 위치로 폴백)
+                    local pcldPart = nil
+                    if player:FindFirstChild("PCld") then
+                        pcldPart = player.PCld
+                    elseif player.Character:FindFirstChild("PCld") then
+                        pcldPart = player.Character.PCld
+                    end
+                    
+                    if pcldPart then
+                        pcall(function()
+                            myHRP.CFrame = pcldPart.CFrame * CFrame.new(0, 2, 0)
+                        end)
+                    else
+                        pcall(function()
+                            myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                        end)
+                    end
                     task.wait(0.15)
                     
-                    -- 3. 셋오너 & 그랩라인 반복 실행 (상대방 위치에서)
+                    -- 3. 셋오너 & 그랩라인 반복 실행 (PCld 위치에서)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 15 do
@@ -218,29 +229,8 @@ function loopPlayerBlobF4()
                     recoveringTargets[name] = nil
                 end)
             end
-
-            -- ★ BodyPosition & BodyGyro 생성/유지 (상대를 Y+20에 강제 고정)
-            if not bp or not bp.Parent then
-                bp = Instance.new("BodyPosition")
-                bp.Name = "KickBodyPos"
-                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bp.D = 200
-                bp.P = 50000
-                bp.Parent = charHRP
-            end
-            if not bg or not bg.Parent then
-                bg = Instance.new("BodyGyro")
-                bg.Name = "KickBodyGyro"
-                bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                bg.D = 200
-                bg.P = 50000
-                bg.Parent = charHRP
-            end
-
-            -- 매 프레임 목표 위치/회전 업데이트
-            bp.Position = targetCF.Position
-            bg.CFrame = targetCF
-
+            
+            -- 셋오너 및 고정 (CFrame 직접 설정 + 원격 이벤트)
             pcall(function()
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -261,13 +251,21 @@ function loopPlayerBlobF4()
                 end
             end)
         end
-        task.wait(1/350)
+        
+        -- 정확한 350Hz 유지를 위한 시간 보정
+        nextTime = nextTime + interval
+        local sleepTime = nextTime - tick()
+        if sleepTime > 0 then
+            task.wait(sleepTime)
+        else
+            nextTime = tick()  -- 뒤처졌으면 보정
+        end
     end
 end
 
--- 통합 셋오너 킥 토글 (PCld 고정 포함)
+-- 통합 셋오너 킥 토글
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (PCld 고정)",
+    Name = "블롭맨 오너 킥 실행 (PCld 이동)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -450,4 +448,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "PCld 고정 통합 + 350Hz 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "PCld 이동 방식 + 정확한 350Hz 최적화 완료", Duration = 3})
