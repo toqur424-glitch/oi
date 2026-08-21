@@ -16,6 +16,9 @@ local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
+-- Destroy 원격 이벤트 (원래 DestroyGrabLine 대신 사용)
+local DestroyEvent = rs:WaitForChild("Destroy")  -- 만약 실제 이름이 다르면 여기 수정
+
 --=============================================
 -- [UI 생성]
 --=============================================
@@ -60,7 +63,7 @@ local function startFKeyAttack(targetPlayer)
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                DestroyEvent:FireServer(tgtRoot)  -- Destroy 사용
             end)
         end
     end)
@@ -85,14 +88,14 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 교차 고정 및 범위 이탈 감지 룹티피
+-- [KICK 탭] - 단일 타겟 셋오너 & 디트로이트 고정 + PCld 기능
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local recoveringTargets = {} 
-
 local selectedKickPlayer = nil
 
+-- 타겟 입력
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
     PlaceholderText = "예: Player1",
@@ -117,6 +120,7 @@ KickTab:CreateInput({
     end
 })
 
+-- 블롭맨 오너 킥 루프 (350Hz + 셋오너 1회 + Destroy 3회)
 function loopPlayerBlobF4()
     local initialized = false
     
@@ -185,9 +189,9 @@ function loopPlayerBlobF4()
                 -- 셋오너 1회
                 rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 
-                -- 디트로이트(DestroyGrabLine) 3회
+                -- Destroy 3회
                 for i = 1, 3 do
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    DestroyEvent:FireServer(charHRP)
                 end
             end)
         end
@@ -195,6 +199,7 @@ function loopPlayerBlobF4()
     end
 end
 
+-- 블롭맨 오너 킥 토글
 KickTab:CreateToggle({
     Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
     Callback = function(v)
@@ -209,7 +214,88 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합]
+-- [PCld 셋오너 킥 기능]
+--=============================================
+KickTab:CreateSection("=== PCld 셋오너 킥 ===")
+
+local pcldInput = KickTab:CreateInput({
+    Name = "PCld 타겟 닉네임",
+    PlaceholderText = "예: Player123",
+    RemoveTextAfterFocusLost = true,
+    Callback = function(v)
+        -- 입력만 받고, 버튼으로 실행
+    end
+})
+
+KickTab:CreateButton({
+    Name = "PCld 셋오너 킥 실행 (1회)",
+    Callback = function()
+        local v = pcldInput.CurrentValue or ""
+        if v == "" then
+            Rayfield:Notify({Title = "오류", Content = "PCld 닉네임을 입력해주세요!", Duration = 2})
+            return
+        end
+        
+        local found = nil
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
+                found = p
+                break
+            end
+        end
+        
+        if not found then
+            Rayfield:Notify({Title = "오류", Content = "해당 PCld 유저를 찾을 수 없습니다.", Duration = 2})
+            return
+        end
+        
+        selectedKickPlayer = found
+        -- 기존 블롭맨 루프와 별개로 즉시 1회 킥 실행 (루프를 잠깐 켜고 끄는 방법)
+        blobLoopT4 = true
+        task.spawn(function()
+            -- 잠시 루프 실행 후 자동 종료 (원하는 만큼 지속)
+            task.wait(1)
+            blobLoopT4 = false
+        end)
+        
+        Rayfield:Notify({Title = "PCld 킥", Content = found.Name .. "님에게 셋오너 킥을 실행했습니다.", Duration = 2})
+    end
+})
+
+KickTab:CreateToggle({
+    Name = "PCld 지속 셋오너 킥 (루프)",
+    Callback = function(v)
+        if v then
+            local v = pcldInput.CurrentValue or ""
+            if v == "" then
+                Rayfield:Notify({Title = "오류", Content = "PCld 닉네임을 입력해주세요!", Duration = 2})
+                return
+            end
+            
+            local found = nil
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Name:lower():find(v:lower()) or (p.DisplayName and p.DisplayName:lower():find(v:lower())) then
+                    found = p
+                    break
+                end
+            end
+            
+            if not found then
+                Rayfield:Notify({Title = "오류", Content = "해당 PCld 유저를 찾을 수 없습니다.", Duration = 2})
+                return
+            end
+            
+            selectedKickPlayer = found
+            blobLoopT4 = true
+            task.spawn(loopPlayerBlobF4)
+        else
+            blobLoopT4 = false
+        end
+    end
+})
+
+--=============================================
+-- [Pallet Ragdoll (Invis) 통합]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
@@ -220,7 +306,7 @@ KickTab:CreateToggle({
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
+        local DestroyEvent = RS:WaitForChild("Destroy")  -- Destroy 사용
         local lpName = plr.Name
 
         local function clearAttackLoop()
@@ -259,7 +345,7 @@ KickTab:CreateToggle({
 
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine:FireServer(soundPart)
+                    DestroyEvent:FireServer(soundPart)
                 end)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
@@ -375,4 +461,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "VHSV6+XOCU 통합 셋오너 킥 시스템 추가 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "PCld 셋오너 킥 + Destroy 방식 적용 완료", Duration = 3})
