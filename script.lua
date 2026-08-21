@@ -1,7 +1,38 @@
 --=============================================
 -- [초기 로드 및 게임 체크]
 --=============================================
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Rayfield = nil
+
+-- Rayfield 로드 시도 (실패해도 스크립트가 멈추지 않도록)
+local success, result = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if success then
+    Rayfield = result
+else
+    -- Rayfield 로드 실패 시 알림 (CoreGui 없이도 가능)
+    local Players = game:GetService("Players")
+    local player = Players.LocalPlayer
+    player:WaitForChild("PlayerGui")
+    local notify = Instance.new("ScreenGui")
+    notify.Name = "ErrorNotify"
+    notify.Parent = player.PlayerGui
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 400, 0, 100)
+    frame.Position = UDim2.new(0.5, 0, 0.3, 0)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    frame.Parent = notify
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Text = "Rayfield 로드 실패\n인터넷 연결 및 URL 확인 후 다시 시도하세요."
+    label.TextColor3 = Color3.fromRGB(255, 0, 0)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 14
+    label.Parent = frame
+    return
+end
 
 if game.PlaceId ~= 6961824067 then 
     Rayfield:Notify({Title = "Error", Content = "이 게임을 지원하지 않습니다.", Duration = 3})
@@ -16,11 +47,10 @@ local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
--- ✅ Destroy 이벤트 자동 감지 (없으면 DestroyGrabLine 사용)
+-- ✅ Destroy 이벤트 자동 감지 (없으면 DestroyGrabLine, 둘 다 없으면 nil 허용)
 local DestroyEvent = rs:FindFirstChild("Destroy") or (rs:FindFirstChild("GrabEvents") and rs.GrabEvents:FindFirstChild("DestroyGrabLine"))
 if not DestroyEvent then
-    Rayfield:Notify({Title = "오류", Content = "Destroy 이벤트를 찾을 수 없습니다. 게임 업데이트 확인 필요.", Duration = 5})
-    return
+    Rayfield:Notify({Title = "오류", Content = "Destroy 이벤트를 찾을 수 없습니다. 일부 기능이 제한될 수 있습니다.", Duration = 5})
 end
 
 --=============================================
@@ -67,7 +97,7 @@ local function startFKeyAttack(targetPlayer)
             pcall(function()
                 rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                DestroyEvent:FireServer(tgtRoot)
+                if DestroyEvent then DestroyEvent:FireServer(tgtRoot) end
             end)
         end
     end)
@@ -98,7 +128,7 @@ local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local recoveringTargets = {} 
 local selectedKickPlayer = nil
-local pcldTargetName = ""  -- ✅ PCld 입력값 저장 변수
+local pcldTargetName = ""
 
 -- 타겟 입력
 KickTab:CreateInput({
@@ -195,10 +225,12 @@ function loopPlayerBlobF4()
                 rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 
                 -- Destroy 3회
-                for i = 1, 3 do
-                    pcall(function()
-                        DestroyEvent:FireServer(charHRP)
-                    end)
+                if DestroyEvent then
+                    for i = 1, 3 do
+                        pcall(function()
+                            DestroyEvent:FireServer(charHRP)
+                        end)
+                    end
                 end
             end)
         end
