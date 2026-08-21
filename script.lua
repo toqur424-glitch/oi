@@ -119,14 +119,13 @@ KickTab:CreateInput({
 
 function loopPlayerBlobF4()
     local initialized = false
-    local frameToggle = false
     
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            RunService.RenderStepped:Wait()
+            task.wait(1/350)
             continue
         end
 
@@ -136,16 +135,12 @@ function loopPlayerBlobF4()
         local charHUM = player.Character:FindFirstChild("Humanoid")
         
         if myHRP and charHRP and charHUM then
-            -- Y좌표 20 (내 머리 위 20)을 고정 목표 위치로 설정
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-            
-            -- 내 몸이 아닌 '고정 목표 위치'와의 거리를 계산
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 고정 위치에서 15스터드 이상 벗어났을 때만 추적/룹티피 발동
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
-                initialized = true -- [수정 핵심] 포획 성공 처리 후 다시 false로 풀리지 않도록 함
+                initialized = true
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
@@ -177,7 +172,6 @@ function loopPlayerBlobF4()
                     
                     task.wait(0.3)
                     recoveringTargets[name] = nil
-                    -- [수정됨] 무한 반복 버그의 원인인 initialized = false 삭제
                 end)
             end
             
@@ -188,16 +182,16 @@ function loopPlayerBlobF4()
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 
-                frameToggle = not frameToggle
-                if frameToggle then
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                else
-                    rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                -- 셋오너 1회
+                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                
+                -- 디트로이트(DestroyGrabLine) 3회
+                for i = 1, 3 do
                     rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                 end
             end)
         end
-        RunService.RenderStepped:Wait()
+        task.wait(1/350)
     end
 end
 
@@ -373,189 +367,6 @@ KickTab:CreateToggle({
             end
         end
     end,
-})
-
---=============================================
--- [VHSV6 + XOCU 통합 셋오너 킥 시스템]
---=============================================
-local SmartKickTab = Window:CreateTab("셋오너 킥 (통합)", nil)
-SmartKickTab:CreateSection("=== 최적화된 셋오너 킥 & 자동 복귀 ===")
-
-getgenv().SmartKickActive = false
-local smartKickConn = nil
-local smartKickTarget = nil
-
--- 셋오너 킥 실행 함수 (VHSV6 + XOCU 메커니즘 완전 통합)
-local function executeSmartKick(targetPlayer)
-    local myChar = plr.Character
-    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    
-    if not myHRP then return end
-    
-    local tgtChar = targetPlayer.Character
-    local tgtHRP = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
-    local tgtHead = tgtChar and tgtChar:FindFirstChild("Head")
-    local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
-    
-    if not tgtHRP or not tgtHead or not tgtHum then return end
-    
-    -- [1] 내 원래 위치 저장 (복귀용 - VHSV6 방식)
-    local originalCF = myHRP.CFrame
-    
-    -- [2] 타겟에게 텔레포트 (접근 - XOCU 방식)
-    myHRP.CFrame = tgtHRP.CFrame * CFrame.new(0, 2, 0)
-    task.wait(0.1)
-    
-    -- [3] 셋오너 원격 이벤트 반복 발사 (VHSV6 방식 - 15회)
-    for i = 1, 15 do
-        pcall(function()
-            rs.GrabEvents.SetNetworkOwner:FireServer(tgtHRP, CFrame.lookAt(myHRP.Position, tgtHRP.Position))
-            rs.GrabEvents.CreateGrabLine:FireServer(tgtHRP, CFrame.new())
-            rs.GrabEvents.DestroyGrabLine:FireServer(tgtHRP)
-        end)
-        task.wait()
-    end
-    
-    -- [4] 내 원래 위치로 즉시 복귀 (VHSV6 핵심)
-    myHRP.CFrame = originalCF
-    myHRP.AssemblyLinearVelocity = Vector3.zero
-    myHRP.AssemblyAngularVelocity = Vector3.zero
-    
-    -- [5] 타겟을 내 원래 위치 위로 고정 이동 (XOCU 방식 - 20스터드 위)
-    local lockPos = originalCF * CFrame.new(0, 20, 0)
-    
-    task.spawn(function()
-        -- BodyPosition 생성 (고정력 최대)
-        local bp = Instance.new("BodyPosition")
-        bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bp.D = 100
-        bp.P = 50000
-        bp.Position = lockPos.Position
-        bp.Parent = tgtHRP
-        
-        -- BodyGyro 생성
-        local bg = Instance.new("BodyGyro")
-        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bg.D = 100
-        bg.CFrame = lockPos
-        bg.Parent = tgtHRP
-        
-        -- 타겟을 강제로 내 원래 위치 위로 이동
-        pcall(function()
-            tgtHRP.CFrame = lockPos
-            tgtHRP.AssemblyLinearVelocity = Vector3.zero
-            tgtHRP.AssemblyAngularVelocity = Vector3.zero
-            tgtHum.PlatformStand = true
-            tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
-        end)
-        
-        -- 5초 동안 유지 (셋오너 지속 확인 및 갱신)
-        local startTime = tick()
-        while tick() - startTime < 5 do
-            -- 타겟이 다시 이동하려고 하면 재고정
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtHRP, CFrame.lookAt(myHRP.Position, tgtHRP.Position))
-                tgtHRP.CFrame = lockPos
-                tgtHRP.AssemblyLinearVelocity = Vector3.zero
-                tgtHRP.AssemblyAngularVelocity = Vector3.zero
-                
-                -- 5초 동안 유지 (셋오너 지속 확인)
-                local bp2 = tgtHRP:FindFirstChild("BodyPosition")
-                if bp2 then bp2.Position = lockPos.Position end
-            end)
-            task.wait(0.1)
-        end
-        
-        -- 정리
-        if bp and bp.Parent then bp:Destroy() end
-        if bg and bg.Parent then bg:Destroy() end
-    end)
-end
-
--- F키 조준 셋오너 킥 (VHSV6 + XOCU 통합)
-SmartKickTab:CreateKeybind({
-    Name = "F키 셋오너 킥 (조준한 유저)",
-    CurrentKeybind = "F",
-    Callback = function()
-        local target = nil
-        
-        -- 카메라 정면에서 가장 가까운 플레이어 찾기
-        local camPos = camera.CFrame.Position
-        local camLook = camera.CFrame.LookVector
-        local closestDist = math.huge
-        
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= plr and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                local hrp = p.Character.HumanoidRootPart
-                local dist = (hrp.Position - camPos).Magnitude
-                local direction = (hrp.Position - camPos).Unit
-                
-                -- 카메라 방향과 일치하는지 확인 (도트 프로덕트)
-                local dot = camLook:Dot(direction)
-                if dot > 0.95 and dist < closestDist then  -- 정면 5도 이내
-                    closestDist = dist
-                    target = p
-                end
-            end
-        end
-        
-        if target then
-            executeSmartKick(target)
-            Rayfield:Notify({Title = "셋오너 킥", Content = target.Name .. "님에게 셋오너 킥 실행!", Duration = 2})
-        else
-            Rayfield:Notify({Title = "알림", Content = "조준한 유저를 찾을 수 없습니다.", Duration = 2})
-        end
-    end
-})
-
--- 선택한 유저 지속 셋오너 킥
-SmartKickTab:CreateToggle({
-    Name = "선택한 유저 지속 셋오너 킥 (자동 복귀 포함)",
-    Callback = function(v)
-        getgenv().SmartKickActive = v
-        
-        if v then
-            if not selectedKickPlayer then
-                Rayfield:Notify({Title = "알림", Content = "먼저 타겟을 선택해주세요!", Duration = 3})
-                return
-            end
-            
-            smartKickTarget = selectedKickPlayer
-            
-            if smartKickConn then smartKickConn:Disconnect() end
-            smartKickConn = RunService.Heartbeat:Connect(function()
-                if not getgenv().SmartKickActive or not smartKickTarget then return end
-                executeSmartKick(smartKickTarget)
-                task.wait(0.5)  -- 0.5초 간격으로 반복
-            end)
-            
-            Rayfield:Notify({Title = "지속 킥 시작", Content = smartKickTarget.Name .. "님에게 지속 셋오너 킥 시작!", Duration = 2})
-        else
-            if smartKickConn then
-                smartKickConn:Disconnect()
-                smartKickConn = nil
-            end
-            Rayfield:Notify({Title = "지속 킥 종료", Content = "셋오너 킥이 중지되었습니다.", Duration = 2})
-        end
-    end
-})
-
--- 한 번에 모든 유저 셋오너 킥 (원거리 공격)
-SmartKickTab:CreateButton({
-    Name = "전체 유저 일괄 셋오너 킥 (위험)",
-    Callback = function()
-        local count = 0
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= plr and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                task.spawn(function()
-                    executeSmartKick(p)
-                end)
-                count = count + 1
-                task.wait(0.2)
-            end
-        end
-        Rayfield:Notify({Title = "일괄 킥 실행", Content = count .. "명에게 셋오너 킥 실행!", Duration = 3})
-    end
 })
 
 --=============================================
