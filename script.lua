@@ -220,7 +220,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, Ragdoll + AlignPosition)
+-- [KICK 탭] - 블롭맨 오너 킥 (350Hz, 강제 CFrame 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -230,8 +230,8 @@ local kickCounter = 0
 local steppedConn = nil
 local remoteTask = nil
 local respawnConn = nil
-local targetAlign = nil
-local targetAlignRot = nil
+local targetBP = nil
+local targetBG = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -257,8 +257,7 @@ KickTab:CreateInput({
     end
 })
 
--- AlignPosition 기반 고정 + Ragdoll 강제
-local function setupAlignForTarget()
+local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
@@ -267,59 +266,30 @@ local function setupAlignForTarget()
     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return end
 
-    -- 기존 BodyPosition/BodyGyro/AlignPosition 제거
+    -- 기존 BodyPosition/BodyGyro 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
             v:Destroy()
         end
     end
 
-    -- 상대 캐릭터의 모든 부품 충돌 해제
-    for _, part in pairs(tChar:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-            part.CanQuery = false
-        end
-    end
+    targetBP = Instance.new("BodyPosition")
+    targetBP.Name = "KickBP"
+    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    targetBP.P = 100000
+    targetBP.D = 1000
+    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
+    targetBP.Parent = tHRP
 
-    -- Humanoid를 완전히 Ragdoll 상태로 강제
-    local hum = tChar:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.PlatformStand = true
-        hum:ChangeState(Enum.HumanoidStateType.Physics)
-        hum:ChangeState(Enum.HumanoidStateType.FallingDown)
-        hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
-        hum.WalkSpeed = 0
-        hum.JumpPower = 0
-        hum.Health = 100
-    end
+    targetBG = Instance.new("BodyGyro")
+    targetBG.Name = "KickBG"
+    targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    targetBG.P = 100000
+    targetBG.D = 1000
+    targetBG.CFrame = CFrame.Angles(0, 0, 0)
+    targetBG.Parent = tHRP
 
-    -- 상대 HRP에 Attachment 부착
-    local att0 = Instance.new("Attachment", tHRP)
-    att0.Name = "KickAtt0"
-
-    -- AlignPosition 생성
-    targetAlign = Instance.new("AlignPosition")
-    targetAlign.Name = "KickAlign"
-    targetAlign.Attachment0 = att0
-    targetAlign.MaxForce = math.huge
-    targetAlign.MaxVelocity = math.huge
-    targetAlign.Responsiveness = math.huge
-    targetAlign.RigidityEnabled = true
-    targetAlign.Position = myHRP.Position + Vector3.new(7, 20, 0)
-    targetAlign.Parent = tHRP
-
-    -- AlignOrientation 생성 (회전 고정)
-    targetAlignRot = Instance.new("AlignOrientation")
-    targetAlignRot.Name = "KickAlignRot"
-    targetAlignRot.Attachment0 = att0
-    targetAlignRot.MaxTorque = math.huge
-    targetAlignRot.Responsiveness = math.huge
-    targetAlignRot.RigidityEnabled = true
-    targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
-    targetAlignRot.Parent = tHRP
-
-    return targetAlign, targetAlignRot
+    return targetBP, targetBG
 end
 
 local function startKickLoop()
@@ -337,7 +307,7 @@ local function startKickLoop()
             if hrp and hum then
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
-                setupAlignForTarget()
+                setupBodiesForTarget()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
@@ -351,7 +321,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 목표 위치 업데이트 + Ragdoll 유지 + 충돌 해제 유지
+    -- 매 프레임 강제 이동 + 물리 속도 0 + BodyPosition 유지
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -366,19 +336,25 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- AlignPosition이 없으면 재생성
-        if not targetAlign or targetAlign.Parent ~= tHRP then
-            setupAlignForTarget()
+        -- ★ 가장 강력한 고정: 직접 CFrame 설정 ★
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+        end)
+        
+        -- BodyPosition 재설정
+        if not targetBP or targetBP.Parent ~= tHRP then
+            setupBodiesForTarget()
+        end
+        if targetBP then
+            targetBP.Position = targetPos
+        end
+        if targetBG then
+            targetBG.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        if targetAlign then
-            targetAlign.Position = targetPos
-        end
-        if targetAlignRot then
-            targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
-        end
-        
-        -- Humanoid를 계속 Ragdoll 상태로 유지
+        -- Humanoid를 완전히 Ragdoll 상태로
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
@@ -388,7 +364,7 @@ local function startKickLoop()
             tHum.JumpPower = 0
         end
         
-        -- 상대의 모든 부품 충돌 해제 유지
+        -- 모든 부품 충돌 해제
         for _, part in pairs(tChar:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CanCollide = false
@@ -436,47 +412,24 @@ local function startKickLoop()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
                 elseif pattern == 2 then
-                    -- 2번째: DestroyGrabLine (소유권 풀기) → AlignPosition 강화
-                    if not targetAlign or targetAlign.Parent ~= tHRP then
-                        setupAlignForTarget()
-                    end
-                    if targetAlign then
-                        targetAlign.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                    end
-                    if targetAlignRot then
-                        targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
-                    end
+                    -- 2번째: DestroyGrabLine (소유권 흔들기)
                     pcall(function()
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
-                    -- 호출 직후 잠깐 속도 0으로 (떨어짐 방지)
-                    tHRP.AssemblyLinearVelocity = Vector3.zero
-                    tHRP.AssemblyAngularVelocity = Vector3.zero
-                    -- AlignPosition 재설정
-                    if targetAlign then
-                        targetAlign.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                    end
                 elseif pattern == 0 then
-                    -- 3번째: Destroy (소유권 풀기) → AlignPosition 강화
-                    if not targetAlign or targetAlign.Parent ~= tHRP then
-                        setupAlignForTarget()
-                    end
-                    if targetAlign then
-                        targetAlign.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                    end
-                    if targetAlignRot then
-                        targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
-                    end
+                    -- 3번째: Destroy (소유권 흔들기)
                     pcall(function()
                         rs.GrabEvents.Destroy:FireServer(tHRP)
                     end)
-                    -- 호출 직후 잠깐 속도 0으로 (떨어짐 방지)
-                    tHRP.AssemblyLinearVelocity = Vector3.zero
-                    tHRP.AssemblyAngularVelocity = Vector3.zero
-                    -- AlignPosition 재설정
-                    if targetAlign then
-                        targetAlign.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                    end
+                end
+                
+                -- 호출 직후 BodyPosition 강화
+                if not targetBP or targetBP.Parent ~= tHRP then
+                    setupBodiesForTarget()
+                end
+                if targetBP then
+                    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
+                    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                 end
             end
         end
@@ -501,18 +454,18 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
                     v:Destroy()
                 end
             end
         end
     end
-    targetAlign = nil
-    targetAlignRot = nil
+    targetBP = nil
+    targetBG = nil
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, Ragdoll + AlignPosition)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, 강제 CFrame 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -689,4 +642,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 1번 → Destroy 1번, Ragdoll + AlignPosition 강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 1번 → Destroy 1번, 강제 CFrame 고정", Duration = 3})
