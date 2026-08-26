@@ -216,7 +216,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (CFrame 강제 + BodyPosition)
+-- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition 극한 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -253,6 +253,7 @@ KickTab:CreateInput({
     end
 end)
 
+-- BodyPosition + BodyGyro 극한 강화 (AlignPosition 제거)
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -269,11 +270,12 @@ local function setupBodiesForTarget()
         end
     end
 
-    -- 충돌 해제
+    -- 충돌 해제 + Massless
     for _, part in pairs(tChar:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CanCollide = false
             part.CanQuery = false
+            part.Massless = true
         end
     end
 
@@ -288,21 +290,21 @@ local function setupBodiesForTarget()
         hum.JumpPower = 0
     end
 
-    -- BodyPosition (math.huge)
+    -- BodyPosition (math.huge, P/D 극한 강화)
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 100000
-    targetBP.D = 1000
+    targetBP.P = 1e9  -- 극한 비례
+    targetBP.D = 1e8  -- 극한 미분
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
-    -- BodyGyro (회전 고정)
+    -- BodyGyro (math.huge, P/D 극한 강화)
     targetBG = Instance.new("BodyGyro")
     targetBG.Name = "KickBG"
     targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG.P = 100000
-    targetBG.D = 1000
+    targetBG.P = 1e9
+    targetBG.D = 1e8
     targetBG.CFrame = CFrame.Angles(0, 0, 0)
     targetBG.Parent = tHRP
 
@@ -328,21 +330,17 @@ local function startKickLoop()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    -- 즉시 텔레포트 5회 반복 (초반 고정 강화)
-                    for i = 1, 5 do
-                        pcall(function()
-                            hrp.CFrame = CFrame.new(targetPos)
-                            hrp.AssemblyLinearVelocity = Vector3.zero
-                            hrp.AssemblyAngularVelocity = Vector3.zero
-                        end)
-                        task.wait(0.01)
-                    end
+                    pcall(function()
+                        hrp.CFrame = CFrame.new(targetPos)
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    end)
                 end
             end
         end)
     end
 
-    -- Stepped 루프: CFrame 강제 + BodyPosition 갱신
+    -- Stepped 루프: BodyPosition 갱신 + 속도 강제 0
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -357,13 +355,6 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- ★ CFrame 강제 설정 (초반/후반 모두 강력 고정)
-        pcall(function()
-            tHRP.CFrame = CFrame.new(targetPos)
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-        end)
-        
         -- BodyPosition 재생성 확인
         if not targetBP or targetBP.Parent ~= tHRP then
             setupBodiesForTarget()
@@ -376,6 +367,10 @@ local function startKickLoop()
             targetBG.CFrame = CFrame.Angles(0, 0, 0)
         end
         
+        -- ★ 물리 속도 강제 0 (떨어짐/회전 완전 차단)
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
+        
         -- Humanoid 상태 유지
         if tHum then
             tHum.PlatformStand = true
@@ -386,11 +381,12 @@ local function startKickLoop()
             tHum.JumpPower = 0
         end
         
-        -- 충돌 해제 유지
+        -- 충돌 해제 + Massless 유지
         for _, part in pairs(tChar:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CanCollide = false
                 part.CanQuery = false
+                part.Massless = true
             end
         end
     end)
@@ -482,7 +478,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (CFrame 강제 + BodyPosition, 350Hz)",
+    Name = "블롭맨 오너 킥 실행 (BodyPosition 극한 강화, 350Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -659,4 +655,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "CFrame 강제 + BodyPosition 강화, 350Hz, SetOwner 1번 → DestroyGrabLine 2번", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "BodyPosition 극한 강화, Massless, 속도 강제 0, 350Hz, SetOwner 1번 → DestroyGrabLine 2번", Duration = 3})
