@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, Destroy 3번)
+local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, DestroyGrabLine 3번)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -147,7 +147,7 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- SetOwner와 Destroy 번갈아 전송 (1:3 비율)
+        -- SetOwner와 DestroyGrabLine 번갈아 전송 (1:3 비율)
         fCounter = fCounter + 1
         if fCounter % setOwnerRatio == 1 then
             pcall(function()
@@ -155,7 +155,8 @@ local function startFKeyAttack(targetPlayer)
             end)
         else
             pcall(function()
-                rs.GrabEvents.Destroy:FireServer(tgtRoot)
+                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
         end
     end)
@@ -354,7 +355,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz로 SetOwner/Destroy 전송 (1:3 비율, BodyPosition 고정)
+    -- 350Hz로 SetOwner/DestroyGrabLine 전송 (1:3 비율, BodyPosition 고정)
     remoteTask = task.spawn(function()
         local interval = 0.002857142857  -- 350Hz (1/350)
         local nextTime = tick() + interval
@@ -386,12 +387,12 @@ local function startKickLoop()
                 
                 kickCounter = kickCounter + 1
                 if kickCounter % setOwnerRatio == 1 then
-                    -- SetNetworkOwner 1회
+                    -- SetOwner 1회
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
                 else
-                    -- Destroy 3회 (소유권 풀림) → BodyPosition으로 강제 고정
+                    -- DestroyGrabLine 3회 (소유권 흔들기) + BodyPosition 강제 고정
                     if not targetBP or targetBP.Parent ~= tHRP then
                         setupBodiesForTarget()
                     end
@@ -400,7 +401,8 @@ local function startKickLoop()
                         targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     end
                     pcall(function()
-                        rs.GrabEvents.Destroy:FireServer(tHRP)
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
                 end
             end
@@ -615,4 +617,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 사용, 핑 최적화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 사용, DestroyGrabLine 3회 반복", Duration = 3})
