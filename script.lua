@@ -223,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition만 사용)
+-- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition만 + 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local kickLoopRunning = false
@@ -258,7 +258,7 @@ KickTab:CreateInput({
     end
 })
 
--- BodyPosition만 생성 (다른 물리 요소 제거)
+-- BodyPosition만 생성 + 강력 설정
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -294,12 +294,12 @@ local function setupBodiesForTarget()
         hum.JumpPower = 0
     end
 
-    -- BodyPosition (math.huge)
+    -- BodyPosition (초강력: P, D 모두 높게)
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 100000
-    targetBP.D = 1000
+    targetBP.P = 1e9      -- 비례 게인 극대화
+    targetBP.D = 1e7      -- 감쇠 게인 극대화
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
@@ -335,7 +335,7 @@ local function startKickLoop()
         end)
     end
 
-    -- Stepped 루프: 매 프레임 BodyPosition 업데이트
+    -- Stepped 루프: 매 프레임 BodyPosition 업데이트 + 낙하 방지
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -348,6 +348,7 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
+        -- 항상 내 캐릭터 기준 +7, +20 위치를 목표로 설정
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
         -- BodyPosition 재생성 확인
@@ -359,7 +360,14 @@ local function startKickLoop()
         if targetBP then
             targetBP.Position = targetPos
             targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            targetBP.P = 1e9
+            targetBP.D = 1e7
         end
+        
+        -- 낙하 방지: AssemblyLinearVelocity 강제 0
+        pcall(function()
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+        end)
         
         -- Humanoid 상태 유지
         if tHum then
@@ -378,6 +386,11 @@ local function startKickLoop()
                 part.CanQuery = false
             end
         end
+        
+        -- 추가: CFrame 직접 설정 (서버 반영 시도)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+        end)
     end)
 
     -- 350Hz로 SetOwner 1번 → DestroyGrabLine 2번 무한반복
@@ -461,7 +474,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition만)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition 강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -638,4 +651,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 2번, BodyPosition(math.huge) 단일 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition(P=1e9,D=1e7) 강화 + 낙하 방지", Duration = 3})
