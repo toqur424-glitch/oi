@@ -220,7 +220,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, AlignPosition 기반)
+-- [KICK 탭] - 블롭맨 오너 킥 (350Hz, Ragdoll + AlignPosition)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -257,7 +257,7 @@ KickTab:CreateInput({
     end
 })
 
--- AlignPosition 기반 고정 + 충돌 해제 + Humanoid 물리 전환
+-- AlignPosition 기반 고정 + Ragdoll 강제
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -282,13 +282,16 @@ local function setupAlignForTarget()
         end
     end
 
-    -- Humanoid를 완전 물리 상태로 전환
+    -- Humanoid를 완전히 Ragdoll 상태로 강제
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if hum then
         hum.PlatformStand = true
         hum:ChangeState(Enum.HumanoidStateType.Physics)
+        hum:ChangeState(Enum.HumanoidStateType.FallingDown)
+        hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
         hum.WalkSpeed = 0
         hum.JumpPower = 0
+        hum.Health = 100
     end
 
     -- 상대 HRP에 Attachment 부착
@@ -348,7 +351,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 목표 위치 업데이트 + 충돌 해제 유지
+    -- 매 프레임 목표 위치 업데이트 + Ragdoll 유지 + 충돌 해제 유지
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -375,10 +378,12 @@ local function startKickLoop()
             targetAlignRot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        -- Humanoid를 계속 물리 상태로 유지
+        -- Humanoid를 계속 Ragdoll 상태로 유지
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            tHum:ChangeState(Enum.HumanoidStateType.FallingDown)
+            tHum:ChangeState(Enum.HumanoidStateType.Ragdoll)
             tHum.WalkSpeed = 0
             tHum.JumpPower = 0
         end
@@ -507,7 +512,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, AlignPosition 기반, 충돌 해제)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, Ragdoll + AlignPosition)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -684,4 +689,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 1번 → Destroy 1번, AlignPosition + 충돌 해제", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 1번 → Destroy 1번, Ragdoll + AlignPosition 강화", Duration = 3})
