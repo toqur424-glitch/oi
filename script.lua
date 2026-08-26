@@ -223,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition 단독, 초강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition 단독, CFrame 완전 제거)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local kickLoopRunning = false
@@ -258,7 +258,7 @@ KickTab:CreateInput({
     end
 })
 
--- BodyPosition만 생성 (초강력 설정)
+-- BodyPosition만 생성 (초강력)
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -283,7 +283,7 @@ local function setupBodiesForTarget()
         end
     end
 
-    -- Humanoid 완전 Ragdoll
+    -- Humanoid 완전 Ragdoll (물리 저항 제거)
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if hum then
         hum.PlatformStand = true
@@ -298,8 +298,8 @@ local function setupBodiesForTarget()
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 1e10
-    targetBP.D = 1e8
+    targetBP.P = 1e9
+    targetBP.D = 1e7
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
@@ -326,7 +326,7 @@ local function startKickLoop()
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
                     pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos) -- 리스폰 시 1회 순간이동 (BodyPosition과 별개)
+                        hrp.CFrame = CFrame.new(targetPos) -- 리스폰 시 1회 순간이동 (초기화 용도)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                     end)
@@ -360,8 +360,8 @@ local function startKickLoop()
         if targetBP then
             targetBP.Position = targetPos
             targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            targetBP.P = 1e10
-            targetBP.D = 1e8
+            targetBP.P = 1e9
+            targetBP.D = 1e7
         end
         
         -- Humanoid 상태 유지 (떨어짐 방지)
@@ -641,4 +641,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition(P=1e10,D=1e8) 초강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition(P=1e9,D=1e7) 단독 고정, CFrame 완전 제거", Duration = 3})
