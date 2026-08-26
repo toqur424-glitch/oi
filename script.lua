@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, DestroyGrabLine 3번)
+local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, DestroyGrabLine + ReleasePlayer 3번)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -147,7 +147,7 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- SetOwner와 DestroyGrabLine 번갈아 전송 (1:3 비율)
+        -- SetOwner와 DestroyGrabLine + ReleasePlayer 번갈아 전송 (1:3 비율)
         fCounter = fCounter + 1
         if fCounter % setOwnerRatio == 1 then
             pcall(function()
@@ -155,8 +155,8 @@ local function startFKeyAttack(targetPlayer)
             end)
         else
             pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                rs.GrabEvents.ReleasePlayer:FireServer(tgtRoot)
             end)
         end
     end)
@@ -276,15 +276,15 @@ local function setupBodiesForTarget()
 
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
-    targetBP.MaxForce = Vector3.new(100000, 100000, 100000) -- 적당한 힘
-    targetBP.P = 10000  -- 반응 속도
-    targetBP.D = 1000   -- 감쇠
+    targetBP.MaxForce = Vector3.new(100000, 100000, 100000)
+    targetBP.P = 10000
+    targetBP.D = 1000
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
     targetBG = Instance.new("BodyGyro")
     targetBG.Name = "KickBG"
-    targetBG.MaxTorque = Vector3.new(100000, 100000, 100000) -- 적당한 회전력
+    targetBG.MaxTorque = Vector3.new(100000, 100000, 100000)
     targetBG.P = 10000
     targetBG.D = 1000
     targetBG.CFrame = CFrame.Angles(0, 0, 0)
@@ -302,7 +302,6 @@ local function startKickLoop()
     kickCounter = 0
 
     if selectedKickPlayer then
-        -- 리셋 감지 및 자동 재부착
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
@@ -323,7 +322,6 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 위치 업데이트 (BodyPosition + BodyGyro, 속도 강제 없음)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -338,7 +336,6 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- BodyPosition이 없으면 생성
         if not targetBP or targetBP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
@@ -350,17 +347,13 @@ local function startKickLoop()
             targetBG.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        -- 속도 강제 제거 (BodyPosition이 자유롭게 이동)
-        -- tHRP.AssemblyLinearVelocity = Vector3.zero
-        -- tHRP.AssemblyAngularVelocity = Vector3.zero
-        
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
         end
     end)
 
-    -- 350Hz로 SetOwner/DestroyGrabLine 전송 (1:3 비율, BodyPosition 고정)
+    -- 350Hz로 SetOwner 1번 → DestroyGrabLine + ReleasePlayer 3번 무한반복
     remoteTask = task.spawn(function()
         local interval = 0.002857142857  -- 350Hz (1/350)
         local nextTime = tick() + interval
@@ -392,12 +385,12 @@ local function startKickLoop()
                 
                 kickCounter = kickCounter + 1
                 if kickCounter % setOwnerRatio == 1 then
-                    -- SetOwner 1회
+                    -- 1번째: SetOwner
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
                 else
-                    -- DestroyGrabLine 3회 호출 직전/직후 BodyPosition 강화
+                    -- 2,3,4번째: DestroyGrabLine + ReleasePlayer
                     if not targetBP or targetBP.Parent ~= tHRP then
                         setupBodiesForTarget()
                     end
@@ -407,10 +400,9 @@ local function startKickLoop()
                     if targetBG then
                         targetBG.CFrame = CFrame.Angles(0, 0, 0)
                     end
-                    -- DestroyGrabLine 호출
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                        rs.GrabEvents.ReleasePlayer:FireServer(tHRP)
                     end)
                     -- 호출 직후 잠깐 속도 0으로 (떨어짐 방지)
                     tHRP.AssemblyLinearVelocity = Vector3.zero
@@ -528,8 +520,8 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5   -- 50% 투명도
-                            v.Massless = true       -- 몸통 통과
+                            v.Transparency = 0.5
+                            v.Massless = true
                         end
                     end
 
@@ -551,7 +543,6 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 진동: 위아래 15스터드, 20Hz
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
@@ -632,4 +623,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 안정화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1회 → DestroyGrabLine + ReleasePlayer 3회 반복", Duration = 3})
