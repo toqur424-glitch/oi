@@ -223,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition 단독, CFrame 완전 제거)
+-- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition + 원격 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local kickLoopRunning = false
@@ -258,7 +258,7 @@ KickTab:CreateInput({
     end
 })
 
--- BodyPosition만 생성 (초강력)
+-- BodyPosition 생성 (초강력, 다른 물리 요소 없음)
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -298,8 +298,8 @@ local function setupBodiesForTarget()
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 1e9
-    targetBP.D = 1e7
+    targetBP.P = 1e10
+    targetBP.D = 1e8
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
@@ -326,7 +326,7 @@ local function startKickLoop()
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
                     pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos) -- 리스폰 시 1회 순간이동 (초기화 용도)
+                        hrp.CFrame = CFrame.new(targetPos) -- 리스폰 시 1회 초기화 (필수)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                     end)
@@ -360,8 +360,8 @@ local function startKickLoop()
         if targetBP then
             targetBP.Position = targetPos
             targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            targetBP.P = 1e9
-            targetBP.D = 1e7
+            targetBP.P = 1e10
+            targetBP.D = 1e8
         end
         
         -- Humanoid 상태 유지 (떨어짐 방지)
@@ -383,7 +383,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz로 SetOwner 1번 → DestroyGrabLine 2번 무한반복
+    -- 350Hz 루프: SetOwner 1번 → DestroyGrabLine 2번 + BodyPosition 동시 갱신
     remoteTask = task.spawn(function()
         local interval = 0.002857142857  -- 350Hz (1/350)
         local nextTime = tick() + interval
@@ -416,6 +416,7 @@ local function startKickLoop()
                 kickCounter = kickCounter + 1
                 local pattern = kickCounter % 3
                 
+                -- 패턴: SetOwner 1번 → DestroyGrabLine 2번
                 if pattern == 1 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
@@ -426,10 +427,12 @@ local function startKickLoop()
                     end)
                 end
                 
-                -- 매 호출 후 BodyPosition 재강화
+                -- 매 원격 호출 후 BodyPosition 재강화 (즉시 목표 위치로)
                 if targetBP then
                     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
                     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    targetBP.P = 1e10
+                    targetBP.D = 1e8
                 end
             end
         end
@@ -464,7 +467,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition 초강화)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, SetOwner+Destroy+BodyPosition 강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -641,4 +644,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition(P=1e9,D=1e7) 단독 고정, CFrame 완전 제거", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 2번 + BodyPosition(1e10/1e8) 동시 강화", Duration = 3})
