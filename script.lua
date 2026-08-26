@@ -221,7 +221,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, BodyPosition 사용)
+-- [KICK 탭] - 블롭맨 오너 킥 (350Hz, BodyPosition + BodyGyro)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -279,13 +279,18 @@ local function setupBodiesForTarget()
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
     targetBP.P = 100000
     targetBP.D = 1000
-    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0) -- 초기 목표 설정
+    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
-    -- BodyGyro는 제거 (회전 고정 불필요)
-    targetBG = nil
+    targetBG = Instance.new("BodyGyro")
+    targetBG.Name = "KickBG"
+    targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    targetBG.P = 100000
+    targetBG.D = 1000
+    targetBG.CFrame = CFrame.Angles(0, 0, 0) -- 기본 회전 고정
+    targetBG.Parent = tHRP
 
-    return targetBP
+    return targetBP, targetBG
 end
 
 local function startKickLoop()
@@ -318,7 +323,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 위치 업데이트 (BodyPosition 사용) - 속도 강제 0 제거
+    -- 매 프레임 위치 업데이트 (BodyPosition + BodyGyro + 속도 강제 0)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -326,6 +331,7 @@ local function startKickLoop()
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        local tHum = tChar and tChar:FindFirstChild("Humanoid")
         
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
@@ -340,10 +346,18 @@ local function startKickLoop()
         if targetBP then
             targetBP.Position = targetPos
         end
+        if targetBG then
+            targetBG.CFrame = CFrame.Angles(0, 0, 0)
+        end
         
-        -- 속도 강제 0 제거 (BodyPosition이 움직이도록)
-        -- tHRP.AssemblyLinearVelocity = Vector3.zero
-        -- tHRP.AssemblyAngularVelocity = Vector3.zero
+        -- 항상 물리 속도 0으로 강제 (떨어짐/회전 방지)
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
+        
+        if tHum then
+            tHum.PlatformStand = true
+            tHum:ChangeState(Enum.HumanoidStateType.Physics)
+        end
     end)
 
     -- 350Hz로 SetOwner/DestroyGrabLine 전송 (1:3 비율, BodyPosition 고정)
@@ -390,17 +404,22 @@ local function startKickLoop()
                     if targetBP then
                         targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
                     end
+                    if targetBG then
+                        targetBG.CFrame = CFrame.Angles(0, 0, 0)
+                    end
                     -- DestroyGrabLine 호출
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
-                    -- 호출 직후 잠깐 속도 리셋 (떨어짐 방지)
+                    -- 호출 직후 속도 강제 0 및 BodyPosition 재설정
                     tHRP.AssemblyLinearVelocity = Vector3.zero
                     tHRP.AssemblyAngularVelocity = Vector3.zero
-                    -- BodyPosition 즉시 재설정
                     if targetBP then
                         targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
+                    end
+                    if targetBG then
+                        targetBG.CFrame = CFrame.Angles(0, 0, 0)
                     end
                 end
             end
@@ -615,4 +634,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 이동 최적화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition+BodyGyro, 강제 고정", Duration = 3})
