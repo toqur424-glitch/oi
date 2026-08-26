@@ -216,7 +216,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition만 사용)
+-- [KICK 탭] - 블롭맨 오너 킥 (CFrame 강제 + BodyPosition)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -251,9 +251,8 @@ KickTab:CreateInput({
         selectedKickPlayer = found
         Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
-})
+end)
 
--- BodyPosition + BodyGyro만 생성 (AlignPosition 제거)
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -329,17 +328,21 @@ local function startKickLoop()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                    end)
+                    -- 즉시 텔레포트 5회 반복 (초반 고정 강화)
+                    for i = 1, 5 do
+                        pcall(function()
+                            hrp.CFrame = CFrame.new(targetPos)
+                            hrp.AssemblyLinearVelocity = Vector3.zero
+                            hrp.AssemblyAngularVelocity = Vector3.zero
+                        end)
+                        task.wait(0.01)
+                    end
                 end
             end
         end)
     end
 
-    -- Stepped 루프: BodyPosition 위치 갱신 (AlignPosition 없음)
+    -- Stepped 루프: CFrame 강제 + BodyPosition 갱신
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -353,6 +356,13 @@ local function startKickLoop()
         if not (tChar and tHRP) then return end
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        
+        -- ★ CFrame 강제 설정 (초반/후반 모두 강력 고정)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+        end)
         
         -- BodyPosition 재생성 확인
         if not targetBP or targetBP.Parent ~= tHRP then
@@ -472,7 +482,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition만 사용)",
+    Name = "블롭맨 오너 킥 실행 (CFrame 강제 + BodyPosition, 350Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -649,4 +659,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 2번, BodyPosition(math.huge) 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "CFrame 강제 + BodyPosition 강화, 350Hz, SetOwner 1번 → DestroyGrabLine 2번", Duration = 3})
