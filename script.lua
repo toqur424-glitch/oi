@@ -1,7 +1,14 @@
 --=============================================
 -- [초기 로드 및 게임 체크]
 --=============================================
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local ok, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not ok then
+    print("Rayfield 로드 실패: " .. tostring(Rayfield))
+    return
+end
 
 if game.PlaceId ~= 6961824067 then 
     Rayfield:Notify({Title = "Error", Content = "이 게임을 지원하지 않습니다.", Duration = 3})
@@ -15,6 +22,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
+
+-- 전역 변수로 승격 (안티그랩에서 접근 가능)
+local selectedKickPlayer = nil
+local selectedGrabPlayer = nil
 
 --=============================================
 -- [UI 생성]
@@ -74,7 +85,6 @@ getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
 local fCounter = 0
-local selectedGrabPlayer = nil
 
 local function setupFKeyAlign(targetPlayer)
     local tChar = targetPlayer and targetPlayer.Character
@@ -214,10 +224,9 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition + AlignPosition 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (강화 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
-local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
