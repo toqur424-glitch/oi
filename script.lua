@@ -11,8 +11,7 @@ if not ok then
 end
 
 if game.PlaceId ~= 6961824067 then 
-    Rayfield:Notify({Title = "Error", Content = "이 게임을 지원하지 않습니다.", Duration = 3})
-    return 
+    Rayfield:Notify({Title = "경고", Content = "이 게임이 아닐 수 있습니다. 계속 실행합니다.", Duration = 3})
 end
 
 local Players = game:GetService("Players")
@@ -23,7 +22,7 @@ local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
--- 전역 변수로 승격 (안티그랩에서 접근 가능)
+-- 전역 변수
 local selectedKickPlayer = nil
 local selectedGrabPlayer = nil
 
@@ -75,7 +74,7 @@ if BeingHeld then
 end
 
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
+-- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -224,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (강화 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition만 사용, 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local kickLoopRunning = false
@@ -235,8 +234,6 @@ local remoteTask = nil
 local respawnConn = nil
 local targetBP = nil
 local targetBG = nil
-local targetAP = nil
-local targetAO = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -262,7 +259,7 @@ KickTab:CreateInput({
     end
 })
 
--- BodyPosition + BodyGyro + AlignPosition/AlignOrientation 생성 (강화)
+-- BodyPosition + BodyGyro만 생성 (Align 제거)
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -272,9 +269,9 @@ local function setupBodiesForTarget()
     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return end
 
-    -- 기존 물리 제어 요소 제거
+    -- 기존 BodyPosition/BodyGyro 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
             v:Destroy()
         end
     end
@@ -298,49 +295,32 @@ local function setupBodiesForTarget()
         hum.JumpPower = 0
     end
 
-    -- BodyPosition (math.huge)
+    -- BodyPosition (초강력)
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 100000
-    targetBP.D = 1000
+    targetBP.P = 1e9
+    targetBP.D = 1e7
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
-    -- BodyGyro (회전 고정)
+    -- BodyGyro (초강력)
     targetBG = Instance.new("BodyGyro")
     targetBG.Name = "KickBG"
     targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG.P = 100000
-    targetBG.D = 1000
+    targetBG.P = 1e9
+    targetBG.D = 1e7
     targetBG.CFrame = CFrame.Angles(0, 0, 0)
     targetBG.Parent = tHRP
 
-    -- AlignPosition (추가 강화)
-    local att0 = Instance.new("Attachment", tHRP)
-    att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
-    att1.Name = "KickAtt1"
-    targetAP = Instance.new("AlignPosition")
-    targetAP.Name = "KickAP"
-    targetAP.Attachment0 = att0
-    targetAP.Attachment1 = att1
-    targetAP.MaxForce = math.huge
-    targetAP.MaxVelocity = math.huge
-    targetAP.Responsiveness = math.huge
-    targetAP.RigidityEnabled = true
-    targetAP.Parent = tHRP
+    -- 초기 위치 강제
+    pcall(function()
+        tHRP.CFrame = CFrame.new(myHRP.Position + Vector3.new(7, 20, 0))
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
+    end)
 
-    -- AlignOrientation (추가 강화)
-    targetAO = Instance.new("AlignOrientation")
-    targetAO.Name = "KickAO"
-    targetAO.Attachment0 = att0
-    targetAO.MaxTorque = math.huge
-    targetAO.Responsiveness = math.huge
-    targetAO.RigidityEnabled = true
-    targetAO.Parent = tHRP
-
-    return targetBP, targetBG, targetAP, targetAO
+    return targetBP, targetBG
 end
 
 local function startKickLoop()
@@ -372,7 +352,7 @@ local function startKickLoop()
         end)
     end
 
-    -- Stepped 루프: 위치/회전 갱신 (BodyPosition/AlignPosition 모두 업데이트)
+    -- Stepped 루프: 매 프레임 BodyPosition/BodyGyro 업데이트 + CFrame 강제
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -387,25 +367,20 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- 물리 제어 재설정 확인
-        if not targetBP or targetBP.Parent ~= tHRP or not targetAP or targetAP.Parent ~= tHRP then
+        -- BodyPosition 재생성 확인
+        if not targetBP or targetBP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
         
-        -- BodyPosition 갱신
+        -- BodyPosition 업데이트
         if targetBP then
             targetBP.Position = targetPos
+            targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         end
-        -- AlignPosition 갱신 (Attachment1의 WorldPosition)
-        if targetAP and targetAP.Attachment1 then
-            targetAP.Attachment1.WorldPosition = targetPos
-        end
-        -- BodyGyro / AlignOrientation 갱신
+        -- BodyGyro 업데이트
         if targetBG then
             targetBG.CFrame = CFrame.Angles(0, 0, 0)
-        end
-        if targetAO then
-            targetAO.Attachment0.CFrame = CFrame.Angles(0, 0, 0)
+            targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         end
         
         -- Humanoid 상태 유지
@@ -425,6 +400,11 @@ local function startKickLoop()
                 part.CanQuery = false
             end
         end
+        
+        -- CFrame 직접 강제 (서버 반영 시도)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+        end)
     end)
 
     -- 350Hz로 SetOwner 1번 → DestroyGrabLine 2번 무한반복
@@ -461,32 +441,23 @@ local function startKickLoop()
                 local pattern = kickCounter % 3
                 
                 if pattern == 1 then
-                    -- 1번째: SetNetworkOwner
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
                 else
-                    -- 2,3번째: DestroyGrabLine
                     pcall(function()
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
                 end
                 
-                -- 매 호출 후 물리 제어 재강화
-                local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+                -- 매 호출 후 BodyPosition 재강화
                 if targetBP then
-                    targetBP.Position = targetPos
+                    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
                     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                end
-                if targetAP and targetAP.Attachment1 then
-                    targetAP.Attachment1.WorldPosition = targetPos
-                    targetAP.MaxForce = math.huge
                 end
                 if targetBG then
                     targetBG.CFrame = CFrame.Angles(0, 0, 0)
-                end
-                if targetAO then
-                    targetAO.Attachment0.CFrame = CFrame.Angles(0, 0, 0)
+                    targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
                 end
             end
         end
@@ -511,7 +482,7 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
                     v:Destroy()
                 end
             end
@@ -519,12 +490,10 @@ local function stopKickLoop()
     end
     targetBP = nil
     targetBG = nil
-    targetAP = nil
-    targetAO = nil
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, 강화 고정)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition 강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -701,4 +670,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 2번, BodyPosition+AlignPosition(math.huge) 강화 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 2번, BodyPosition(P=1e9,D=1e7) 강화 고정", Duration = 3})
