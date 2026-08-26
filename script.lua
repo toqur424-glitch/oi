@@ -276,18 +276,18 @@ local function setupBodiesForTarget()
 
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
-    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 100000
-    targetBP.D = 1000
+    targetBP.MaxForce = Vector3.new(100000, 100000, 100000) -- 적당한 힘
+    targetBP.P = 10000  -- 반응 속도
+    targetBP.D = 1000   -- 감쇠
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
     targetBG = Instance.new("BodyGyro")
     targetBG.Name = "KickBG"
-    targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG.P = 100000
+    targetBG.MaxTorque = Vector3.new(100000, 100000, 100000) -- 적당한 회전력
+    targetBG.P = 10000
     targetBG.D = 1000
-    targetBG.CFrame = CFrame.Angles(0, 0, 0) -- 기본 회전 고정
+    targetBG.CFrame = CFrame.Angles(0, 0, 0)
     targetBG.Parent = tHRP
 
     return targetBP, targetBG
@@ -323,7 +323,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 위치 업데이트 (BodyPosition + BodyGyro + 속도 강제 0)
+    -- 매 프레임 위치 업데이트 (BodyPosition + BodyGyro, 속도 강제 없음)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -350,9 +350,9 @@ local function startKickLoop()
             targetBG.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        -- 항상 물리 속도 0으로 강제 (떨어짐/회전 방지)
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
+        -- 속도 강제 제거 (BodyPosition이 자유롭게 이동)
+        -- tHRP.AssemblyLinearVelocity = Vector3.zero
+        -- tHRP.AssemblyAngularVelocity = Vector3.zero
         
         if tHum then
             tHum.PlatformStand = true
@@ -412,14 +412,12 @@ local function startKickLoop()
                         rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
-                    -- 호출 직후 속도 강제 0 및 BodyPosition 재설정
+                    -- 호출 직후 잠깐 속도 0으로 (떨어짐 방지)
                     tHRP.AssemblyLinearVelocity = Vector3.zero
                     tHRP.AssemblyAngularVelocity = Vector3.zero
+                    -- BodyPosition 재설정
                     if targetBP then
                         targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                    end
-                    if targetBG then
-                        targetBG.CFrame = CFrame.Angles(0, 0, 0)
                     end
                 end
             end
@@ -634,4 +632,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition+BodyGyro, 강제 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 안정화", Duration = 3})
