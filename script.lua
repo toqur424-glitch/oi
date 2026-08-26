@@ -264,6 +264,8 @@ local function setupBodiesForTarget()
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
+    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
 
     -- 기존 BodyPosition/BodyGyro 제거
     for _, v in pairs(tHRP:GetChildren()) do
@@ -275,19 +277,15 @@ local function setupBodiesForTarget()
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 1e9  -- 매우 높은 반응 속도
-    targetBP.D = 1e8  -- 매우 높은 감쇠
+    targetBP.P = 100000
+    targetBP.D = 1000
+    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0) -- 초기 목표 설정
     targetBP.Parent = tHRP
 
-    targetBG = Instance.new("BodyGyro")
-    targetBG.Name = "KickBG"
-    targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG.P = 1e9
-    targetBG.D = 1e8
-    targetBG.CFrame = CFrame.Angles(0, 0, 0)
-    targetBG.Parent = tHRP
+    -- BodyGyro는 제거 (회전 고정 불필요)
+    targetBG = nil
 
-    return targetBP, targetBG
+    return targetBP
 end
 
 local function startKickLoop()
@@ -320,7 +318,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 위치 업데이트 (BodyPosition 사용) + 물리 속도 강제 0
+    -- 매 프레임 위치 업데이트 (BodyPosition 사용) - 속도 강제 0 제거
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -342,18 +340,10 @@ local function startKickLoop()
         if targetBP then
             targetBP.Position = targetPos
         end
-        if targetBG then
-            targetBG.CFrame = CFrame.Angles(0, 0, 0)
-        end
         
-        -- 소유권이 풀려도 물리 속도 계속 0 유지
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
-        local tHum = tChar:FindFirstChild("Humanoid")
-        if tHum then
-            tHum.PlatformStand = true
-            tHum:ChangeState(Enum.HumanoidStateType.Physics)
-        end
+        -- 속도 강제 0 제거 (BodyPosition이 움직이도록)
+        -- tHRP.AssemblyLinearVelocity = Vector3.zero
+        -- tHRP.AssemblyAngularVelocity = Vector3.zero
     end)
 
     -- 350Hz로 SetOwner/DestroyGrabLine 전송 (1:3 비율, BodyPosition 고정)
@@ -399,16 +389,16 @@ local function startKickLoop()
                     end
                     if targetBP then
                         targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                        targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     end
                     -- DestroyGrabLine 호출
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
-                    -- 호출 직후 물리 속도 강제 초기화 및 위치 재고정
+                    -- 호출 직후 잠깐 속도 리셋 (떨어짐 방지)
                     tHRP.AssemblyLinearVelocity = Vector3.zero
                     tHRP.AssemblyAngularVelocity = Vector3.zero
+                    -- BodyPosition 즉시 재설정
                     if targetBP then
                         targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
                     end
@@ -625,4 +615,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition(math.huge) 강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 이동 최적화", Duration = 3})
