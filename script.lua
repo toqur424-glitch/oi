@@ -117,7 +117,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 통합 셋오너 킥 (PCld 이동 + 350Hz)
+-- [KICK 탭] - 통합 셋오너 킥 (BodyPosition 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
@@ -149,17 +149,19 @@ KickTab:CreateInput({
     end
 end)
 
--- 통합 셋오너 킥 루프 (정확한 350Hz, PCld 이동 후 복귀)
+-- 통합 셋오너 킥 루프 (350Hz, BodyPosition 고정 + PCld 이동)
 function loopPlayerBlobF4()
     local initialized = false
     local nextTime = 0
-    local interval = 1/350  -- 350Hz 간격
+    local interval = 1/350
+    local bp = nil  -- BodyPosition (고정용)
 
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
+            if bp then bp:Destroy() bp = nil end
             task.wait(interval)
             continue
         end
@@ -179,7 +181,7 @@ function loopPlayerBlobF4()
                 initialized = true
                 
                 task.spawn(function()
-                    -- 1. 내 원래 위치 저장 (복귀용)
+                    -- 1. 내 원래 위치 저장
                     local originalCF = myHRP.CFrame
                     
                     -- 2. 상대방 PCld 파트 찾기 (없으면 캐릭터 위치로 폴백)
@@ -201,28 +203,29 @@ function loopPlayerBlobF4()
                     end
                     task.wait(0.15)
                     
-                    -- 3. 셋오너 & 그랩라인 반복 실행 (PCld 위치에서)
+                    -- 3. 소유권 뺏기: 셋오너 1회 + Destroy 3회
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        if DestroyEvent then
+                            for i = 1, 3 do
+                                DestroyEvent:FireServer(charHRP)
+                            end
                         end
                     end)
                     task.wait(0.05)
                     
-                    -- 4. 상대방을 내 머리 위로 이동 (원래 위치에서 고정 시작)
-                    pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
-                        myHRP.CFrame = originalCF
-                    end)
-                    task.wait(0.1)
+                    -- 4. BodyPosition 생성 (math.huge) 및 목표 좌표 설정
+                    if bp then bp:Destroy() end
+                    bp = Instance.new("BodyPosition")
+                    bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    bp.D = 200
+                    bp.P = 50000
+                    bp.Parent = charHRP
+                    bp.Position = targetCF.Position  -- 내 머리 위 Y+20
                     
-                    -- 5. 추가 셋오너 15회 (고정 유지용)
+                    -- 5. 내 원래 위치 복귀
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
+                        myHRP.CFrame = originalCF
                     end)
                     
                     task.wait(0.3)
@@ -230,7 +233,17 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- 셋오너 및 고정 (CFrame 직접 설정 + 원격 이벤트)
+            -- 매 프레임 BodyPosition 유지 및 목표 좌표 업데이트
+            if not bp or not bp.Parent then
+                bp = Instance.new("BodyPosition")
+                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bp.D = 200
+                bp.P = 50000
+                bp.Parent = charHRP
+            end
+            bp.Position = targetCF.Position
+            
+            -- 셋오너 및 고정 (원격 이벤트 + CFrame 직접 설정)
             pcall(function()
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
@@ -258,7 +271,7 @@ function loopPlayerBlobF4()
         if sleepTime > 0 then
             task.wait(sleepTime)
         else
-            nextTime = tick()  -- 뒤처졌으면 보정
+            nextTime = tick()
         end
     end
 end
@@ -448,4 +461,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "PCld 이동 방식 + 정확한 350Hz 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "BodyPosition 고정 + PCld 이동 방식 완료", Duration = 3})
