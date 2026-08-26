@@ -275,15 +275,15 @@ local function setupBodiesForTarget()
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 100000
-    targetBP.D = 1000
+    targetBP.P = 1e9  -- 매우 높은 반응 속도
+    targetBP.D = 1e8  -- 매우 높은 감쇠
     targetBP.Parent = tHRP
 
     targetBG = Instance.new("BodyGyro")
     targetBG.Name = "KickBG"
     targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG.P = 100000
-    targetBG.D = 1000
+    targetBG.P = 1e9
+    targetBG.D = 1e8
     targetBG.CFrame = CFrame.Angles(0, 0, 0)
     targetBG.Parent = tHRP
 
@@ -320,7 +320,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 위치 업데이트 (BodyPosition 사용)
+    -- 매 프레임 위치 업데이트 (BodyPosition 사용) + 물리 속도 강제 0
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -346,6 +346,7 @@ local function startKickLoop()
             targetBG.CFrame = CFrame.Angles(0, 0, 0)
         end
         
+        -- 소유권이 풀려도 물리 속도 계속 0 유지
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         local tHum = tChar:FindFirstChild("Humanoid")
@@ -392,7 +393,7 @@ local function startKickLoop()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
                 else
-                    -- DestroyGrabLine 3회 (소유권 흔들기) + BodyPosition 강제 고정
+                    -- DestroyGrabLine 3회 호출 직전/직후 BodyPosition 강화
                     if not targetBP or targetBP.Parent ~= tHRP then
                         setupBodiesForTarget()
                     end
@@ -400,10 +401,17 @@ local function startKickLoop()
                         targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
                         targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     end
+                    -- DestroyGrabLine 호출
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
+                    -- 호출 직후 물리 속도 강제 초기화 및 위치 재고정
+                    tHRP.AssemblyLinearVelocity = Vector3.zero
+                    tHRP.AssemblyAngularVelocity = Vector3.zero
+                    if targetBP then
+                        targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
+                    end
                 end
             end
         end
@@ -617,4 +625,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 사용, DestroyGrabLine 3회 반복", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition(math.huge) 강화", Duration = 3})
