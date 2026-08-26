@@ -132,7 +132,6 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         local holdPos = camCF.Position + camCF.LookVector * 20
 
-        -- AlignPosition으로 고정 (매 프레임 위치 업데이트)
         local align = tgtRoot:FindFirstChild("FKeyAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = holdPos
@@ -142,7 +141,6 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- SetOwner 1번 → DestroyGrabLine 2번 무한반복
         fCounter = fCounter + 1
         local pattern = fCounter % 3
         if pattern == 1 then
@@ -216,7 +214,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition 극한 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition + AlignPosition 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -228,6 +226,8 @@ local remoteTask = nil
 local respawnConn = nil
 local targetBP = nil
 local targetBG = nil
+local targetAP = nil
+local targetAO = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -251,9 +251,9 @@ KickTab:CreateInput({
         selectedKickPlayer = found
         Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
-end)
+})
 
--- BodyPosition + BodyGyro 극한 강화 (AlignPosition 제거)
+-- BodyPosition + BodyGyro + AlignPosition/AlignOrientation 생성 (강화)
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -263,19 +263,18 @@ local function setupBodiesForTarget()
     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return end
 
-    -- 기존 BodyPosition/BodyGyro 제거
+    -- 기존 물리 제어 요소 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
+        if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
         end
     end
 
-    -- 충돌 해제 + Massless
+    -- 충돌 해제
     for _, part in pairs(tChar:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CanCollide = false
             part.CanQuery = false
-            part.Massless = true
         end
     end
 
@@ -290,25 +289,49 @@ local function setupBodiesForTarget()
         hum.JumpPower = 0
     end
 
-    -- BodyPosition (math.huge, P/D 극한 강화)
+    -- BodyPosition (math.huge)
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 1e9  -- 극한 비례
-    targetBP.D = 1e8  -- 극한 미분
+    targetBP.P = 100000
+    targetBP.D = 1000
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
-    -- BodyGyro (math.huge, P/D 극한 강화)
+    -- BodyGyro (회전 고정)
     targetBG = Instance.new("BodyGyro")
     targetBG.Name = "KickBG"
     targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG.P = 1e9
-    targetBG.D = 1e8
+    targetBG.P = 100000
+    targetBG.D = 1000
     targetBG.CFrame = CFrame.Angles(0, 0, 0)
     targetBG.Parent = tHRP
 
-    return targetBP, targetBG
+    -- AlignPosition (추가 강화)
+    local att0 = Instance.new("Attachment", tHRP)
+    att0.Name = "KickAtt0"
+    local att1 = Instance.new("Attachment", workspace.Terrain)
+    att1.Name = "KickAtt1"
+    targetAP = Instance.new("AlignPosition")
+    targetAP.Name = "KickAP"
+    targetAP.Attachment0 = att0
+    targetAP.Attachment1 = att1
+    targetAP.MaxForce = math.huge
+    targetAP.MaxVelocity = math.huge
+    targetAP.Responsiveness = math.huge
+    targetAP.RigidityEnabled = true
+    targetAP.Parent = tHRP
+
+    -- AlignOrientation (추가 강화)
+    targetAO = Instance.new("AlignOrientation")
+    targetAO.Name = "KickAO"
+    targetAO.Attachment0 = att0
+    targetAO.MaxTorque = math.huge
+    targetAO.Responsiveness = math.huge
+    targetAO.RigidityEnabled = true
+    targetAO.Parent = tHRP
+
+    return targetBP, targetBG, targetAP, targetAO
 end
 
 local function startKickLoop()
@@ -340,7 +363,7 @@ local function startKickLoop()
         end)
     end
 
-    -- Stepped 루프: BodyPosition 갱신 + 속도 강제 0
+    -- Stepped 루프: 위치/회전 갱신 (BodyPosition/AlignPosition 모두 업데이트)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -355,21 +378,26 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- BodyPosition 재생성 확인
-        if not targetBP or targetBP.Parent ~= tHRP then
+        -- 물리 제어 재설정 확인
+        if not targetBP or targetBP.Parent ~= tHRP or not targetAP or targetAP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
         
+        -- BodyPosition 갱신
         if targetBP then
             targetBP.Position = targetPos
         end
+        -- AlignPosition 갱신 (Attachment1의 WorldPosition)
+        if targetAP and targetAP.Attachment1 then
+            targetAP.Attachment1.WorldPosition = targetPos
+        end
+        -- BodyGyro / AlignOrientation 갱신
         if targetBG then
             targetBG.CFrame = CFrame.Angles(0, 0, 0)
         end
-        
-        -- ★ 물리 속도 강제 0 (떨어짐/회전 완전 차단)
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
+        if targetAO then
+            targetAO.Attachment0.CFrame = CFrame.Angles(0, 0, 0)
+        end
         
         -- Humanoid 상태 유지
         if tHum then
@@ -381,12 +409,11 @@ local function startKickLoop()
             tHum.JumpPower = 0
         end
         
-        -- 충돌 해제 + Massless 유지
+        -- 충돌 해제 유지
         for _, part in pairs(tChar:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CanCollide = false
                 part.CanQuery = false
-                part.Massless = true
             end
         end
     end)
@@ -436,13 +463,21 @@ local function startKickLoop()
                     end)
                 end
                 
-                -- 매 호출 후 BodyPosition 재강화
+                -- 매 호출 후 물리 제어 재강화
+                local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
                 if targetBP then
-                    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
+                    targetBP.Position = targetPos
                     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                end
+                if targetAP and targetAP.Attachment1 then
+                    targetAP.Attachment1.WorldPosition = targetPos
+                    targetAP.MaxForce = math.huge
                 end
                 if targetBG then
                     targetBG.CFrame = CFrame.Angles(0, 0, 0)
+                end
+                if targetAO then
+                    targetAO.Attachment0.CFrame = CFrame.Angles(0, 0, 0)
                 end
             end
         end
@@ -467,7 +502,7 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
+                if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                     v:Destroy()
                 end
             end
@@ -475,10 +510,12 @@ local function stopKickLoop()
     end
     targetBP = nil
     targetBG = nil
+    targetAP = nil
+    targetAO = nil
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (BodyPosition 극한 강화, 350Hz)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, 강화 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -655,4 +692,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "BodyPosition 극한 강화, Massless, 속도 강제 0, 350Hz, SetOwner 1번 → DestroyGrabLine 2번", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 2번, BodyPosition+AlignPosition(math.huge) 강화 고정", Duration = 3})
