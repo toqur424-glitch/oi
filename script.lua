@@ -276,7 +276,7 @@ local function setupBodiesForTarget()
 
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
-    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge) -- 강력한 고정
+    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
     targetBP.P = 100000
     targetBP.D = 1000
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
@@ -341,7 +341,7 @@ local function startKickLoop()
         end
         
         if targetBP then
-            targetBP.Position = tHRP.Position -- 상대의 현재 위치에 고정
+            targetBP.Position = targetPos  -- 항상 (7,20,0)으로 설정
         end
         if targetBG then
             targetBG.CFrame = CFrame.Angles(0, 0, 0)
@@ -401,13 +401,12 @@ local function startKickLoop()
                         targetBG.CFrame = CFrame.Angles(0, 0, 0)
                     end
                 else
-                    -- 2,3,4번째: DestroyGrabLine + ReleasePlayer (상대가 떨어지는 위치에 고정)
+                    -- 2,3,4번째: DestroyGrabLine + ReleasePlayer (상대를 다시 위로 끌어올림)
                     if not targetBP or targetBP.Parent ~= tHRP then
                         setupBodiesForTarget()
                     end
                     if targetBP then
-                        -- 상대의 현재 위치에 고정 (떨어지는 순간 멈춤)
-                        targetBP.Position = tHRP.Position
+                        targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
                         targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     end
                     if targetBG then
@@ -420,9 +419,9 @@ local function startKickLoop()
                     -- 호출 직후 잠깐 속도 0으로 (떨어짐 방지)
                     tHRP.AssemblyLinearVelocity = Vector3.zero
                     tHRP.AssemblyAngularVelocity = Vector3.zero
-                    -- BodyPosition을 현재 위치에 즉시 재설정
+                    -- BodyPosition을 위로 재설정
                     if targetBP then
-                        targetBP.Position = tHRP.Position
+                        targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
                         targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     end
                 end
