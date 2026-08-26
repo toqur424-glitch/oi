@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, DestroyGrabLine + ReleasePlayer 3번)
+-- setOwnerRatio 제거 (kickCounter % 4로 직접 처리)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -147,16 +147,24 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- SetOwner와 DestroyGrabLine + ReleasePlayer 번갈아 전송 (1:3 비율)
+        -- SetOwner와 DestroyGrabLine + Destroy 번갈아 전송 (1:1:1:1 패턴)
         fCounter = fCounter + 1
-        if fCounter % setOwnerRatio == 1 then
+        local pattern = fCounter % 4
+        if pattern == 1 then
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
             end)
-        else
+        elseif pattern == 2 then
             pcall(function()
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-                rs.GrabEvents.ReleasePlayer:FireServer(tgtRoot)
+            end)
+        elseif pattern == 3 then
+            pcall(function()
+                rs.GrabEvents.Destroy:FireServer(tgtRoot)
+            end)
+        elseif pattern == 0 then
+            pcall(function()
+                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
         end
     end)
@@ -341,7 +349,7 @@ local function startKickLoop()
         end
         
         if targetBP then
-            targetBP.Position = targetPos  -- 항상 (7,20,0)으로 설정
+            targetBP.Position = targetPos
         end
         if targetBG then
             targetBG.CFrame = CFrame.Angles(0, 0, 0)
@@ -353,7 +361,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz로 SetOwner 1번 → DestroyGrabLine + ReleasePlayer 3번 무한반복
+    -- 350Hz로 SetOwner 1번 → DestroyGrabLine 1번 → Destroy 1번 → DestroyGrabLine 1번 무한반복
     remoteTask = task.spawn(function()
         local interval = 0.002857142857  -- 350Hz (1/350)
         local nextTime = tick() + interval
@@ -384,46 +392,40 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                if kickCounter % setOwnerRatio == 1 then
-                    -- 1번째: SetOwner (상대를 위로 끌어올림)
+                local pattern = kickCounter % 4
+                
+                if pattern == 1 then
+                    -- 1번째: SetNetworkOwner
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
-                    -- SetOwner 후 BodyPosition을 위로 설정
-                    if not targetBP or targetBP.Parent ~= tHRP then
-                        setupBodiesForTarget()
-                    end
-                    if targetBP then
-                        targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                        targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    end
-                    if targetBG then
-                        targetBG.CFrame = CFrame.Angles(0, 0, 0)
-                    end
-                else
-                    -- 2,3,4번째: DestroyGrabLine + ReleasePlayer (상대를 다시 위로 끌어올림)
-                    if not targetBP or targetBP.Parent ~= tHRP then
-                        setupBodiesForTarget()
-                    end
-                    if targetBP then
-                        targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                        targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    end
-                    if targetBG then
-                        targetBG.CFrame = CFrame.Angles(0, 0, 0)
-                    end
+                elseif pattern == 2 then
+                    -- 2번째: DestroyGrabLine
                     pcall(function()
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                        rs.GrabEvents.ReleasePlayer:FireServer(tHRP)
                     end)
-                    -- 호출 직후 잠깐 속도 0으로 (떨어짐 방지)
-                    tHRP.AssemblyLinearVelocity = Vector3.zero
-                    tHRP.AssemblyAngularVelocity = Vector3.zero
-                    -- BodyPosition을 위로 재설정
-                    if targetBP then
-                        targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                        targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    end
+                elseif pattern == 3 then
+                    -- 3번째: Destroy
+                    pcall(function()
+                        rs.GrabEvents.Destroy:FireServer(tHRP)
+                    end)
+                elseif pattern == 0 then
+                    -- 4번째: DestroyGrabLine
+                    pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                end
+                
+                -- 매 호출마다 BodyPosition 강화
+                if not targetBP or targetBP.Parent ~= tHRP then
+                    setupBodiesForTarget()
+                end
+                if targetBP then
+                    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
+                    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                end
+                if targetBG then
+                    targetBG.CFrame = CFrame.Angles(0, 0, 0)
                 end
             end
         end
@@ -636,4 +638,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1회 → DestroyGrabLine + ReleasePlayer 3회 반복", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 1번 → Destroy 1번 → DestroyGrabLine 1번", Duration = 3})
