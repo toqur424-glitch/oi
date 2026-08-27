@@ -127,12 +127,14 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (3:1 번갈아, 350Hz 정밀 타이머, 회전 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (셋오너 연타 + 완전 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
+local kickBodyVel = nil
+local kickBodyGyro = nil
 
 -- Stepped: AlignPosition 갱신 (물리 직전, 보조)
 local steppedConn = nil
@@ -195,7 +197,7 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
-    -- [변경] AlignOrientation을 TwoAttachment 모드로 수정 (회전 완전 고정)
+    -- [VHS/XOCO 스타일] AlignOrientation을 TwoAttachment 모드로 완전 고정
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
@@ -204,6 +206,23 @@ local function setupAlignForTarget()
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
+    
+    -- [VHS 스타일] BodyVelocity로 위로 강제 이동 (선택 사항)
+    if not tHRP:FindFirstChild("KickBodyVel") then
+        kickBodyVel = Instance.new("BodyVelocity")
+        kickBodyVel.Name = "KickBodyVel"
+        kickBodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        kickBodyVel.Velocity = Vector3.new(0, 0, 0)
+        kickBodyVel.Parent = tHRP
+    end
+    
+    if not tHRP:FindFirstChild("KickBodyGyro") then
+        kickBodyGyro = Instance.new("BodyGyro")
+        kickBodyGyro.Name = "KickBodyGyro"
+        kickBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        kickBodyGyro.CFrame = CFrame.new()
+        kickBodyGyro.Parent = tHRP
+    end
 end
 
 local function startKickLoop()
@@ -270,6 +289,17 @@ local function startKickLoop()
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
         
+        -- [VHS/XOCO 스타일] BodyVelocity/BodyGyro도 갱신
+        local bv = tHRP:FindFirstChild("KickBodyVel")
+        if bv then
+            bv.Velocity = Vector3.zero
+        end
+        
+        local bg = tHRP:FindFirstChild("KickBodyGyro")
+        if bg then
+            bg.CFrame = CFrame.Angles(0, 0, 0)
+        end
+        
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         local tHum = tChar:FindFirstChild("Humanoid")
@@ -279,7 +309,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 + Align 갱신 (정밀 타이머, 350Hz, 주 갱신, 3:1 번갈아)
+    -- 2. 리모트 호출 + Align 갱신 (정밀 타이머, 350Hz, 주 갱신)
     remoteTask = task.spawn(function()
         local interval = 0.002857 -- 350Hz
         local nextTime = tick() + interval
@@ -322,6 +352,7 @@ local function startKickLoop()
                 rot.CFrame = CFrame.Angles(0, 0, 0)
             end
             
+            -- [VHS/XOCO 스타일] 물리 강제 초기화
             tHRP.AssemblyLinearVelocity = Vector3.zero
             tHRP.AssemblyAngularVelocity = Vector3.zero
             if tHum then
@@ -329,7 +360,7 @@ local function startKickLoop()
                 tHum:ChangeState(Enum.HumanoidStateType.Physics)
             end
             
-            -- 살아있을 때만 리모트 호출 (3:1 번갈아: SetOwner 3번, Detroit 1번)
+            -- 살아있을 때만 리모트 호출
             if tHum and tHum.Health > 0 then
                 -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
                 local dist = (tHRP.Position - myHRP.Position).Magnitude
@@ -339,18 +370,21 @@ local function startKickLoop()
                     end)
                 end
                 
+                -- [VHS/XOCO 스타일] 매 틱 SetNetworkOwner + DestroyGrabLine 연타
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+                
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                end)
+                
+                -- 추가로 5틱마다 CreateGrabLine + DestroyGrabLine (서버 혼란 추가)
                 kickCounter = kickCounter + 1
-                -- [변경] 4번마다 1번 Detroit, 나머지는 SetOwner
-                if kickCounter % 4 == 0 then
-                    -- Detroit (Create + Destroy)
+                if kickCounter % 5 == 0 then
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                    end)
-                else
-                    -- SetOwner (3번 중 1번은 생략하지 않고 계속 호출)
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
                 end
             end
@@ -376,7 +410,7 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyVelocity") or v:IsA("BodyGyro") then
                     v:Destroy()
                 end
             end
@@ -385,7 +419,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (3:1 번갈아, 350Hz 정밀 타이머, 회전 고정)",
+    Name = "셋오너 킥 실행 (VHS/XOCO 스타일: 350Hz 연타 + 완전 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -565,4 +599,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "3:1 번갈아, 350Hz 정밀 타이머, 회전 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "VHS/XOCO 스타일: 셋오너 연타 + 완전 고정 (350Hz)", Duration = 3})
