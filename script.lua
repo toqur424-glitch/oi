@@ -223,7 +223,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition + 원격 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (원격 호출만 사용)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local kickLoopRunning = false
@@ -232,7 +232,6 @@ local kickCounter = 0
 local steppedConn = nil
 local remoteTask = nil
 local respawnConn = nil
-local targetBP = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -258,54 +257,6 @@ KickTab:CreateInput({
     end
 })
 
--- BodyPosition 생성 (초강력, 다른 물리 요소 없음)
-local function setupBodiesForTarget()
-    if not selectedKickPlayer then return end
-    local tChar = selectedKickPlayer.Character
-    if not tChar then return end
-    local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-    if not tHRP then return end
-    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
-
-    -- 기존 BodyPosition 제거
-    for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("BodyPosition") then
-            v:Destroy()
-        end
-    end
-
-    -- 충돌 해제
-    for _, part in pairs(tChar:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-            part.CanQuery = false
-        end
-    end
-
-    -- Humanoid 완전 Ragdoll (물리 저항 제거)
-    local hum = tChar:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.PlatformStand = true
-        hum:ChangeState(Enum.HumanoidStateType.Physics)
-        hum:ChangeState(Enum.HumanoidStateType.FallingDown)
-        hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
-        hum.WalkSpeed = 0
-        hum.JumpPower = 0
-    end
-
-    -- BodyPosition (MaxForce=math.huge, P/D 극대화)
-    targetBP = Instance.new("BodyPosition")
-    targetBP.Name = "KickBP"
-    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 1e10
-    targetBP.D = 1e8
-    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
-    targetBP.Parent = tHRP
-
-    return targetBP
-end
-
 local function startKickLoop()
     if remoteTask then task.cancel(remoteTask) end
     if steppedConn then steppedConn:Disconnect() end
@@ -316,74 +267,16 @@ local function startKickLoop()
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
-            local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
-            local hum = newChar:WaitForChild("Humanoid", 5)
-            if hrp and hum then
-                while hum.Health <= 0 do task.wait(0.1) end
-                task.wait(0.2)
-                setupBodiesForTarget()
-                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos) -- 리스폰 시 1회 초기화 (필수)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                    end)
-                end
-            end
+            -- 리스폰 시 아무것도 하지 않음 (원격 호출만 사용)
         end)
     end
 
-    -- Stepped 루프: 매 프레임 BodyPosition 목표 위치 갱신
+    -- Stepped 루프: 필요 없음 (원격 호출만으로 처리)
     steppedConn = RunService.Stepped:Connect(function()
-        if not kickLoopRunning or not selectedKickPlayer then return end
-        
-        local myChar = plr.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        local tChar = selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tHum = tChar and tChar:FindFirstChild("Humanoid")
-        
-        if not (myChar and myHRP) then return end
-        if not (tChar and tHRP) then return end
-        
-        -- 항상 내 캐릭터 기준 +7, +20 위치를 목표로 설정
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-        
-        -- BodyPosition 재생성 확인
-        if not targetBP or targetBP.Parent ~= tHRP then
-            setupBodiesForTarget()
-        end
-        
-        -- BodyPosition 업데이트 (P/D 극대화)
-        if targetBP then
-            targetBP.Position = targetPos
-            targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            targetBP.P = 1e10
-            targetBP.D = 1e8
-        end
-        
-        -- Humanoid 상태 유지 (떨어짐 방지)
-        if tHum then
-            tHum.PlatformStand = true
-            tHum:ChangeState(Enum.HumanoidStateType.Physics)
-            tHum:ChangeState(Enum.HumanoidStateType.FallingDown)
-            tHum:ChangeState(Enum.HumanoidStateType.Ragdoll)
-            tHum.WalkSpeed = 0
-            tHum.JumpPower = 0
-        end
-        
-        -- 충돌 해제 유지
-        for _, part in pairs(tChar:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-                part.CanQuery = false
-            end
-        end
+        -- 의도적으로 비워둠
     end)
 
-    -- 350Hz 루프: SetOwner 1번 → DestroyGrabLine 2번 + BodyPosition 동시 갱신
+    -- 350Hz로 SetOwner 1번 → DestroyGrabLine 2번 무한반복
     remoteTask = task.spawn(function()
         local interval = 0.002857142857  -- 350Hz (1/350)
         local nextTime = tick() + interval
@@ -406,17 +299,9 @@ local function startKickLoop()
             if not (tChar and tHRP) then continue end
             
             if tHum and tHum.Health > 0 then
-                local dist = (tHRP.Position - myHRP.Position).Magnitude
-                if dist > 30 then
-                    pcall(function()
-                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                    end)
-                end
-                
                 kickCounter = kickCounter + 1
                 local pattern = kickCounter % 3
                 
-                -- 패턴: SetOwner 1번 → DestroyGrabLine 2번
                 if pattern == 1 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
@@ -425,14 +310,6 @@ local function startKickLoop()
                     pcall(function()
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
-                end
-                
-                -- 매 원격 호출 후 BodyPosition 재강화 (즉시 목표 위치로)
-                if targetBP then
-                    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    targetBP.P = 1e10
-                    targetBP.D = 1e8
                 end
             end
         end
@@ -453,21 +330,10 @@ local function stopKickLoop()
         respawnConn:Disconnect()
         respawnConn = nil
     end
-    if selectedKickPlayer and selectedKickPlayer.Character then
-        local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if tHRP then
-            for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("BodyPosition") then
-                    v:Destroy()
-                end
-            end
-        end
-    end
-    targetBP = nil
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, SetOwner+Destroy+BodyPosition 강화)",
+    Name = "블롭맨 오너 킥 실행 (350Hz, 원격 호출만)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -644,4 +510,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, SetOwner 1번 → DestroyGrabLine 2번 + BodyPosition(1e10/1e8) 동시 강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, 셋오너 킥은 원격 호출만 사용 (350Hz), 기타 기능 유지", Duration = 3})
