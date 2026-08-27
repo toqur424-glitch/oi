@@ -95,8 +95,8 @@ local function setupFKeyAlign(targetPlayer)
     alignPos.Name = "FKeyAlign"
     alignPos.Attachment0 = att0
     alignPos.Attachment1 = att1
-    alignPos.MaxForce = math.huge
-    alignPos.MaxVelocity = math.huge
+    alignPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    alignPos.MaxVelocity = Vector3.new(math.huge, math.huge, math.huge)
     alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
@@ -104,9 +104,11 @@ local function setupFKeyAlign(targetPlayer)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "FKeyRot"
     alignRot.Attachment0 = att0
-    alignRot.MaxTorque = math.huge
+    alignRot.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
+    alignRot.C0 = CFrame.Angles(0, 0, 0)
+    alignRot.C1 = CFrame.Angles(0, 0, 0)
     alignRot.Parent = tHRP
 end
 
@@ -132,17 +134,16 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         local holdPos = camCF.Position + camCF.LookVector * 20
 
-        -- AlignPosition으로 고정 (매 프레임 위치 업데이트)
         local align = tgtRoot:FindFirstChild("FKeyAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = holdPos
         end
         local rot = tgtRoot:FindFirstChild("FKeyRot")
         if rot then
-            rot.CFrame = CFrame.Angles(0, 0, 0)
+            rot.C0 = CFrame.Angles(0, 0, 0)
+            rot.C1 = CFrame.Angles(0, 0, 0)
         end
 
-        -- SetOwner 1번 → DestroyGrabLine 2번 무한반복
         fCounter = fCounter + 1
         local pattern = fCounter % 3
         if pattern == 1 then
@@ -263,14 +264,12 @@ local function setupBodiesForTarget()
     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return end
 
-    -- 기존 BodyPosition/BodyGyro 제거
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
             v:Destroy()
         end
     end
 
-    -- 충돌 해제 + Massless
     for _, part in pairs(tChar:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CanCollide = false
@@ -279,7 +278,6 @@ local function setupBodiesForTarget()
         end
     end
 
-    -- Humanoid 완전 Ragdoll
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if hum then
         hum.PlatformStand = true
@@ -290,16 +288,14 @@ local function setupBodiesForTarget()
         hum.JumpPower = 0
     end
 
-    -- BodyPosition (math.huge, P/D 극한 강화)
     targetBP = Instance.new("BodyPosition")
     targetBP.Name = "KickBP"
     targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 1e9  -- 극한 비례
-    targetBP.D = 1e8  -- 극한 미분
+    targetBP.P = 1e9
+    targetBP.D = 1e8
     targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
     targetBP.Parent = tHRP
 
-    -- BodyGyro (math.huge, P/D 극한 강화)
     targetBG = Instance.new("BodyGyro")
     targetBG.Name = "KickBG"
     targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
@@ -340,7 +336,6 @@ local function startKickLoop()
         end)
     end
 
-    -- Stepped 루프: BodyPosition 갱신 + 속도 강제 0
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -355,7 +350,6 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- BodyPosition 재생성 확인
         if not targetBP or targetBP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
@@ -367,11 +361,9 @@ local function startKickLoop()
             targetBG.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        -- ★ 물리 속도 강제 0 (떨어짐/회전 완전 차단)
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         
-        -- Humanoid 상태 유지
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
@@ -381,7 +373,6 @@ local function startKickLoop()
             tHum.JumpPower = 0
         end
         
-        -- 충돌 해제 + Massless 유지
         for _, part in pairs(tChar:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CanCollide = false
@@ -391,9 +382,8 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz로 SetOwner 1번 → DestroyGrabLine 2번 무한반복
     remoteTask = task.spawn(function()
-        local interval = 0.002857142857  -- 350Hz (1/350)
+        local interval = 0.002857142857
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -402,47 +392,44 @@ local function startKickLoop()
             end
             nextTime = nextTime + interval
             
-            if not selectedKickPlayer then continue end
-            
-            local tChar = selectedKickPlayer.Character
-            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-            local tHum = tChar and tChar:FindFirstChild("Humanoid")
-            local myChar = plr.Character
-            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            
-            if not (myChar and myHRP) then continue end
-            if not (tChar and tHRP) then continue end
-            
-            if tHum and tHum.Health > 0 then
-                local dist = (tHRP.Position - myHRP.Position).Magnitude
-                if dist > 30 then
-                    pcall(function()
-                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                    end)
-                end
+            -- continue 제거: 조건을 if로 감싸기
+            if selectedKickPlayer then
+                local tChar = selectedKickPlayer.Character
+                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                local tHum = tChar and tChar:FindFirstChild("Humanoid")
+                local myChar = plr.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
                 
-                kickCounter = kickCounter + 1
-                local pattern = kickCounter % 3
-                
-                if pattern == 1 then
-                    -- 1번째: SetNetworkOwner
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                else
-                    -- 2,3번째: DestroyGrabLine
-                    pcall(function()
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                    end)
-                end
-                
-                -- 매 호출 후 BodyPosition 재강화
-                if targetBP then
-                    targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
-                    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                end
-                if targetBG then
-                    targetBG.CFrame = CFrame.Angles(0, 0, 0)
+                if myChar and myHRP and tChar and tHRP then
+                    if tHum and tHum.Health > 0 then
+                        local dist = (tHRP.Position - myHRP.Position).Magnitude
+                        if dist > 30 then
+                            pcall(function()
+                                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                            end)
+                        end
+                        
+                        kickCounter = kickCounter + 1
+                        local pattern = kickCounter % 3
+                        
+                        if pattern == 1 then
+                            pcall(function()
+                                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                            end)
+                        else
+                            pcall(function()
+                                rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                            end)
+                        end
+                        
+                        if targetBP then
+                            targetBP.Position = myHRP.Position + Vector3.new(7, 20, 0)
+                            targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                        end
+                        if targetBG then
+                            targetBG.CFrame = CFrame.Angles(0, 0, 0)
+                        end
+                    end
                 end
             end
         end
