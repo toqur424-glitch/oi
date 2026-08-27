@@ -128,7 +128,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 셋오너 킥 (상대를 내 위치로 가져오기 + 완전 고정)
+-- [KICK 탭] - 셋오너 킥 (XOCU Loop Grab Kick V3 스타일 + 매 프레임 3종 순환)
 --=============================================
 local KickTab = Window:CreateTab("Kick (셋오너)", nil)
 local selectedKickPlayer = nil
@@ -281,7 +281,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 (셋오너 1번 → 디트로이트 2번)
+    -- 2. 리모트 호출 (매 프레임 순환: SetOwner → DestroyLine → CreateGrabLine)
     remoteTask = task.spawn(function()
         while kickLoopRunning do
             if not selectedKickPlayer then continue end
@@ -297,32 +297,42 @@ local function startKickLoop()
             
             -- 상대가 살아있을 때만 리모트 호출
             if tHum and tHum.Health > 0 then
-                -- 상대를 내 위치 위 20칸으로 텔레포트
-                local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
-                pcall(function()
-                    tHRP.CFrame = CFrame.new(targetPos)
-                    tHRP.AssemblyLinearVelocity = Vector3.zero
-                    tHRP.AssemblyAngularVelocity = Vector3.zero
-                end)
+                -- [XOCU 스타일] 거리 30 이상이면 상대를 데려오기
+                local dist = (tHRP.Position - myHRP.Position).Magnitude
+                if dist > 30 then
+                    pcall(function()
+                        local myHead = myChar:FindFirstChild("Head")
+                        if myHead then
+                            local targetPos = myHead.Position + Vector3.new(0, 20, 0)
+                            tHRP.CFrame = CFrame.new(targetPos)
+                            tHRP.AssemblyLinearVelocity = Vector3.zero
+                            tHRP.AssemblyAngularVelocity = Vector3.zero
+                        end
+                    end)
+                end
                 
-                -- 셋오너 1번 → 디트로이트 2번
+                -- 매 프레임 순환: SetOwner → DestroyLine → CreateGrabLine
                 kickCounter = kickCounter + 1
                 if kickCounter % 3 == 1 then
                     -- 1. 셋오너 (SetNetworkOwner)
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
-                else
-                    -- 2. 디트로이트 (DestroyGrabLine 2번)
+                elseif kickCounter % 3 == 2 then
+                    -- 2. 디트로이트 (DestroyGrabLine)
                     pcall(function()
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                else
+                    -- 3. 라인 생성 (CreateGrabLine) - "사일런트" 라인
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                     end)
                 end
             end
             
-            -- 350Hz 타이머 (약 0.003초 대기)
-            task.wait(0.003)
+            -- 매 프레임 실행
+            task.wait()
         end
     end)
 end
@@ -363,7 +373,7 @@ end
 
 -- 셋오너 킥 토글
 KickTab:CreateToggle({
-    Name = "셋오너 킥 (상대를 내 위치로 + 완전 고정)",
+    Name = "셋오너 킥 (XOCU 스타일, 매 프레임 3종 순환)",
     Callback = function(v)
         if v then
             startKickLoop()
@@ -539,4 +549,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 1번 → 디트로이트 2번, 완전 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 1번 → 디트로이트 1번 → 라인 생성 1번 (매 프레임 순환)", Duration = 3})
