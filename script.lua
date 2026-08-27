@@ -1,37 +1,23 @@
 --=============================================
 -- [초기 로드 및 게임 체크]
 --=============================================
-local Rayfield = nil
+local Rayfield
+local ok, err = pcall(function()
+    Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
 
--- Rayfield 로드 시도 (여러 URL 시도)
-local urls = {
-    "https://sirius.menu/rayfield",
-    "https://raw.githubusercontent.com/Sirius-Roblox/Rayfield/main/rayfield.lua"
-}
-
-for _, url in ipairs(urls) do
-    local ok, result = pcall(function()
-        return loadstring(game:HttpGet(url))()
-    end)
-    if ok and type(result) == "table" then
-        Rayfield = result
-        break
-    end
-end
-
-if not Rayfield then
-    warn("Rayfield 로드 실패: 인터넷 연결 또는 URL 차단 확인")
+if not ok or type(Rayfield) ~= "table" then
+    warn("Rayfield 로드 실패: " .. tostring(err))
     return
 end
 
--- 게임 체크
-if game.PlaceId ~= 6961824067 then
+if game.PlaceId ~= 6961824067 then 
     Rayfield:Notify({Title = "Error", Content = "이 게임을 지원하지 않습니다.", Duration = 3})
-    return
+    return 
 end
 
 --=============================================
--- [기본 서비스 및 변수]
+-- [기본 변수]
 --=============================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -41,24 +27,12 @@ local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
--- 전역 변수 선언 (안티그랩에서 참조)
+-- 전역 변수 (안티그랩에서 참조)
 local selectedKickPlayer = nil
 local selectedGrabPlayer = nil
 
 --=============================================
--- [UI 생성]
---=============================================
-local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
-    LoadingTitle = "최적화 및 로딩 중...",
-    LoadingSubtitle = "by Extreme Script",
-    ToggleUIKeybind = "T",
-    Theme = "Dark",
-    ConfigurationSaving = { Enabled = false }
-})
-
---=============================================
--- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지]
+-- [안티그랩]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -93,7 +67,19 @@ if BeingHeld then
 end
 
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
+-- [UI 생성]
+--=============================================
+local Window = Rayfield:CreateWindow({
+    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
+    LoadingTitle = "최적화 및 로딩 중...",
+    LoadingSubtitle = "by Extreme Script",
+    ToggleUIKeybind = "T",
+    Theme = "Dark",
+    ConfigurationSaving = { Enabled = false }
+})
+
+--=============================================
+-- [GRAB 탭]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -245,7 +231,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition 극한 강화)
+-- [KICK 탭]
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local kickLoopRunning = false
@@ -505,7 +491,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 사인파로 부드럽게 출입]
+-- [Pallet Ragdoll (Invis)]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 사인파 출입 (몸통 관통)",
