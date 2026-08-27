@@ -1,7 +1,15 @@
 --=============================================
 -- [초기 로드 및 게임 체크]
 --=============================================
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Rayfield = nil
+local loadOk, loadErr = pcall(function()
+    Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not loadOk or type(Rayfield) ~= "table" then
+    warn("Rayfield 로드 실패: " .. tostring(loadErr or "알 수 없는 오류"))
+    return
+end
 
 if game.PlaceId ~= 6961824067 then 
     Rayfield:Notify({Title = "Error", Content = "이 게임을 지원하지 않습니다.", Duration = 3})
@@ -17,16 +25,10 @@ local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
 --=============================================
--- [UI 생성]
+-- [전역 변수 선언 (안티그랩에서 사용)]
 --=============================================
-local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
-    LoadingTitle = "최적화 및 로딩 중...",
-    LoadingSubtitle = "by Extreme Script",
-    ToggleUIKeybind = "T",
-    Theme = "Dark",
-    ConfigurationSaving = { Enabled = false }
-})
+local selectedKickPlayer = nil
+local selectedGrabPlayer = nil
 
 --=============================================
 -- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지]
@@ -74,7 +76,6 @@ getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
 local fCounter = 0
-local selectedGrabPlayer = nil
 
 local function setupFKeyAlign(targetPlayer)
     local tChar = targetPlayer and targetPlayer.Character
@@ -220,7 +221,6 @@ GrabTab:CreateToggle({
 -- [KICK 탭] - 블롭맨 오너 킥 (BodyPosition 극한 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
-local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
@@ -254,7 +254,6 @@ KickTab:CreateInput({
     end
 end)
 
--- BodyPosition + BodyGyro 극한 강화 (AlignPosition 제거)
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
@@ -392,7 +391,6 @@ local function startKickLoop()
             end
             nextTime = nextTime + interval
             
-            -- continue 제거: 조건을 if로 감싸기
             if selectedKickPlayer then
                 local tChar = selectedKickPlayer.Character
                 local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
