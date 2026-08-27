@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아, 350Hz 정밀 타이머, 회전 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (3:1 번갈아, 350Hz 정밀 타이머, 회전 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -195,10 +195,11 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
-    -- AlignOrientation (회전 0도 고정, 회전 완전 제거)
+    -- [변경] AlignOrientation을 TwoAttachment 모드로 수정 (회전 완전 고정)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
+    alignRot.Attachment1 = att1 -- 회전 기준 첨부
     alignRot.MaxTorque = math.huge
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
@@ -278,7 +279,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 2. 리모트 호출 + Align 갱신 (정밀 타이머, 350Hz, 주 갱신, 1:1 번갈아)
+    -- 2. 리모트 호출 + Align 갱신 (정밀 타이머, 350Hz, 주 갱신, 3:1 번갈아)
     remoteTask = task.spawn(function()
         local interval = 0.002857 -- 350Hz
         local nextTime = tick() + interval
@@ -328,7 +329,7 @@ local function startKickLoop()
                 tHum:ChangeState(Enum.HumanoidStateType.Physics)
             end
             
-            -- 살아있을 때만 리모트 호출 (1:1 번갈아)
+            -- 살아있을 때만 리모트 호출 (3:1 번갈아: SetOwner 3번, Detroit 1번)
             if tHum and tHum.Health > 0 then
                 -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
                 local dist = (tHRP.Position - myHRP.Position).Magnitude
@@ -339,16 +340,17 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                if kickCounter % 2 == 0 then
-                    -- SetOwner
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                else
+                -- [변경] 4번마다 1번 Detroit, 나머지는 SetOwner
+                if kickCounter % 4 == 0 then
                     -- Detroit (Create + Destroy)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                else
+                    -- SetOwner (3번 중 1번은 생략하지 않고 계속 호출)
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
                 end
             end
@@ -383,7 +385,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:1 번갈아, 350Hz 정밀 타이머, 회전 고정)",
+    Name = "블롭맨 오너 킥 실행 (3:1 번갈아, 350Hz 정밀 타이머, 회전 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -563,4 +565,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아, 350Hz 정밀 타이머, 회전 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "3:1 번갈아, 350Hz 정밀 타이머, 회전 고정", Duration = 3})
