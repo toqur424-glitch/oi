@@ -60,10 +60,10 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - F키 킥 그랩 (1:1 번갈아)
+-- [GRAB 탭] - F키 킥 그랩 (셋오너 1번 → 디트로이트 2번)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
+GrabTab:CreateSection("=== 킥 그랩 (셋오너 1번 → 디트로이트 2번) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -94,13 +94,13 @@ local function startFKeyAttack(targetPlayer)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % 2 == 0 then
+            -- [수정] 셋오너 1번 → 디트로이트 2번 (홀수면 셋오너, 짝수면 디트로이트)
+            if fCounter % 2 == 1 then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
             else
                 pcall(function()
-                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
                 end)
             end
@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (셋오너 연타 + 완전 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (셋오너 1번 → 디트로이트 2번, 고정 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -176,7 +176,7 @@ local function setupAlignForTarget()
     
     -- 기존 Align 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyVelocity") or v:IsA("BodyGyro") then
             v:Destroy()
         end
     end
@@ -370,20 +370,16 @@ local function startKickLoop()
                     end)
                 end
                 
-                -- [VHS/XOCO 스타일] 매 틱 SetNetworkOwner + DestroyGrabLine 연타
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
-                
-                pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                end)
-                
-                -- 추가로 5틱마다 CreateGrabLine + DestroyGrabLine (서버 혼란 추가)
+                -- [수정] 셋오너 1번 → 디트로이트 2번 (홀수면 셋오너, 짝수면 디트로이트)
                 kickCounter = kickCounter + 1
-                if kickCounter % 5 == 0 then
+                if kickCounter % 2 == 1 then
+                    -- 셋오너 (SetNetworkOwner)
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
+                else
+                    -- 디트로이트 (DestroyGrabLine만, CreateGrabLine은 빼기)
+                    pcall(function()
                         rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                     end)
                 end
@@ -419,7 +415,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "셋오너 킥 실행 (VHS/XOCO 스타일: 350Hz 연타 + 완전 고정)",
+    Name = "셋오너 킥 실행 (셋오너 1번 → 디트로이트 2번, 350Hz, 완전 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -599,4 +595,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "VHS/XOCO 스타일: 셋오너 연타 + 완전 고정 (350Hz)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 1번 → 디트로이트 2번, 350Hz, 완전 고정", Duration = 3})
