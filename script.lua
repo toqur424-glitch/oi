@@ -227,6 +227,7 @@ local function startKickLoop()
     end
     
     -- Stepped: AlignPosition 위치 업데이트 (서버 물리 업데이트 전)
+    -- ★ 수정: 내 머리 위 15스터드 지점으로 이동
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -234,11 +235,15 @@ local function startKickLoop()
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
         
+        local myChar = plr.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP then return end
+        
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align:IsA("AlignPosition") then
             local att1 = align.Attachment1
             if att1 then
-                att1.CFrame = tHRP.CFrame
+                att1.CFrame = myHRP.CFrame * CFrame.new(0, 15, 0)
             end
         end
     end)
@@ -255,9 +260,10 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- 타겟 위치 고정 (X: 15, Y: 16) + 고정력 강화
+        -- ★ 수정: 상대를 내 머리 위 15스터드 지점으로 가져오기 (Loop Grab Kick V3 원리)
         pcall(function()
-            tHRP.CFrame = CFrame.new(15, 16, tHRP.Position.Z)
+            local targetCF = myHRP.CFrame * CFrame.new(0, 15, 0)
+            tHRP.CFrame = targetCF
             tHRP.AssemblyLinearVelocity = Vector3.zero
             tHRP.AssemblyAngularVelocity = Vector3.zero
         end)
