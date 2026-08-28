@@ -140,6 +140,9 @@ local heartbeatConn = nil
 -- 리스폰 감지
 local respawnConn = nil
 
+-- ★ 추가: 킥 시작 시 원래 위치 저장용 변수
+local savedKickPos = nil
+
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
     PlaceholderText = "예: Player1",
@@ -212,22 +215,66 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 20으로 텔레포트 후 Align 설정
+    -- ★ 추가: 내 원래 위치 저장 (킥을 시작한 장소)
+    local myChar = plr.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if myHRP then
+        savedKickPos = myHRP.CFrame
+    end
+
+    -- ★ 추가: 타겟의 PCLD(또는 HRP) 위치로 즉시 텔레포트
+    if selectedKickPlayer then
+        local tChar = selectedKickPlayer.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        if tHRP then
+            -- PCLD 찾기 (PlayerCharacterLocationDetector)
+            local pcld = nil
+            for _, child in ipairs(Workspace:GetChildren()) do
+                if child.Name == "PlayerCharacterLocationDetector" and child:IsA("BasePart") then
+                    if (child.Position - tHRP.Position).Magnitude < 5 then
+                        pcld = child
+                        break
+                    end
+                end
+            end
+            
+            -- 타겟 위치로 텔레포트 (PCLD가 있으면 그 근처로, 없으면 타겟 앞으로)
+            local targetPos = pcld and pcld.CFrame or tHRP.CFrame
+            if myHRP then
+                pcall(function()
+                    plr.Character:PivotTo(targetPos * CFrame.new(0, 2, 4))
+                end)
+            end
+            
+            -- SetNetworkOwner를 여러 번 쏴서 소유권 확보
+            task.spawn(function()
+                for i = 1, 10 do
+                    if not kickLoopRunning then break end
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, tHRP.CFrame)
+                    end)
+                    task.wait(0.05)
+                end
+            end)
+        end
+    end
+
+    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 원래 위치로 텔레포트 후 Align 설정
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             task.wait(0.1)
             setupAlignForTarget()
             local tHRP = newChar:FindFirstChild("HumanoidRootPart")
-            if tHRP and plr.Character then
+            if tHRP and savedKickPos then
                 pcall(function()
-                    plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                    tHRP.CFrame = savedKickPos * CFrame.new(0, 15, 0)
                 end)
             end
         end)
     end
     
     -- Stepped: AlignPosition 위치 업데이트 (서버 물리 업데이트 전)
-    -- ★ 수정: 내 머리 위 15스터드 지점으로 이동
+    -- ★ 수정: 저장된 원래 위치를 기준으로 타겟 이동
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -235,15 +282,13 @@ local function startKickLoop()
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
         
-        local myChar = plr.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        if not myHRP then return end
-        
-        local align = tHRP:FindFirstChild("KickAlign")
-        if align and align:IsA("AlignPosition") then
-            local att1 = align.Attachment1
-            if att1 then
-                att1.CFrame = myHRP.CFrame * CFrame.new(0, 15, 0)
+        if savedKickPos then
+            local align = tHRP:FindFirstChild("KickAlign")
+            if align and align:IsA("AlignPosition") then
+                local att1 = align.Attachment1
+                if att1 then
+                    att1.CFrame = savedKickPos * CFrame.new(0, 15, 0)
+                end
             end
         end
     end)
@@ -260,13 +305,15 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- ★ 수정: 상대를 내 머리 위 15스터드 지점으로 가져오기 (Loop Grab Kick V3 원리)
-        pcall(function()
-            local targetCF = myHRP.CFrame * CFrame.new(0, 15, 0)
-            tHRP.CFrame = targetCF
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-        end)
+        -- ★ 수정: 타겟을 저장된 원래 위치로 이동
+        if savedKickPos then
+            pcall(function()
+                local targetCF = savedKickPos * CFrame.new(0, 15, 0)
+                tHRP.CFrame = targetCF
+                tHRP.AssemblyLinearVelocity = Vector3.zero
+                tHRP.AssemblyAngularVelocity = Vector3.zero
+            end)
+        end
         
         -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
         local dist = (tHRP.Position - myHRP.Position).Magnitude
@@ -283,7 +330,7 @@ local function startKickLoop()
         kickCounter = kickCounter + 1
         if kickCounter % 3 == 1 then
             pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(savedKickPos and savedKickPos.Position or myHRP.Position, tHRP.Position))
             end)
         else
             pcall(function()
@@ -297,6 +344,7 @@ end
 
 local function stopKickLoop()
     kickLoopRunning = false
+    savedKickPos = nil
     if heartbeatConn then
         heartbeatConn:Disconnect()
         heartbeatConn = nil
