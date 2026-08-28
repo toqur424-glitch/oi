@@ -190,7 +190,7 @@ local function setupAlignForTarget()
     alignPos.Attachment1 = att1
     alignPos.MaxForce = math.huge
     alignPos.MaxVelocity = math.huge
-    alignPos.Responsiveness = 10000
+    alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
@@ -199,7 +199,7 @@ local function setupAlignForTarget()
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
     alignRot.MaxTorque = math.huge
-    alignRot.Responsiveness = 10000
+    alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 end
@@ -496,4 +496,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회 (고정력 강화)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회 (math.huge 고정력)", Duration = 3})
