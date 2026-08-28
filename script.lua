@@ -140,7 +140,7 @@ local heartbeatConn = nil
 -- 리스폰 감지
 local respawnConn = nil
 
--- ★ 추가: 킥 시작 시 원래 위치 저장용 변수
+-- 원래 위치 저장 변수
 local savedKickPos = nil
 
 KickTab:CreateInput({
@@ -181,7 +181,7 @@ local function setupAlignForTarget()
         end
     end
     
-    -- AlignPosition (위치 고정, 성능 최대)
+    -- AlignPosition (위치 고정, 항상 math.huge)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -191,7 +191,7 @@ local function setupAlignForTarget()
     alignPos.Name = "KickAlign"
     alignPos.Attachment0 = att0
     alignPos.Attachment1 = att1
-    alignPos.MaxForce = math.huge
+    alignPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)  -- 항상 math.huge
     alignPos.MaxVelocity = math.huge
     alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
@@ -215,51 +215,39 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- ★ 추가: 내 원래 위치 저장 (킥을 시작한 장소)
+    -- 내 원래 위치 저장 (킥을 시작한 장소)
     local myChar = plr.Character
     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if myHRP then
         savedKickPos = myHRP.CFrame
     end
 
-    -- ★ 추가: 타겟의 PCLD(또는 HRP) 위치로 즉시 텔레포트
-    if selectedKickPlayer then
+    -- 부드럽게 접근 (즉시 텔레포트하지 않음)
+    task.spawn(function()
+        if not selectedKickPlayer then return end
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        if tHRP then
-            -- PCLD 찾기 (PlayerCharacterLocationDetector)
-            local pcld = nil
-            for _, child in ipairs(Workspace:GetChildren()) do
-                if child.Name == "PlayerCharacterLocationDetector" and child:IsA("BasePart") then
-                    if (child.Position - tHRP.Position).Magnitude < 5 then
-                        pcld = child
-                        break
-                    end
-                end
-            end
-            
-            -- 타겟 위치로 텔레포트 (PCLD가 있으면 그 근처로, 없으면 타겟 앞으로)
-            local targetPos = pcld and pcld.CFrame or tHRP.CFrame
-            if myHRP then
-                pcall(function()
-                    plr.Character:PivotTo(targetPos * CFrame.new(0, 2, 4))
-                end)
-            end
-            
-            -- SetNetworkOwner를 여러 번 쏴서 소유권 확보
-            task.spawn(function()
-                for i = 1, 10 do
-                    if not kickLoopRunning then break end
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, tHRP.CFrame)
-                    end)
-                    task.wait(0.05)
-                end
-            end)
+        if not tHRP or not myHRP then return end
+        
+        -- 매 프레임 조금씩 이동하여 접근
+        while kickLoopRunning and myHRP and tHRP and (myHRP.Position - tHRP.Position).Magnitude > 5 do
+            if not kickLoopRunning then break end
+            local dir = (tHRP.Position - myHRP.Position).Unit
+            myHRP.CFrame = myHRP.CFrame + dir * 0.5  -- 한 프레임에 0.5스터드 이동
+            task.wait()
         end
-    end
+        
+        -- 접근 완료 후 SetNetworkOwner 여러 번 호출
+        for i = 1, 10 do
+            if not kickLoopRunning then break end
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, tHRP.CFrame)
+            end)
+            task.wait(0.05)
+        end
+    end)
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 원래 위치로 텔레포트 후 Align 설정
+    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 원래 위치로 이동 후 Align 설정
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             task.wait(0.1)
@@ -274,7 +262,6 @@ local function startKickLoop()
     end
     
     -- Stepped: AlignPosition 위치 업데이트 (서버 물리 업데이트 전)
-    -- ★ 수정: 저장된 원래 위치를 기준으로 타겟 이동
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -305,7 +292,7 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- ★ 수정: 타겟을 저장된 원래 위치로 이동
+        -- 타겟을 저장된 원래 위치로 이동
         if savedKickPos then
             pcall(function()
                 local targetCF = savedKickPos * CFrame.new(0, 15, 0)
@@ -550,4 +537,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회 (math.huge 고정력)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회 (항상 math.huge)", Duration = 3})
