@@ -255,6 +255,11 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
+        -- 타겟 위치 고정 (X: 7, Y: 20)
+        pcall(function()
+            tHRP.CFrame = CFrame.new(7, 20, tHRP.Position.Z)
+        end)
+        
         -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
         local dist = (tHRP.Position - myHRP.Position).Magnitude
         if dist > 30 then
