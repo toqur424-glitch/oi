@@ -126,7 +126,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (400Hz, SetNetworkOwner / DestroyGrabLine 번갈아)
+-- [KICK 탭] - 블롭맨 오너 킥 (400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -190,7 +190,7 @@ local function setupAlignForTarget()
     alignPos.Attachment1 = att1
     alignPos.MaxForce = math.huge
     alignPos.MaxVelocity = math.huge
-    alignPos.Responsiveness = math.huge
+    alignPos.Responsiveness = 10000
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
@@ -199,7 +199,7 @@ local function setupAlignForTarget()
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
     alignRot.MaxTorque = math.huge
-    alignRot.Responsiveness = math.huge
+    alignRot.Responsiveness = 10000
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 end
@@ -243,7 +243,7 @@ local function startKickLoop()
         end
     end)
     
-    -- Heartbeat: 리모트 호출 (400Hz, SetNetworkOwner / DestroyGrabLine 번갈아)
+    -- Heartbeat: 리모트 호출 (400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회)
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -255,9 +255,11 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- 타겟 위치 고정 (X: 7, Y: 20)
+        -- 타겟 위치 고정 (X: 15, Y: 16) + 고정력 강화
         pcall(function()
-            tHRP.CFrame = CFrame.new(7, 20, tHRP.Position.Z)
+            tHRP.CFrame = CFrame.new(15, 16, tHRP.Position.Z)
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
         end)
         
         -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
@@ -271,9 +273,9 @@ local function startKickLoop()
             end)
         end
         
-        -- 1:1 번갈아 호출 (400Hz)
+        -- SetNetworkOwner 1번, DestroyGrabLine 2번 (400Hz)
         kickCounter = kickCounter + 1
-        if kickCounter % 2 == 1 then
+        if kickCounter % 3 == 1 then
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
             end)
@@ -314,7 +316,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (400Hz, SetNetworkOwner / DestroyGrabLine 번갈아)",
+    Name = "블롭맨 오너 킥 실행 (400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -494,4 +496,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, SetNetworkOwner / DestroyGrabLine 번갈아 호출 (최적화)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회 (고정력 강화)", Duration = 3})
