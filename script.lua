@@ -191,7 +191,7 @@ local function setupAlignForTarget()
     alignPos.Name = "KickAlign"
     alignPos.Attachment0 = att0
     alignPos.Attachment1 = att1
-    alignPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)  -- 항상 math.huge
+    alignPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
     alignPos.MaxVelocity = math.huge
     alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
@@ -222,7 +222,7 @@ local function startKickLoop()
         savedKickPos = myHRP.CFrame
     end
 
-    -- 부드럽게 접근 (즉시 텔레포트하지 않음)
+    -- ★ 추가: 상대방에게 접근 & SetNetworkOwner 확인 후 원래 위치로 복귀하는 로직
     task.spawn(function()
         if not selectedKickPlayer then return end
         local tChar = selectedKickPlayer.Character
@@ -233,17 +233,33 @@ local function startKickLoop()
         while kickLoopRunning and myHRP and tHRP and (myHRP.Position - tHRP.Position).Magnitude > 5 do
             if not kickLoopRunning then break end
             local dir = (tHRP.Position - myHRP.Position).Unit
-            myHRP.CFrame = myHRP.CFrame + dir * 0.5  -- 한 프레임에 0.5스터드 이동
+            myHRP.CFrame = myHRP.CFrame + dir * 0.5
             task.wait()
         end
         
-        -- 접근 완료 후 SetNetworkOwner 여러 번 호출
-        for i = 1, 10 do
+        -- SetNetworkOwner를 반복 호출하며 소유권 확인
+        local ownerConfirmed = false
+        for i = 1, 15 do
             if not kickLoopRunning then break end
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, tHRP.CFrame)
             end)
             task.wait(0.05)
+            
+            -- 상대방 HRP의 PartOwner가 내 이름인지 확인
+            local partOwner = tHRP:FindFirstChild("PartOwner")
+            if partOwner and partOwner.Value == plr.Name then
+                ownerConfirmed = true
+                break
+            end
+        end
+        
+        -- 소유권이 확인되면 내 원래 위치로 복귀
+        if ownerConfirmed and kickLoopRunning then
+            pcall(function()
+                plr.Character:PivotTo(savedKickPos)
+            end)
+            Rayfield:Notify({Title = "복귀", Content = "셋오너 확인됨, 원래 위치로 이동", Duration = 2})
         end
     end)
 
@@ -292,7 +308,7 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- 타겟을 저장된 원래 위치로 이동
+        -- 타겟을 저장된 원래 위치로 이동 (math.huge 고정)
         if savedKickPos then
             pcall(function()
                 local targetCF = savedKickPos * CFrame.new(0, 15, 0)
