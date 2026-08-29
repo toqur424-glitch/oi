@@ -17,6 +17,14 @@ local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
 --=============================================
+-- [원격 이벤트 미리 가져오기 (안전)]
+--=============================================
+local GrabEvents = rs:WaitForChild("GrabEvents")
+local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
+local DestroyGrabLine = GrabEvents:WaitForChild("DestroyGrabLine")
+local CreateGrabLine = GrabEvents:WaitForChild("CreateGrabLine")
+
+--=============================================
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
@@ -58,9 +66,9 @@ local function startFKeyAttack(targetPlayer)
         
         for i = 1, 4 do
             pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                DestroyGrabLine:FireServer(tgtRoot)
             end)
         end
     end)
@@ -122,16 +130,15 @@ function loopPlayerBlobF4()
     local lastBPTool = nil
     local lastAOTool = nil
 
-    -- 250Hz 네트워크 루프 (셋오너 1번 + 디트로이트 2번 반복)
+    -- 250Hz 네트워크 루프 (셋오너 1번 + 디트로이트 1번 반복)
     task.spawn(function()
         while blobLoopT4 and selectedKickPlayer and selectedKickPlayer.Character do
             local charHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-            if charHRP and myHRP then
+            if charHRP and myHRP and SetNetworkOwner and DestroyGrabLine then
                 pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    DestroyGrabLine:FireServer(charHRP)
                 end)
             end
             task.wait(0.004) -- 250Hz (1/250 = 0.004초)
@@ -173,11 +180,9 @@ function loopPlayerBlobF4()
                     task.wait(0.15)
                     
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        -- 셋오너 1번 + 디트로이트 2번 교차 (일회성 호출)
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        DestroyGrabLine:FireServer(charHRP)
                     end)
                     task.wait(0.05)
                     
@@ -189,11 +194,9 @@ function loopPlayerBlobF4()
                     task.wait(0.1)
                     
                     pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        -- 셋오너 1번 + 디트로이트 2번 교차 (일회성 호출)
-                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        DestroyGrabLine:FireServer(charHRP)
                     end)
                     
                     task.wait(0.3)
@@ -286,8 +289,8 @@ KickTab:CreateToggle({
         local RS = game:GetService("ReplicatedStorage")
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
-        local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
+        local SetNetOwner2 = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
+        local DestroyLine2 = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
         local lpName = plr.Name
 
         local function clearAttackLoop()
@@ -325,8 +328,8 @@ KickTab:CreateToggle({
                 if not soundPart then return end
 
                 pcall(function()
-                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine:FireServer(soundPart)
+                    SetNetOwner2:FireServer(soundPart, soundPart.CFrame)
+                    DestroyLine2:FireServer(soundPart)
                 end)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
