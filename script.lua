@@ -126,21 +126,20 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - BodyPosition(math.huge) 빈틈없이 매 프레임 고정
+-- [KICK 탭] - BodyPosition(math.huge) 초고속 + 낙하 방지
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: BodyPosition.Position 갱신 (물리 직전)
-local steppedConn = nil
--- Heartbeat: 물리 이전에 미리 위치 강제 (더 촘촘하게)
-local heartbeatConn = nil
--- 리모트 호출 (400Hz 스레드)
-local remoteThread = nil
--- 리스폰 감지
-local respawnConn = nil
+-- 고정 갱신용 이벤트 연결들
+local renderSteppedConn = nil   -- 가장 빠른 렌더 전 이벤트
+local heartbeatConn = nil       -- 물리 이전
+local steppedConn = nil         -- 물리 이후
+local remoteThread = nil        -- 네트워크 소유권 요청 (400Hz)
+local respawnConn = nil         -- 리스폰 감지
+
 -- 현재 몸통에 부착된 BodyPosition
 local bodyPosition = nil
 
@@ -207,58 +206,82 @@ local function setupBodyPosition()
     bodyPosition.Parent = torso
 end
 
+-- 초고속 고정 함수: 여러 이벤트에서 호출되어 빈틈없이 갱신
+local function updateBodyLock()
+    if not kickLoopRunning or not selectedKickPlayer then return end
+    local torso = getTorsoPart(selectedKickPlayer.Character)
+    if not torso then return end
+    
+    local targetPos = getTargetPosition()
+    
+    -- 1. BodyPosition 갱신
+    if bodyPosition and bodyPosition.Parent == torso then
+        bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bodyPosition.Position = targetPos
+    else
+        -- BodyPosition이 사라졌다면 재생성
+        clearBodyPosition()
+        bodyPosition = Instance.new("BodyPosition")
+        bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bodyPosition.Position = targetPos
+        bodyPosition.Parent = torso
+    end
+    
+    -- 2. 직접 CFrame 설정 (물리 엔진 무시하고 순간 이동)
+    pcall(function()
+        torso.CFrame = CFrame.new(targetPos)
+    end)
+    
+    -- 3. 속도 완전 제거 (떨어지는 속도, 회전 모두 차단)
+    torso.AssemblyLinearVelocity = Vector3.zero
+    torso.AssemblyAngularVelocity = Vector3.zero
+    
+    -- 4. 앵커 상태 재확인 (물리 간섭 방지)
+    torso.Anchored = false
+end
+
 local function startKickLoop()
+    -- 기존 연결 해제
     if remoteThread then task.cancel(remoteThread) end
-    if steppedConn then steppedConn:Disconnect() end
+    if renderSteppedConn then renderSteppedConn:Disconnect() end
     if heartbeatConn then heartbeatConn:Disconnect() end
+    if steppedConn then steppedConn:Disconnect() end
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 BodyPosition 재설정
+    -- 리스폰 감지
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             task.wait(0.1)
             setupBodyPosition()
+            updateBodyLock() -- 즉시 고정
         end)
     end
 
-    -- 시작 시: BodyPosition 설정
+    -- 초기 설정
     setupBodyPosition()
+    updateBodyLock()
     
-    -- Heartbeat: 물리 이전에 미리 위치 강제 (더 빠르게)
+    -- 1. RenderStepped: 가장 빠른 이벤트 (렌더링 직전)
+    renderSteppedConn = RunService.RenderStepped:Connect(function()
+        updateBodyLock()
+    end)
+    
+    -- 2. Heartbeat: 물리 시뮬레이션 이전
     heartbeatConn = RunService.Heartbeat:Connect(function()
-        if not kickLoopRunning or not selectedKickPlayer then return end
-        if bodyPosition and bodyPosition.Parent then
-            -- MaxForce 재확인 (혹시 모를 서버/클라 간섭 방지)
-            bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            -- 목표 위치 갱신
-            bodyPosition.Position = getTargetPosition()
-        end
+        updateBodyLock()
     end)
     
-    -- Stepped: 물리 이후에도 위치 재확인 + 속도 0
+    -- 3. Stepped: 물리 시뮬레이션 이후 (최종 확인)
     steppedConn = RunService.Stepped:Connect(function()
-        if not kickLoopRunning or not selectedKickPlayer then return end
-        if bodyPosition and bodyPosition.Parent then
-            -- MaxForce 재확인
-            bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            -- 목표 위치 갱신
-            bodyPosition.Position = getTargetPosition()
-            
-            -- 몸통 속도 0으로 강제 (물리적 도주 차단)
-            local torso = getTorsoPart(selectedKickPlayer.Character)
-            if torso then
-                torso.AssemblyLinearVelocity = Vector3.zero
-                torso.AssemblyAngularVelocity = Vector3.zero
-            end
-        end
+        updateBodyLock()
     end)
     
-    -- 리모트 호출: 네트워크 소유권 유지 (400Hz) - 몸통에만 적용
+    -- 4. 네트워크 소유권 계속 요청 (400Hz)
     remoteThread = task.spawn(function()
-        local interval = 0.0025 -- 400Hz
+        local interval = 0.0025
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -269,23 +292,16 @@ local function startKickLoop()
             
             if not selectedKickPlayer then continue end
             
-            local tChar = selectedKickPlayer.Character
-            local torso = getTorsoPart(tChar)
+            local torso = getTorsoPart(selectedKickPlayer.Character)
             local myChar = plr.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             
             if not (myChar and myHRP and torso) then continue end
             
-            kickCounter = kickCounter + 1
-            if kickCounter % 3 == 1 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(torso, CFrame.lookAt(myHRP.Position, torso.Position))
-                end)
-            else
-                pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(torso)
-                end)
-            end
+            -- 매번 SetNetworkOwner 호출 (공격적으로)
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(torso, CFrame.lookAt(myHRP.Position, torso.Position))
+            end)
         end
     end)
 end
@@ -296,13 +312,17 @@ local function stopKickLoop()
         task.cancel(remoteThread)
         remoteThread = nil
     end
-    if steppedConn then
-        steppedConn:Disconnect()
-        steppedConn = nil
+    if renderSteppedConn then
+        renderSteppedConn:Disconnect()
+        renderSteppedConn = nil
     end
     if heartbeatConn then
         heartbeatConn:Disconnect()
         heartbeatConn = nil
+    end
+    if steppedConn then
+        steppedConn:Disconnect()
+        steppedConn = nil
     end
     if respawnConn then
         respawnConn:Disconnect()
@@ -312,7 +332,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (BodyPosition math.huge 빈틈없이 고정)",
+    Name = "블롭맨 오너 킥 (BodyPosition math.huge 초고속 낙하방지)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -492,4 +512,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "BodyPosition(math.huge) 빈틈없이 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "초고속 BodyPosition(math.huge) 낙하방지 고정", Duration = 3})
