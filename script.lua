@@ -126,15 +126,16 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 상대를 내 머리 위 20에 고정 (math.huge) + 거리 기반 재텔레포트
+-- [KICK 탭] - 상대에게 텔레포트 후 킥, 25이내 유지 / 26이상 재텔레포트
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
+local kickCounter = 0
 
 -- Stepped: AlignPosition 갱신 (물리 직전)
 local steppedConn = nil
--- 리모트 호출 스레드 (거리 체크 + 리모트)
+-- 리모트 호출 (400Hz 스레드)
 local remoteThread = nil
 -- 리스폰 감지
 local respawnConn = nil
@@ -181,7 +182,7 @@ local function setupAlignForTarget()
     
     -- 기존 Align 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyGyro") then
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
         end
     end
@@ -210,6 +211,15 @@ local function setupAlignForTarget()
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
+    
+    -- Humanoid 무력화
+    local tHum = tChar:FindFirstChildOfClass("Humanoid")
+    if tHum then
+        tHum.WalkSpeed = 0
+        tHum.JumpPower = 0
+        tHum.AutoRotate = false
+        tHum:ChangeState(Enum.HumanoidStateType.Physics)
+    end
 end
 
 local function startKickLoop()
@@ -218,24 +228,36 @@ local function startKickLoop()
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
+    kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 재고정
+    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 재고정 + 머리 위로 이동
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             task.wait(0.1)
             setupAlignForTarget()
+            local tHRP = newChar:FindFirstChild("HumanoidRootPart")
+            if tHRP then
+                pcall(function()
+                    tHRP.CFrame = CFrame.new(getTargetPosition())
+                end)
+            end
         end)
     end
 
-    -- 시작 시 상대를 내 머리 위 20으로 이동 + Align 설정
+    -- 시작 시: 상대에게 텔레포트 후 상대를 내 머리 위 20으로 올림
     local tChar = selectedKickPlayer.Character
-    if tChar then
+    local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+    local myChar = plr.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    
+    if tHRP and myHRP then
+        -- 1. 공격자를 상대 위치로 텔레포트 (바로 앞)
         pcall(function()
-            setupAlignForTarget()
-            local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-            if tHRP then
-                tHRP.CFrame = CFrame.new(getTargetPosition())
-            end
+            myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 0, 4))
+        end)
+        -- 2. 상대를 내 머리 위 20으로 이동
+        pcall(function()
+            tHRP.CFrame = CFrame.new(getTargetPosition())
         end)
     end
     
@@ -247,7 +269,7 @@ local function startKickLoop()
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
         
-        -- Align 목표 위치를 머리 위 20으로 계속 갱신
+        -- Align 목표 위치를 머리 위 20으로 계속 갱신 (상대가 25 이내에 있으면 계속 유지)
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align:IsA("AlignPosition") then
             local att1 = align.Attachment1
@@ -284,8 +306,18 @@ local function startKickLoop()
             
             if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then continue end
             
-            -- 거리 체크: 상대가 26 스터드 이상 멀어지면 공격자가 상대에게 텔레포트
+            -- Humanoid 상태 강제 유지
+            pcall(function()
+                tHum:ChangeState(Enum.HumanoidStateType.Physics)
+                tHum.WalkSpeed = 0
+                tHum.JumpPower = 0
+                tHum.AutoRotate = false
+            end)
+            
+            -- 거리 체크:
             local dist = (tHRP.Position - myHRP.Position).Magnitude
+            
+            -- 상대가 26 스터드 이상 튀면 공격자가 상대에게 즉시 텔레포트
             if dist > 26 then
                 pcall(function()
                     myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 0, 4)) -- 상대 바로 앞으로
@@ -327,16 +359,22 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyGyro") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                     v:Destroy()
                 end
             end
+        end
+        local tHum = selectedKickPlayer.Character:FindFirstChild("Humanoid")
+        if tHum then
+            tHum.WalkSpeed = 16
+            tHum.JumpPower = 50
+            tHum.AutoRotate = true
         end
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (머리 위 20 고정, math.huge, 25/26 재텔포)",
+    Name = "블롭맨 오너 킥 (상대에게 텔포 후 킥, 25이내 유지 / 26이상 재텔포)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -516,4 +554,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "머리 위 20 고정 (math.huge, 25/26 재텔포)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "상대에게 텔포 후 킥, 25이내 유지 / 26이상 재텔포, y20 고정", Duration = 3})
