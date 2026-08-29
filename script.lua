@@ -116,11 +116,27 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] 매 프레임 250회 셋오너/디트로이트 호출 + 직접 고정 + Tool 제약
+-- [수정된 함수] 250Hz 네트워크 루프 + 직접 고정 + Tool 제약
 function loopPlayerBlobF4()
     local initialized = false
     local lastBPTool = nil
     local lastAOTool = nil
+
+    -- 250Hz 네트워크 루프 (셋오너 1번 + 디트로이트 2번 반복)
+    task.spawn(function()
+        while blobLoopT4 and selectedKickPlayer and selectedKickPlayer.Character do
+            local charHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+            if charHRP and myHRP then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                end)
+            end
+            task.wait(0.004) -- 250Hz (1/250 = 0.004초)
+        end
+    end)
 
     while blobLoopT4 do
         local player = selectedKickPlayer
@@ -185,7 +201,7 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 최대 고정 (직접 CFrame + Tool 전용 물리 제약 + 250회 네트워크 호출)
+            -- 매 프레임 최대 고정 (직접 CFrame + Tool 전용 물리 제약)
             pcall(function()
                 -- [1] HRP 직접 고정 (CFrame + 속도 제로)
                 charHRP.CFrame = targetCF
@@ -239,12 +255,7 @@ function loopPlayerBlobF4()
                     end
                 end
 
-                -- [5] 매 프레임마다 250회 네트워크 호출 (셋오너 1번 + 디트로이트 2번)
-                for _ = 1, 250 do
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                end
+                -- [5] 네트워크 호출은 250Hz 루프에서 수행 (여기서는 없음)
             end)
         end
         RunService.RenderStepped:Wait()
