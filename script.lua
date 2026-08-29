@@ -178,17 +178,20 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
+    -- 기존 Align 제거 (재설정 방지)
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
         end
     end
     
+    -- Attachment 생성
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
     att1.Name = "KickAtt1"
     
+    -- AlignPosition: 오직 math.huge
     local alignPos = Instance.new("AlignPosition")
     alignPos.Name = "KickAlign"
     alignPos.Attachment0 = att0
@@ -199,6 +202,7 @@ local function setupAlignForTarget()
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
+    -- AlignOrientation: 오직 math.huge
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
@@ -216,14 +220,14 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- ★ 수정: 처음 위치 저장 (킥 시작 시점)
+    -- 처음 위치 저장 (킥 시작 시점)
     local myChar = plr.Character
     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if myHRP then
         savedKickPos = myHRP.CFrame
     end
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 20으로 텔레포트 후 Align 설정
+    -- 리스폰 감지: 새 캐릭터 생성 시 초기 위치 설정 후 Align 부착
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
@@ -236,7 +240,7 @@ local function startKickLoop()
                 
                 local myHRP2 = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP2 then
-                    -- ★ 수정: savedKickPos 기준으로 이동
+                    -- 초기 위치로 이동 (이후 Align이 계속 유지)
                     local targetPos = savedKickPos and (savedKickPos.Position + Vector3.new(0, 15, 0)) or (myHRP2.Position + Vector3.new(0, 20, 0))
                     pcall(function()
                         hrp.CFrame = CFrame.new(targetPos)
@@ -246,7 +250,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 1. Stepped: AlignPosition 갱신 (물리 직전, 보조)
+    -- 1. Stepped: Align 갱신 (물리 직전, 보조)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -258,7 +262,7 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        -- ★ 수정: savedKickPos 기준으로 고정
+        -- 목표 위치 (savedKickPos 기준 +15 y)
         local targetPos = savedKickPos and (savedKickPos.Position + Vector3.new(0, 15, 0)) or (myHRP.Position + Vector3.new(0, 20, 0))
         
         if not tHRP:FindFirstChild("KickAlign") then
@@ -270,9 +274,12 @@ local function startKickLoop()
             align.Attachment1.WorldPosition = targetPos
         end
         
-        -- (회전 고정, 속도 제거, 플랫폼 스탠드 제거)
-        -- AlignOrientation은 MaxTorque = math.huge로 이미 고정됨
-        -- 다른 조작 없음
+        local rot = tHRP:FindFirstChild("KickRot")
+        if rot then
+            rot.CFrame = CFrame.Angles(0, 0, 0)  -- 회전도 math.huge로 고정됨
+        end
+        
+        -- ★ 여기서는 더 이상 속도, 플랫폼스탠드 등 직접 조작 없음
     end)
 
     -- 2. 리모트 호출 + Align 갱신 (정밀 타이머, 400Hz, 주 갱신, 1:1 번갈아)
@@ -297,7 +304,7 @@ local function startKickLoop()
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
             
-            -- ★ 수정: savedKickPos 기준으로 고정
+            -- 목표 위치
             local targetPos = savedKickPos and (savedKickPos.Position + Vector3.new(0, 15, 0)) or (myHRP.Position + Vector3.new(0, 20, 0))
             
             if not tHRP:FindFirstChild("KickAlign") then
@@ -309,10 +316,15 @@ local function startKickLoop()
                 align.Attachment1.WorldPosition = targetPos
             end
             
-            -- (회전 고정, 속도 제거, 플랫폼 스탠드 제거)
+            local rot = tHRP:FindFirstChild("KickRot")
+            if rot then
+                rot.CFrame = CFrame.Angles(0, 0, 0)
+            end
+            
+            -- ★ 여기서도 직접 고정 로직 없음
             
             if tHum and tHum.Health > 0 then
-                -- ★ 수정: KICK_RANGE(100) 이상이면 상대 위치로 룹텔포
+                -- 거리 초과 시 자신을 상대 근처로 텔레포트 (공격자 이동)
                 local dist = (tHRP.Position - myHRP.Position).Magnitude
                 if dist > KICK_RANGE then
                     pcall(function()
@@ -320,12 +332,6 @@ local function startKickLoop()
                     end)
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                    -- 텔레포트 후 바로 다시 고정 위치로 이동
-                    pcall(function()
-                        if savedKickPos then
-                            tHRP.CFrame = savedKickPos * CFrame.new(0, 15, 0)
-                        end
                     end)
                 end
                 
@@ -373,7 +379,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:1 번갈아, 400Hz 정밀 타이머)",
+    Name = "블롭맨 오너 킥 실행 (1:1 번갈아, 400Hz 정밀 타이머, math.huge 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -553,4 +559,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아, 400Hz 정밀 타이머, Align 고정 (math.huge)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아, 400Hz 정밀 타이머, 오직 math.huge로 상대 고정", Duration = 3})
