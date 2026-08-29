@@ -124,7 +124,7 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] BodyPosition(math.huge)만으로 고정 + 300Hz 네트워크 루프
+-- [수정된 함수] BodyPosition(math.huge) + 즉시 복귀 + Struggle 강화 + 300Hz 루프
 function loopPlayerBlobF4()
     local initialized = false
     local lastBP_HRP = nil
@@ -164,47 +164,55 @@ function loopPlayerBlobF4()
 
         if myHRP and charHRP and charHUM then
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
-            local currentDist = (charHRP.Position - targetCF.Position).Magnitude
+            local targetPos = targetCF.Position
             
-            -- 범위 이탈 시 추적/룹티피 (기존 로직 유지, pcall 없음)
-            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
-                recoveringTargets[name] = true
-                initialized = true
-                
-                task.spawn(function()
-                    local originalCF = myHRP.CFrame
-                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    task.wait(0.15)
+            -- 상대가 목표 위치보다 아래에 있으면 즉시 올림 (빠른 복귀)
+            if charHRP.Position.Y < targetPos.Y - 0.5 then
+                charHRP.CFrame = targetCF
+                if charTorso then charTorso.CFrame = targetCF end
+            end
+
+            -- 범위 이탈 시 추적/룹티피 (기존 로직 유지)
+            if (charHRP.Position - targetPos).Magnitude > 15 or not initialized then
+                if not recoveringTargets[name] then
+                    recoveringTargets[name] = true
+                    initialized = true
                     
-                    if SetNetworkOwner and DestroyGrabLine then
-                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        DestroyGrabLine:FireServer(charHRP)
-                    end
-                    task.wait(0.05)
-                    
-                    charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
-                    if charTorso then charTorso.CFrame = originalCF * CFrame.new(0, 20, 0) end
-                    myHRP.CFrame = originalCF
-                    task.wait(0.1)
-                    
-                    if SetNetworkOwner and DestroyGrabLine then
-                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        DestroyGrabLine:FireServer(charHRP)
-                    end
-                    
-                    task.wait(0.3)
-                    recoveringTargets[name] = nil
-                end)
+                    task.spawn(function()
+                        local originalCF = myHRP.CFrame
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
+                        task.wait(0.15)
+                        
+                        if SetNetworkOwner and DestroyGrabLine then
+                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            DestroyGrabLine:FireServer(charHRP)
+                        end
+                        task.wait(0.05)
+                        
+                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                        if charTorso then charTorso.CFrame = originalCF * CFrame.new(0, 20, 0) end
+                        myHRP.CFrame = originalCF
+                        task.wait(0.1)
+                        
+                        if SetNetworkOwner and DestroyGrabLine then
+                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            DestroyGrabLine:FireServer(charHRP)
+                        end
+                        
+                        task.wait(0.3)
+                        recoveringTargets[name] = nil
+                    end)
+                end
             end
             
-            -- 매 프레임 고정: BodyPosition(math.huge)만 사용
+            -- 매 프레임 고정: BodyPosition(math.huge) + Struggle 강화
             -- [1] HRP에 BodyPosition 적용
             if lastBP_HRP then lastBP_HRP:Destroy() lastBP_HRP = nil end
             local bp_HRP = Instance.new("BodyPosition", charHRP)
             bp_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            bp_HRP.Position = targetCF.Position
+            bp_HRP.Position = targetPos
             bp_HRP.D = 1000
             bp_HRP.P = 1000
             bp_HRP.Enabled = true
@@ -215,16 +223,27 @@ function loopPlayerBlobF4()
                 if lastBP_Torso then lastBP_Torso:Destroy() lastBP_Torso = nil end
                 local bp_Torso = Instance.new("BodyPosition", charTorso)
                 bp_Torso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bp_Torso.Position = targetCF.Position
+                bp_Torso.Position = targetPos
                 bp_Torso.D = 1000
                 bp_Torso.P = 1000
                 bp_Torso.Enabled = true
                 lastBP_Torso = bp_Torso
             end
 
-            -- [3] Humanoid 상태 강제 (PlatformStand 유지)
+            -- [3] Struggle 강제 (저항 불가)
             charHUM.PlatformStand = true
             charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+            
+            -- Ragdoll 상태 강제 해제
+            local ragdolledVal = charHUM:FindFirstChild("Ragdolled")
+            if ragdolledVal and ragdolledVal.Value == true then
+                ragdolledVal.Value = false
+            end
+            
+            -- FreeFall 상태 방지
+            if charHUM:GetState() == Enum.HumanoidStateType.Freefall then
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+            end
         end
         RunService.RenderStepped:Wait()
     end
