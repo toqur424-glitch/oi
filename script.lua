@@ -154,9 +154,10 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 4 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
+                        -- 셋오너 1번 + 디트로이트 2번 교차
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                     end)
                     task.wait(0.05)
                     
@@ -169,9 +170,10 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 4 do
-                            rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
+                        -- 셋오너 1번 + 디트로이트 2번 교차
+                        rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                        rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                     end)
                     
                     task.wait(0.3)
@@ -193,7 +195,7 @@ function loopPlayerBlobF4()
                 ao.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
                 ao.Orientation = targetCF
                 ao.Responsiveness = 1000
-                ao.RigidityEnabled = true   -- ✅ 강성 고정 활성화
+                ao.RigidityEnabled = true   -- 강성 고정 활성화
                 ao.Enabled = true
 
                 -- [2] Torso에도 동일하게 적용
@@ -225,7 +227,6 @@ function loopPlayerBlobF4()
                             bpTool.P = 1000
                             bpTool.Enabled = true
                             
-                            -- 툴도 같은 위치로 강제 이동
                             handle.CFrame = targetCF
                             handle.AssemblyLinearVelocity = Vector3.zero
                             handle.AssemblyAngularVelocity = Vector3.zero
@@ -248,11 +249,9 @@ function loopPlayerBlobF4()
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
 
-                -- [6] 네트워크 소유권 및 그래브라인 강화
-                for i = 1, 4 do
-                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                end
-                rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
+                -- [6] 네트워크 소유권 및 그래브라인 강화 (셋오너 1번 + 디트로이트 2번 교차)
+                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                 rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
             end)
         end
