@@ -187,7 +187,7 @@ local function setupAlignForTarget()
         end
     end
     
-    -- AlignPosition (위치 고정, 최대 힘)
+    -- AlignPosition (위치 고정, math.huge = 무한대 힘)
     local att0 = Instance.new("Attachment", tHRP)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
@@ -197,13 +197,13 @@ local function setupAlignForTarget()
     alignPos.Name = "KickAlign"
     alignPos.Attachment0 = att0
     alignPos.Attachment1 = att1
-    alignPos.MaxForce = math.huge
+    alignPos.MaxForce = math.huge        -- 👈 상대 몸에 무한대 힘 적용
     alignPos.MaxVelocity = math.huge
     alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
     alignPos.Parent = tHRP
     
-    -- AlignOrientation (회전 고정, 최대 힘)
+    -- AlignOrientation (회전 고정, math.huge = 무한대 토크)
     local alignRot = Instance.new("AlignOrientation")
     alignRot.Name = "KickRot"
     alignRot.Attachment0 = att0
