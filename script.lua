@@ -126,7 +126,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (머리 위 20 고정, math.huge)
+-- [KICK 탭] - 블롭맨 오너 킥 (상대 위치로 텔포, y 20 고정, math.huge)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -244,11 +244,20 @@ local function startKickLoop()
         end)
     end
 
-    -- 시작 시 상대를 머리 위로 이동
+    -- 시작 시 상대를 머리 위로 이동 + 공격자도 상대 위치로 텔레포트 (아까 방식)
     local tChar = selectedKickPlayer.Character
-    if tChar and tChar:FindFirstChild("HumanoidRootPart") then
+    local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+    local myChar = plr.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    
+    if tHRP and myHRP then
+        -- 1. 상대방을 내 머리 위 20으로 이동
         pcall(function()
-            tChar.HumanoidRootPart.CFrame = CFrame.new(getTargetPosition())
+            tHRP.CFrame = CFrame.new(getTargetPosition())
+        end)
+        -- 2. 내가 상대방 위치로 텔레포트 (바로 앞에 붙기)
+        pcall(function()
+            myChar:PivotTo(tHRP.CFrame * CFrame.new(0, -20, 4))  -- y -20은 상대의 아래, 앞에 4
         end)
     end
     
@@ -305,11 +314,11 @@ local function startKickLoop()
                 tHum.AutoRotate = false
             end)
             
-            -- 거리 체크: 상대가 머리 위에서 멀어지면 자신이 따라가기 (필요시)
+            -- 거리 체크: 상대가 머리 위에서 멀어지면 공격자가 따라가기
             local dist = (tHRP.Position - getTargetPosition()).Magnitude
             if dist > 10 then
                 pcall(function()
-                    myChar:PivotTo(CFrame.new(getTargetPosition()) * CFrame.new(0, -20, 0))
+                    myChar:PivotTo(CFrame.new(getTargetPosition()) * CFrame.new(0, -20, 4))
                 end)
             end
             
@@ -361,7 +370,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (머리 위 20 고정, math.huge, 400Hz)",
+    Name = "블롭맨 오너 킥 실행 (상대 위치로 텔포, y 20 고정, math.huge, 400Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -541,4 +550,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "머리 위 20 고정 (math.huge), 400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "상대 위치로 텔포, y 20 고정, math.huge, 400Hz", Duration = 3})
