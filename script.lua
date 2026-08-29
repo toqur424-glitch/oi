@@ -126,14 +126,14 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 상대를 y=20에 고정하고 킥
+-- [KICK 탭] - 상대 몸통(Torso)을 y=20에 고정하고 킥
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: AlignPosition 갱신 (물리 직전)
+-- Stepped: AlignPosition 갱신 + 직접 CFrame 강제 (물리 직전)
 local steppedConn = nil
 -- 리모트 호출 (400Hz 스레드)
 local remoteThread = nil
@@ -164,13 +164,21 @@ KickTab:CreateInput({
     end
 })
 
--- 목표 위치: 월드 좌표 y=20, x/z는 대상 HRP의 현재 위치 유지
+-- 고정할 몸통 부품 반환 (R6: Torso, R15: UpperTorso, 없으면 HumanoidRootPart)
+local function getTargetPart(character)
+    if not character then return nil end
+    return character:FindFirstChild("Torso") 
+        or character:FindFirstChild("UpperTorso") 
+        or character:FindFirstChild("HumanoidRootPart")
+end
+
+-- 목표 위치: 월드 좌표 y=20, x/z는 몸통의 현재 위치 유지
 local function getTargetPosition()
     if not selectedKickPlayer then return Vector3.new(0, 20, 0) end
     local tChar = selectedKickPlayer.Character
-    local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-    if tHRP then
-        return Vector3.new(tHRP.Position.X, 20, tHRP.Position.Z)
+    local targetPart = getTargetPart(tChar)
+    if targetPart then
+        return Vector3.new(targetPart.Position.X, 20, targetPart.Position.Z)
     end
     return Vector3.new(0, 20, 0)
 end
@@ -179,21 +187,21 @@ local function setupAlignForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
-    local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-    if not tHRP then return end
+    local targetPart = getTargetPart(tChar)  -- 몸통
+    if not targetPart then return end
     
-    -- HRP가 고정되어 있으면 해제
-    tHRP.Anchored = false
+    -- 앵커 해제
+    targetPart.Anchored = false
     
     -- 기존 Align 제거
-    for _, v in pairs(tHRP:GetChildren()) do
+    for _, v in pairs(targetPart:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
             v:Destroy()
         end
     end
     
     -- AlignPosition (위치 고정, math.huge = 무한대 힘)
-    local att0 = Instance.new("Attachment", tHRP)
+    local att0 = Instance.new("Attachment", targetPart)
     att0.Name = "KickAtt0"
     local att1 = Instance.new("Attachment", workspace.Terrain)
     att1.Name = "KickAtt1"
@@ -204,13 +212,10 @@ local function setupAlignForTarget()
     alignPos.Attachment0 = att0
     alignPos.Attachment1 = att1
     alignPos.MaxForce = math.huge
-    alignPos.MaxVelocity = math.huge
+    alignPos.MaxVelocity = math.huge  -- 엄청 빠른 이동 속도
     alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
-    alignPos.Parent = tHRP
-    
-    -- AlignOrientation 제거 (필요 시 올바르게 설정해야 함)
-    -- 여기서는 위치 고정만으로 충분
+    alignPos.Parent = targetPart
 end
 
 local function startKickLoop()
@@ -226,34 +231,40 @@ local function startKickLoop()
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             task.wait(0.1)
             setupAlignForTarget()
-            local tHRP = newChar:FindFirstChild("HumanoidRootPart")
-            if tHRP then
+            local targetPart = getTargetPart(newChar)
+            if targetPart then
                 pcall(function()
-                    tHRP.CFrame = CFrame.new(getTargetPosition())
+                    targetPart.CFrame = CFrame.new(getTargetPosition())
                 end)
             end
         end)
     end
 
-    -- 시작 시: 대상 HRP를 y=20으로 이동
+    -- 시작 시: 몸통을 y=20으로 즉시 이동 + 고정
     local tChar = selectedKickPlayer.Character
-    local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-    if tHRP then
+    local targetPart = getTargetPart(tChar)
+    if targetPart then
         setupAlignForTarget()
         pcall(function()
-            tHRP.CFrame = CFrame.new(getTargetPosition())
+            targetPart.CFrame = CFrame.new(getTargetPosition())
         end)
     end
     
-    -- Stepped: AlignPosition 목표 위치를 y=20으로 계속 갱신
+    -- Stepped: 매 프레임 직접 CFrame 강제 + Align 목표 위치 갱신 (올리는 속도 최상)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
         local tChar = selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        if not tHRP then return end
+        local targetPart = getTargetPart(tChar)
+        if not targetPart then return end
         
-        local align = tHRP:FindFirstChild("KickAlign")
+        -- 직접 CFrame을 목표 위치로 설정 (즉시 이동)
+        pcall(function()
+            targetPart.CFrame = CFrame.new(getTargetPosition())
+        end)
+        
+        -- Align 목표 위치도 갱신 (연속적인 무한대 힘 유지)
+        local align = targetPart:FindFirstChild("KickAlign")
         if align and align:IsA("AlignPosition") then
             local att1 = align.Attachment1
             if att1 then
@@ -276,20 +287,20 @@ local function startKickLoop()
             if not selectedKickPlayer then continue end
             
             local tChar = selectedKickPlayer.Character
-            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+            local targetPart = getTargetPart(tChar)
             local myChar = plr.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             
-            if not (myChar and myHRP and tHRP) then continue end
+            if not (myChar and myHRP and targetPart) then continue end
             
             kickCounter = kickCounter + 1
             if kickCounter % 3 == 1 then
                 pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
                 end)
             else
                 pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
                 end)
             end
         end
@@ -311,9 +322,9 @@ local function stopKickLoop()
         respawnConn = nil
     end
     if selectedKickPlayer and selectedKickPlayer.Character then
-        local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if tHRP then
-            for _, v in pairs(tHRP:GetChildren()) do
+        local targetPart = getTargetPart(selectedKickPlayer.Character)
+        if targetPart then
+            for _, v in pairs(targetPart:GetChildren()) do
                 if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                     v:Destroy()
                 end
@@ -323,7 +334,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (상대를 y=20에 고정)",
+    Name = "블롭맨 오너 킥 (몸통 고정, y=20, 초고속)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -503,4 +514,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "상대를 y=20에 고정하고 킥", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "상대 몸통 y=20 초고속 고정", Duration = 3})
