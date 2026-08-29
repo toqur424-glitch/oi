@@ -128,7 +128,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - BodyPosition(math.huge) 몸통+HRP 초고속 + 700Hz 원격 호출
+-- [KICK 탭] - BodyPosition(math.huge) 몸통+HRP 초고속 + 650Hz 원격 호출
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -139,8 +139,8 @@ local kickCounter = 0
 local renderSteppedConn = nil
 local heartbeatConn = nil
 local steppedConn = nil
-local highFreqThread = nil    -- 추가 고주파 BodyPosition 갱신 루프
-local remoteThread = nil      -- 원격 호출 루프 (700Hz)
+local highFreqThread = nil    -- 추가 고주파 BodyPosition 갱신 루프 (1000Hz)
+local remoteThread = nil      -- 원격 호출 루프 (650Hz)
 local respawnConn = nil
 
 -- 현재 부착된 BodyPosition 테이블 (부품별)
@@ -295,9 +295,9 @@ local function startKickLoop()
         updateBodyLock()
     end)
     
-    -- 4. 추가 고주파 BodyPosition 갱신 루프 (700Hz)
+    -- 4. 추가 고주파 BodyPosition 갱신 루프 (1000Hz)
     highFreqThread = task.spawn(function()
-        local interval = 0.0014285714  -- 700Hz
+        local interval = 0.001  -- 1000Hz
         local nextTime = tick() + interval
         while kickLoopRunning do
             while tick() < nextTime do
@@ -308,9 +308,9 @@ local function startKickLoop()
         end
     end)
     
-    -- 5. 원격 호출 루프 (700Hz): SetOwner 1회, Destroy 2회 패턴
+    -- 5. 원격 호출 루프 (650Hz): SetOwner 1회, Destroy 3회 패턴
     remoteThread = task.spawn(function()
-        local interval = 0.0014285714  -- 700Hz
+        local interval = 0.0015384615  -- 650Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -330,7 +330,7 @@ local function startKickLoop()
             
             for _, part in ipairs(parts) do
                 kickCounter = kickCounter + 1
-                if kickCounter % 3 == 1 then
+                if kickCounter % 4 == 1 then
                     pcall(function()
                         SetNetworkOwner:FireServer(part, CFrame.lookAt(myHRP.Position, part.Position))
                     end)
@@ -356,7 +356,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (BodyPosition math.huge 몸통+HRP 700Hz)",
+    Name = "블롭맨 오너 킥 (BodyPosition math.huge 몸통+HRP 650Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -536,4 +536,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "BodyPosition(math.huge) 몸통+HRP 700Hz 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "BodyPosition(math.huge) 몸통+HRP 650Hz 고정", Duration = 3})
