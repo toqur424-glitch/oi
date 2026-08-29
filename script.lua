@@ -124,10 +124,11 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] 300Hz 네트워크 루프 + Torso BodyPosition 고정
+-- [수정된 함수] BodyPosition(math.huge)만으로 고정 + 300Hz 네트워크 루프
 function loopPlayerBlobF4()
     local initialized = false
-    local lastBPTorso = nil
+    local lastBP_HRP = nil
+    local lastBP_Torso = nil
 
     -- 300Hz 네트워크 루프 (셋오너 2회 + 디트로이트 1회)
     task.spawn(function()
@@ -148,8 +149,9 @@ function loopPlayerBlobF4()
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            -- 이전 Torso 제약 정리
-            if lastBPTorso then lastBPTorso:Destroy() lastBPTorso = nil end
+            -- 이전 BodyPosition 제거
+            if lastBP_HRP then lastBP_HRP:Destroy() lastBP_HRP = nil end
+            if lastBP_Torso then lastBP_Torso:Destroy() lastBP_Torso = nil end
             RunService.RenderStepped:Wait()
             continue
         end
@@ -197,32 +199,30 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 최대 고정 (Torso BodyPosition + HRP CFrame)
-            -- [1] HRP 직접 고정
-            charHRP.CFrame = targetCF
-            charHRP.AssemblyLinearVelocity = Vector3.zero
-            charHRP.AssemblyAngularVelocity = Vector3.zero
+            -- 매 프레임 고정: BodyPosition(math.huge)만 사용
+            -- [1] HRP에 BodyPosition 적용
+            if lastBP_HRP then lastBP_HRP:Destroy() lastBP_HRP = nil end
+            local bp_HRP = Instance.new("BodyPosition", charHRP)
+            bp_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bp_HRP.Position = targetCF.Position
+            bp_HRP.D = 1000
+            bp_HRP.P = 1000
+            bp_HRP.Enabled = true
+            lastBP_HRP = bp_HRP
 
-            -- [2] Torso에 BodyPosition(math.huge) 적용 (있으면)
+            -- [2] Torso에도 BodyPosition 적용 (있다면)
             if charTorso then
-                -- 이전 프레임 제약 제거
-                if lastBPTorso then lastBPTorso:Destroy() lastBPTorso = nil end
-                
-                local bpTorso = Instance.new("BodyPosition", charTorso)
-                bpTorso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bpTorso.Position = targetCF.Position
-                bpTorso.D = 1000
-                bpTorso.P = 1000
-                bpTorso.Enabled = true
-                lastBPTorso = bpTorso
-                
-                -- Torso 자체도 직접 고정 (추가 안정성)
-                charTorso.CFrame = targetCF
-                charTorso.AssemblyLinearVelocity = Vector3.zero
-                charTorso.AssemblyAngularVelocity = Vector3.zero
+                if lastBP_Torso then lastBP_Torso:Destroy() lastBP_Torso = nil end
+                local bp_Torso = Instance.new("BodyPosition", charTorso)
+                bp_Torso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bp_Torso.Position = targetCF.Position
+                bp_Torso.D = 1000
+                bp_Torso.P = 1000
+                bp_Torso.Enabled = true
+                lastBP_Torso = bp_Torso
             end
 
-            -- [3] Humanoid 상태 강제
+            -- [3] Humanoid 상태 강제 (PlatformStand 유지)
             charHUM.PlatformStand = true
             charHUM:ChangeState(Enum.HumanoidStateType.Physics)
         end
