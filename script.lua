@@ -94,12 +94,13 @@ local function startFKeyAttack(targetPlayer)
         
         if (myRoot.Position - tgtRoot.Position).Magnitude <= 30 then
             fCounter = fCounter + 1
-            if fCounter % 2 == 1 then
+            if fCounter % 2 == 0 then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
             else
                 pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
                 end)
             end
@@ -126,17 +127,17 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회)
+-- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아, 600Hz 정밀 타이머, BodyPosition 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
 
--- Stepped: AlignPosition 갱신 (물리 직전)
+-- Stepped: BodyPosition 갱신 (물리 직전, 보조)
 local steppedConn = nil
--- Heartbeat: 리모트 호출 (400Hz)
-local heartbeatConn = nil
+-- 리모트 호출 + BodyPosition 갱신: 정밀 타이머 (600Hz, 주 갱신)
+local remoteTask = nil
 -- 리스폰 감지
 local respawnConn = nil
 
@@ -164,140 +165,188 @@ KickTab:CreateInput({
     end
 })
 
-local function setupAlignForTarget()
+local function setupBodyForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 Align 제거
+    -- 기존 BodyPosition / BodyGyro 제거
     for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
             v:Destroy()
         end
     end
     
-    -- AlignPosition (위치 고정, 성능 최대)
-    local att0 = Instance.new("Attachment", tHRP)
-    att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
-    att1.Name = "KickAtt1"
+    -- BodyPosition (위치 고정, MaxForce = math.huge)
+    local bodyPos = Instance.new("BodyPosition")
+    bodyPos.Name = "KickBodyPos"
+    bodyPos.MaxForce = math.huge
+    bodyPos.MaxVelocity = math.huge
+    bodyPos.D = 1
+    bodyPos.P = 1000 -- 반응 속도 (임의로 높게 설정)
+    bodyPos.Position = tHRP.Position
+    bodyPos.Parent = tHRP
     
-    local alignPos = Instance.new("AlignPosition")
-    alignPos.Name = "KickAlign"
-    alignPos.Attachment0 = att0
-    alignPos.Attachment1 = att1
-    alignPos.MaxForce = math.huge
-    alignPos.MaxVelocity = math.huge
-    alignPos.Responsiveness = math.huge
-    alignPos.RigidityEnabled = true
-    alignPos.Parent = tHRP
-    
-    -- AlignOrientation (회전 0도 고정)
-    local alignRot = Instance.new("AlignOrientation")
-    alignRot.Name = "KickRot"
-    alignRot.Attachment0 = att0
-    alignRot.MaxTorque = math.huge
-    alignRot.Responsiveness = math.huge
-    alignRot.RigidityEnabled = true
-    alignRot.Parent = tHRP
+    -- BodyGyro (회전 0도 고정, MaxTorque = math.huge)
+    local bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.Name = "KickBodyGyro"
+    bodyGyro.MaxTorque = math.huge
+    bodyGyro.D = 1
+    bodyGyro.P = 1000
+    bodyGyro.CFrame = CFrame.Angles(0, 0, 0)
+    bodyGyro.Parent = tHRP
 end
 
 local function startKickLoop()
-    if heartbeatConn then heartbeatConn:Disconnect() end
+    if remoteTask then task.cancel(remoteTask) end
     if steppedConn then steppedConn:Disconnect() end
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 20으로 텔레포트 후 Align 설정
+    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 20으로 텔레포트 후 BodyPosition 설정
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
-            task.wait(0.1)
-            setupAlignForTarget()
-            local tHRP = newChar:FindFirstChild("HumanoidRootPart")
-            if tHRP and plr.Character then
-                pcall(function()
-                    plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                end)
+            local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
+            local hum = newChar:WaitForChild("Humanoid", 5)
+            if hrp and hum then
+                while hum.Health <= 0 do task.wait(0.1) end
+                task.wait(0.2)
+                
+                setupBodyForTarget()
+                
+                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+                    pcall(function()
+                        hrp.CFrame = CFrame.new(targetPos)
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    end)
+                end
             end
         end)
     end
-    
-    -- Stepped: AlignPosition 위치 업데이트 (서버 물리 업데이트 전)
+
+    -- 1. Stepped: BodyPosition 갱신 (물리 직전, 보조)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
-        local tChar = selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        if not tHRP then return end
-        
-        local align = tHRP:FindFirstChild("KickAlign")
-        if align and align:IsA("AlignPosition") then
-            local att1 = align.Attachment1
-            if att1 then
-                att1.CFrame = tHRP.CFrame
-            end
-        end
-    end)
-    
-    -- Heartbeat: 리모트 호출 (400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회)
-    heartbeatConn = RunService.Heartbeat:Connect(function()
-        if not kickLoopRunning or not selectedKickPlayer then return end
-        
-        local tChar = selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tHum = tChar and tChar:FindFirstChild("Humanoid")
         local myChar = plr.Character
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local tChar = selectedKickPlayer.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         
-        if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
+        if not (myChar and myHRP) then return end
+        if not (tChar and tHRP) then return end
         
-        -- 타겟 위치 고정 (X: 15, Y: 16) + 고정력 강화
-        pcall(function()
-            tHRP.CFrame = CFrame.new(15, 16, tHRP.Position.Z)
+        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+        
+        if not tHRP:FindFirstChild("KickBodyPos") then
+            setupBodyForTarget()
+        end
+        
+        local bodyPos = tHRP:FindFirstChild("KickBodyPos")
+        if bodyPos then
+            bodyPos.Position = targetPos
+        end
+        
+        local bodyGyro = tHRP:FindFirstChild("KickBodyGyro")
+        if bodyGyro then
+            bodyGyro.CFrame = CFrame.Angles(0, 0, 0)
+        end
+        
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
+        local tHum = tChar:FindFirstChild("Humanoid")
+        if tHum then
+            tHum.PlatformStand = true
+            tHum:ChangeState(Enum.HumanoidStateType.Physics)
+        end
+    end)
+
+    -- 2. 리모트 호출 + BodyPosition 갱신 (정밀 타이머, 600Hz, 주 갱신, 1:1 번갈아)
+    remoteTask = task.spawn(function()
+        local interval = 1/600 -- 600Hz
+        local nextTime = tick() + interval
+        
+        while kickLoopRunning do
+            while tick() < nextTime do
+                task.wait()
+            end
+            nextTime = nextTime + interval
+            
+            if not selectedKickPlayer then continue end
+            
+            local tChar = selectedKickPlayer.Character
+            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+            local tHum = tChar and tChar:FindFirstChild("Humanoid")
+            local myChar = plr.Character
+            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            
+            if not (myChar and myHRP) then continue end
+            if not (tChar and tHRP) then continue end
+            
+            local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+            
+            if not tHRP:FindFirstChild("KickBodyPos") then
+                setupBodyForTarget()
+            end
+            
+            local bodyPos = tHRP:FindFirstChild("KickBodyPos")
+            if bodyPos then
+                bodyPos.Position = targetPos
+            end
+            
+            local bodyGyro = tHRP:FindFirstChild("KickBodyGyro")
+            if bodyGyro then
+                bodyGyro.CFrame = CFrame.Angles(0, 0, 0)
+            end
+            
             tHRP.AssemblyLinearVelocity = Vector3.zero
             tHRP.AssemblyAngularVelocity = Vector3.zero
-        end)
-        
-        -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
-        local dist = (tHRP.Position - myHRP.Position).Magnitude
-        if dist > 30 then
-            pcall(function()
-                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-            end)
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-            end)
+            if tHum then
+                tHum.PlatformStand = true
+                tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            end
+            
+            -- 살아있을 때만 리모트 호출 (1:1 번갈아)
+            if tHum and tHum.Health > 0 then
+                local dist = (tHRP.Position - myHRP.Position).Magnitude
+                if dist > 30 then
+                    pcall(function()
+                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                    end)
+                end
+                
+                kickCounter = kickCounter + 1
+                if kickCounter % 2 == 0 then
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
+                else
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                end
+            end
         end
-        
-        -- SetNetworkOwner 1번, DestroyGrabLine 2번 (400Hz)
-        kickCounter = kickCounter + 1
-        if kickCounter % 3 == 1 then
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-            end)
-        else
-            pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-            end)
-        end
-        
-        task.wait(0.0025)  -- 400Hz
     end)
 end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    if heartbeatConn then
-        heartbeatConn:Disconnect()
-        heartbeatConn = nil
-    end
     if steppedConn then
         steppedConn:Disconnect()
         steppedConn = nil
+    end
+    if remoteTask then
+        task.cancel(remoteTask)
+        remoteTask = nil
     end
     if respawnConn then
         respawnConn:Disconnect()
@@ -307,7 +356,7 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
                     v:Destroy()
                 end
             end
@@ -316,7 +365,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회)",
+    Name = "블롭맨 오너 킥 실행 (1:1 번갈아, 600Hz 정밀 타이머, BodyPosition 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -496,4 +545,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회 (math.huge 고정력)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아, 600Hz 정밀 타이머, BodyPosition(math.huge) 고정", Duration = 3})
