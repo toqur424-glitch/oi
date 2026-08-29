@@ -143,6 +143,9 @@ local respawnConn = nil
 -- 원래 위치 저장 변수
 local savedKickPos = nil
 
+-- 셋오너 킥 범위 (수정: 100으로 확대)
+local KICK_RANGE = 100
+
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
     PlaceholderText = "예: Player1",
@@ -222,46 +225,7 @@ local function startKickLoop()
         savedKickPos = myHRP.CFrame
     end
 
-    -- ★ 추가: 상대방에게 접근 & SetNetworkOwner 확인 후 원래 위치로 복귀하는 로직
-    task.spawn(function()
-        if not selectedKickPlayer then return end
-        local tChar = selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        if not tHRP or not myHRP then return end
-        
-        -- 매 프레임 조금씩 이동하여 접근
-        while kickLoopRunning and myHRP and tHRP and (myHRP.Position - tHRP.Position).Magnitude > 5 do
-            if not kickLoopRunning then break end
-            local dir = (tHRP.Position - myHRP.Position).Unit
-            myHRP.CFrame = myHRP.CFrame + dir * 0.5
-            task.wait()
-        end
-        
-        -- SetNetworkOwner를 반복 호출하며 소유권 확인
-        local ownerConfirmed = false
-        for i = 1, 15 do
-            if not kickLoopRunning then break end
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, tHRP.CFrame)
-            end)
-            task.wait(0.05)
-            
-            -- 상대방 HRP의 PartOwner가 내 이름인지 확인
-            local partOwner = tHRP:FindFirstChild("PartOwner")
-            if partOwner and partOwner.Value == plr.Name then
-                ownerConfirmed = true
-                break
-            end
-        end
-        
-        -- 소유권이 확인되면 내 원래 위치로 복귀
-        if ownerConfirmed and kickLoopRunning then
-            pcall(function()
-                plr.Character:PivotTo(savedKickPos)
-            end)
-            Rayfield:Notify({Title = "복귀", Content = "셋오너 확인됨, 원래 위치로 이동", Duration = 2})
-        end
-    end)
+    -- 초기 접근/복귀 로직 제거 (요청)
 
     -- 리스폰 감지: 새 캐릭터 생성 시 즉시 원래 위치로 이동 후 Align 설정
     if selectedKickPlayer then
@@ -318,9 +282,9 @@ local function startKickLoop()
             end)
         end
         
-        -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
+        -- FETCH: 거리 KICK_RANGE 이상이면 자신이 대상에게 텔레포트
         local dist = (tHRP.Position - myHRP.Position).Magnitude
-        if dist > 30 then
+        if dist > KICK_RANGE then
             pcall(function()
                 myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
             end)
