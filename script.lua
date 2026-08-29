@@ -90,7 +90,6 @@ GrabTab:CreateKeybind({
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local blobLoopT4 = false
 local recoveringTargets = {} 
-
 local selectedKickPlayer = nil
 
 KickTab:CreateInput({
@@ -117,15 +116,20 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] 250Hz + BodyPosition + AlignOrientation + Tool 고정
+-- [수정된 함수] Tool 전용 AlignOrientation/BodyPosition (매 프레임 생성/파괴) + 네트워크 교차
 function loopPlayerBlobF4()
     local initialized = false
-    
+    local lastBPTool = nil
+    local lastAOTool = nil
+
     while blobLoopT4 do
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
+            -- 이전 툴 제약 정리
+            if lastBPTool then lastBPTool:Destroy() lastBPTool = nil end
+            if lastAOTool then lastAOTool:Destroy() lastAOTool = nil end
             RunService.RenderStepped:Wait()
             continue
         end
@@ -181,75 +185,61 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 최대 고정 (BodyPosition + AlignOrientation + Tool 고정)
+            -- 매 프레임 최대 고정 (직접 CFrame + Tool 전용 물리 제약)
             pcall(function()
-                -- [1] HRP에 BodyPosition 및 AlignOrientation 설정
-                local bp = charHRP:FindFirstChild("BodyPosition") or Instance.new("BodyPosition", charHRP)
-                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bp.Position = targetCF.Position
-                bp.D = 1000
-                bp.P = 1000
-                bp.Enabled = true
-
-                local ao = charHRP:FindFirstChild("AlignOrientation") or Instance.new("AlignOrientation", charHRP)
-                ao.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                ao.Orientation = targetCF
-                ao.Responsiveness = 1000
-                ao.RigidityEnabled = true   -- 강성 고정 활성화
-                ao.Enabled = true
-
-                -- [2] Torso에도 동일하게 적용
-                if charTorso then
-                    local bp2 = charTorso:FindFirstChild("BodyPosition") or Instance.new("BodyPosition", charTorso)
-                    bp2.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    bp2.Position = targetCF.Position
-                    bp2.D = 1000
-                    bp2.P = 1000
-                    bp2.Enabled = true
-
-                    local ao2 = charTorso:FindFirstChild("AlignOrientation") or Instance.new("AlignOrientation", charTorso)
-                    ao2.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                    ao2.Orientation = targetCF
-                    ao2.Responsiveness = 1000
-                    ao2.RigidityEnabled = true
-                    ao2.Enabled = true
-                end
-
-                -- [3] 타겟이 들고 있는 Tool(무기)도 고정
-                for _, tool in ipairs(player.Character:GetChildren()) do
-                    if tool:IsA("Tool") then
-                        local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
-                        if handle then
-                            local bpTool = handle:FindFirstChild("BodyPosition") or Instance.new("BodyPosition", handle)
-                            bpTool.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                            bpTool.Position = targetCF.Position
-                            bpTool.D = 1000
-                            bpTool.P = 1000
-                            bpTool.Enabled = true
-                            
-                            handle.CFrame = targetCF
-                            handle.AssemblyLinearVelocity = Vector3.zero
-                            handle.AssemblyAngularVelocity = Vector3.zero
-                        end
-                    end
-                end
-
-                -- [4] 직접 CFrame 강제 설정 (HRP + Torso)
+                -- [1] HRP 직접 고정 (CFrame + 속도 제로)
                 charHRP.CFrame = targetCF
                 charHRP.AssemblyLinearVelocity = Vector3.zero
                 charHRP.AssemblyAngularVelocity = Vector3.zero
 
+                -- [2] Torso 직접 고정 (CFrame + 속도 제로)
                 if charTorso then
                     charTorso.CFrame = targetCF
                     charTorso.AssemblyLinearVelocity = Vector3.zero
                     charTorso.AssemblyAngularVelocity = Vector3.zero
                 end
 
-                -- [5] Humanoid 상태 강제
+                -- [3] Humanoid 상태 강제
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
 
-                -- [6] 네트워크 소유권 및 그래브라인 강화 (셋오너 1번 + 디트로이트 2번 교차)
+                -- [4] Tool에만 BodyPosition & AlignOrientation 적용 (매 프레임 생성 후 파괴)
+                for _, tool in ipairs(player.Character:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+                        if handle then
+                            -- 이전 프레임 제약 제거
+                            if lastBPTool then lastBPTool:Destroy() lastBPTool = nil end
+                            if lastAOTool then lastAOTool:Destroy() lastAOTool = nil end
+
+                            -- 새 BodyPosition 생성
+                            local bpTool = Instance.new("BodyPosition", handle)
+                            bpTool.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                            bpTool.Position = targetCF.Position
+                            bpTool.D = 1000
+                            bpTool.P = 1000
+                            bpTool.Enabled = true
+                            lastBPTool = bpTool
+
+                            -- 새 AlignOrientation 생성
+                            local aoTool = Instance.new("AlignOrientation", handle)
+                            aoTool.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                            aoTool.Orientation = targetCF
+                            aoTool.Responsiveness = 1000
+                            aoTool.RigidityEnabled = true
+                            aoTool.Enabled = true
+                            lastAOTool = aoTool
+
+                            -- Tool 자체도 직접 고정
+                            handle.CFrame = targetCF
+                            handle.AssemblyLinearVelocity = Vector3.zero
+                            handle.AssemblyAngularVelocity = Vector3.zero
+                        end
+                        break -- 첫 번째 툴만 처리
+                    end
+                end
+
+                -- [5] 네트워크 소유권 및 그래브라인 강화 (셋오너 1번 + 디트로이트 2번 교차)
                 rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                 rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
