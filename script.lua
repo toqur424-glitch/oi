@@ -35,6 +35,8 @@ local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
 local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 5)
 local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
+local SetNetworkOwner = GrabEvents and GrabEvents:FindFirstChild("SetNetworkOwner")
+local DestroyGrabLine = GrabEvents and GrabEvents:FindFirstChild("DestroyGrabLine")
 
 local function handleAntiGrabEscape(...)
     task.spawn(function()
@@ -44,7 +46,7 @@ local function handleAntiGrabEscape(...)
         if tHRP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
             for i = 1, 5 do
                 pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
+                    SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
                 end)
                 task.wait()
             end
@@ -96,11 +98,11 @@ local function startFKeyAttack(targetPlayer)
             fCounter = fCounter + 1
             if fCounter % 2 == 1 then
                 pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                    SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
             else
                 pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                    DestroyGrabLine:FireServer(tgtRoot)
                 end)
             end
         end
@@ -126,7 +128,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - BodyPosition(math.huge) 초고속 + 낙하 방지
+-- [KICK 탭] - BodyPosition(math.huge) 초고속 + 낙하 방지 + DestroyGrabLine 호출
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -201,7 +203,7 @@ local function setupBodyPosition()
     
     -- BodyPosition 생성 (MaxForce를 Vector3(math.huge, math.huge, math.huge)로 설정)
     bodyPosition = Instance.new("BodyPosition")
-    bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)  -- 무한대 힘
+    bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
     bodyPosition.Position = getTargetPosition()
     bodyPosition.Parent = torso
 end
@@ -279,7 +281,7 @@ local function startKickLoop()
         updateBodyLock()
     end)
     
-    -- 4. 네트워크 소유권 계속 요청 (400Hz)
+    -- 4. 네트워크 소유권 + DestroyGrabLine 번갈아 호출 (400Hz)
     remoteThread = task.spawn(function()
         local interval = 0.0025
         local nextTime = tick() + interval
@@ -298,10 +300,17 @@ local function startKickLoop()
             
             if not (myChar and myHRP and torso) then continue end
             
-            -- 매번 SetNetworkOwner 호출 (공격적으로)
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(torso, CFrame.lookAt(myHRP.Position, torso.Position))
-            end)
+            -- 번갈아 호출: SetNetworkOwner 1회, DestroyGrabLine 2회 비율
+            kickCounter = kickCounter + 1
+            if kickCounter % 3 == 1 then
+                pcall(function()
+                    SetNetworkOwner:FireServer(torso, CFrame.lookAt(myHRP.Position, torso.Position))
+                end)
+            else
+                pcall(function()
+                    DestroyGrabLine:FireServer(torso)
+                end)
+            end
         end
     end)
 end
@@ -512,4 +521,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "초고속 BodyPosition(math.huge) 낙하방지 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "초고속 BodyPosition(math.huge) + DestroyGrabLine 호출", Duration = 3})
