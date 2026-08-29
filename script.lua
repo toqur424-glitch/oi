@@ -128,7 +128,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - BodyPosition(math.huge) 초고속 + 낙하 방지 + DestroyGrabLine 호출
+-- [KICK 탭] - BodyPosition(math.huge) 초고속 + 낙하 방지 + 600Hz 원격 호출
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -139,7 +139,7 @@ local kickCounter = 0
 local renderSteppedConn = nil   -- 가장 빠른 렌더 전 이벤트
 local heartbeatConn = nil       -- 물리 이전
 local steppedConn = nil         -- 물리 이후
-local remoteThread = nil        -- 네트워크 소유권 요청 (400Hz)
+local remoteThread = nil        -- 네트워크 소유권 요청 (600Hz)
 local respawnConn = nil         -- 리스폰 감지
 
 -- 현재 몸통에 부착된 BodyPosition
@@ -281,9 +281,9 @@ local function startKickLoop()
         updateBodyLock()
     end)
     
-    -- 4. 네트워크 소유권 + DestroyGrabLine 번갈아 호출 (400Hz)
+    -- 4. 네트워크 소유권 + DestroyGrabLine 600Hz, 패턴: SetOwner 1, Destroy 3 반복
     remoteThread = task.spawn(function()
-        local interval = 0.0025
+        local interval = 0.0016667  -- 600Hz
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -300,9 +300,9 @@ local function startKickLoop()
             
             if not (myChar and myHRP and torso) then continue end
             
-            -- 번갈아 호출: SetNetworkOwner 1회, DestroyGrabLine 2회 비율
+            -- 패턴: 4번 중 1번은 SetNetworkOwner, 3번은 DestroyGrabLine
             kickCounter = kickCounter + 1
-            if kickCounter % 3 == 1 then
+            if kickCounter % 4 == 1 then
                 pcall(function()
                     SetNetworkOwner:FireServer(torso, CFrame.lookAt(myHRP.Position, torso.Position))
                 end)
@@ -521,4 +521,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "초고속 BodyPosition(math.huge) + DestroyGrabLine 호출", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "초고속 BodyPosition(math.huge) + 600Hz 원격 호출", Duration = 3})
