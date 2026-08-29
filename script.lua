@@ -126,7 +126,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (Heartbeat 없음, Align+Humanoid 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (머리 위 20 고정, math.huge)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -163,6 +163,15 @@ KickTab:CreateInput({
         Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
 })
+
+-- 목표 위치: 플레이어 머리 위 20
+local function getTargetPosition()
+    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+    if myHRP then
+        return myHRP.Position + Vector3.new(0, 20, 0)
+    end
+    return Vector3.new(0, 20, 0)
+end
 
 local function setupAlignForTarget()
     if not selectedKickPlayer then return end
@@ -221,21 +230,29 @@ local function startKickLoop()
     kickLoopRunning = true
     kickCounter = 0
 
-    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 재고정
+    -- 리스폰 감지: 새 캐릭터 생성 시 즉시 재고정 + 머리 위로 이동
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             task.wait(0.1)
             setupAlignForTarget()
             local tHRP = newChar:FindFirstChild("HumanoidRootPart")
-            if tHRP and plr.Character then
+            if tHRP then
                 pcall(function()
-                    plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                    tHRP.CFrame = CFrame.new(getTargetPosition())
                 end)
             end
         end)
     end
+
+    -- 시작 시 상대를 머리 위로 이동
+    local tChar = selectedKickPlayer.Character
+    if tChar and tChar:FindFirstChild("HumanoidRootPart") then
+        pcall(function()
+            tChar.HumanoidRootPart.CFrame = CFrame.new(getTargetPosition())
+        end)
+    end
     
-    -- Stepped: AlignPosition 위치 업데이트 + 속도 제거 (물리 직전)
+    -- Stepped: AlignPosition 목표 위치를 머리 위 20으로 갱신 + 속도 제거
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -243,16 +260,16 @@ local function startKickLoop()
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
         
-        -- Align 목표 위치를 현재 위치로 계속 갱신 (이동하려는 힘을 상쇄)
+        -- Align 목표 위치를 머리 위 20으로 계속 갱신
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align:IsA("AlignPosition") then
             local att1 = align.Attachment1
             if att1 then
-                att1.CFrame = tHRP.CFrame
+                att1.WorldPosition = getTargetPosition()
             end
         end
         
-        -- 속도 강제 0
+        -- 속도 강제 0 (Align과 함께 물리 간섭 제거)
         pcall(function()
             tHRP.AssemblyLinearVelocity = Vector3.zero
             tHRP.AssemblyAngularVelocity = Vector3.zero
@@ -288,14 +305,11 @@ local function startKickLoop()
                 tHum.AutoRotate = false
             end)
             
-            -- 거리 30 이상이면 자신이 대상에게 텔레포트
-            local dist = (tHRP.Position - myHRP.Position).Magnitude
-            if dist > 30 then
+            -- 거리 체크: 상대가 머리 위에서 멀어지면 자신이 따라가기 (필요시)
+            local dist = (tHRP.Position - getTargetPosition()).Magnitude
+            if dist > 10 then
                 pcall(function()
-                    myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                end)
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    myChar:PivotTo(CFrame.new(getTargetPosition()) * CFrame.new(0, -20, 0))
                 end)
             end
             
@@ -347,7 +361,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (400Hz, Heartbeat 없음, Align+Humanoid 고정)",
+    Name = "블롭맨 오너 킥 실행 (머리 위 20 고정, math.huge, 400Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -527,4 +541,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, Heartbeat 없음, Align+Humanoid 고정 (15,16 강제 제거)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "머리 위 20 고정 (math.huge), 400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회", Duration = 3})
