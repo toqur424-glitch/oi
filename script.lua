@@ -116,7 +116,7 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] Tool 전용 AlignOrientation/BodyPosition (매 프레임 생성/파괴) + 네트워크 교차
+-- [수정된 함수] 매 프레임 250회 셋오너/디트로이트 호출 + 직접 고정 + Tool 제약
 function loopPlayerBlobF4()
     local initialized = false
     local lastBPTool = nil
@@ -158,7 +158,7 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        -- 셋오너 1번 + 디트로이트 2번 교차
+                        -- 셋오너 1번 + 디트로이트 2번 교차 (일회성 호출)
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
@@ -174,7 +174,7 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        -- 셋오너 1번 + 디트로이트 2번 교차
+                        -- 셋오너 1번 + 디트로이트 2번 교차 (일회성 호출)
                         rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
                         rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
@@ -185,7 +185,7 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 최대 고정 (직접 CFrame + Tool 전용 물리 제약)
+            -- 매 프레임 최대 고정 (직접 CFrame + Tool 전용 물리 제약 + 250회 네트워크 호출)
             pcall(function()
                 -- [1] HRP 직접 고정 (CFrame + 속도 제로)
                 charHRP.CFrame = targetCF
@@ -239,10 +239,12 @@ function loopPlayerBlobF4()
                     end
                 end
 
-                -- [5] 네트워크 소유권 및 그래브라인 강화 (셋오너 1번 + 디트로이트 2번 교차)
-                rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
-                rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                -- [5] 매 프레임마다 250회 네트워크 호출 (셋오너 1번 + 디트로이트 2번)
+                for _ = 1, 250 do
+                    rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                    rs.GrabEvents.DestroyGrabLine:FireServer(charHRP)
+                end
             end)
         end
         RunService.RenderStepped:Wait()
