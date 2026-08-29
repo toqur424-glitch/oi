@@ -44,23 +44,21 @@ local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local SettingsTab = Window:CreateTab("Settings", nil)
 -- SettingsTab:CreateButton({Name = "재설정", Callback = function() end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "빈 스크립트 준비됨 - 안티그랩을 구현하세요", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩이 포함된 버전입니다.", Duration = 3})
 
 --=============================================
--- [안티 그랩 구현 (핑 최적화)]
+-- [안티 그랩 구현 (즉시 탈출 + 7스터드 점프)]
 --=============================================
 local CharacterEvents = rs:WaitForChild("CharacterEvents")
 local GrabEvents = rs:WaitForChild("GrabEvents")
 local StruggleEvent = CharacterEvents:WaitForChild("Struggle")
 local RagdollRemote = CharacterEvents:WaitForChild("RagdollRemote")
-local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
-local DestroyGrabLine = GrabEvents:WaitForChild("DestroyGrabLine")
 
 _G.AntiGrab = false
 local antiGrabConnections = {}
 local antiGrabCharAddedConn = nil
-local isEscaping = false
 local lastPartOwnerTime = 0
+local isEscaping = false
 
 local function getCharacterParts()
     local char = plr.Character
@@ -75,30 +73,36 @@ end
 local function escapeGrab(char, hrp, hum)
     if not char or not hrp or not hum then return end
     task.spawn(function()
+        -- 1. 즉시 위로 튀는 힘 부여 (약 7스터드 높이)
+        local bv = Instance.new("BodyVelocity")
+        bv.Velocity = Vector3.new(0, 52, 0)  -- 52 스터드/초 → 약 7스터드 높이
+        bv.MaxForce = Vector3.new(0, math.huge, 0)
+        bv.Parent = hrp
+        task.delay(0.15, function()
+            if bv.Parent then bv:Destroy() end
+        end)
+
+        -- 2. 빠르게 Struggle & Ragdoll 발사 (0.05초 간격)
         local startTime = tick()
-        local maxDuration = 3
+        local maxDuration = 1.5 -- 최대 1.5초 동안 시도
         while _G.AntiGrab and char.Parent and plr.Character == char and (tick() - startTime) < maxDuration do
             pcall(function()
                 StruggleEvent:FireServer(plr)
                 RagdollRemote:FireServer(hrp, 0)
             end)
-            hrp.Anchored = true
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            local moveDir = hum.MoveDirection
-            if moveDir.Magnitude > 0 then
-                hrp.CFrame = hrp.CFrame + moveDir * 0.43
-            end
-            task.wait(0.15)
+            task.wait(0.05)
         end
-        if hrp then
+
+        -- 3. 마무리 정리
+        if hrp and hrp.Parent then
             hrp.Anchored = false
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         end
     end)
 end
 
 local function onPartOwnerAdded(child)
-    if child.Name == "PartOwner" and _G.AntiGrab and (tick() - lastPartOwnerTime) > 0.5 then
+    if child.Name == "PartOwner" and _G.AntiGrab and (tick() - lastPartOwnerTime) > 0.3 then
         lastPartOwnerTime = tick()
         local char, hrp, hum = getCharacterParts()
         if char and hrp and hum then
@@ -114,7 +118,7 @@ local function onIsHeldChanged(value)
         if char and hrp and hum then
             escapeGrab(char, hrp, hum)
         end
-        task.delay(0.5, function() isEscaping = false end)
+        task.delay(0.4, function() isEscaping = false end)
     else
         local char, hrp = getCharacterParts()
         if char and hrp then
@@ -129,13 +133,13 @@ local function onCharacterAdded(char)
     local hrp = char:WaitForChild("HumanoidRootPart", 5)
     local hum = char:WaitForChild("Humanoid", 5)
     local isHeld = plr:FindFirstChild("IsHeld")
-    if not isHeld then
-        isHeld = plr:WaitForChild("IsHeld", 5)
-    end
+    if not isHeld then isHeld = plr:WaitForChild("IsHeld", 5) end
+
     for _, conn in ipairs(antiGrabConnections) do
         conn:Disconnect()
     end
     table.clear(antiGrabConnections)
+
     if _G.AntiGrab then
         table.insert(antiGrabConnections, head.ChildAdded:Connect(onPartOwnerAdded))
         table.insert(antiGrabConnections, isHeld.Changed:Connect(onIsHeldChanged))
@@ -146,26 +150,20 @@ local function toggleAntiGrab(value)
     _G.AntiGrab = value
     if value then
         local char = plr.Character
-        if char then
-            onCharacterAdded(char)
-        end
+        if char then onCharacterAdded(char) end
         if not antiGrabCharAddedConn then
             antiGrabCharAddedConn = plr.CharacterAdded:Connect(onCharacterAdded)
         end
-        Rayfield:Notify({Title = "안티 그랩", Content = "활성화됨 (핀 최적화)", Duration = 2})
+        Rayfield:Notify({Title = "안티 그랩", Content = "활성화됨 (즉시 탈출 + 7스터드 점프)", Duration = 2})
     else
-        for _, conn in ipairs(antiGrabConnections) do
-            conn:Disconnect()
-        end
+        for _, conn in ipairs(antiGrabConnections) do conn:Disconnect() end
         table.clear(antiGrabConnections)
         if antiGrabCharAddedConn then
             antiGrabCharAddedConn:Disconnect()
             antiGrabCharAddedConn = nil
         end
         local char, hrp = getCharacterParts()
-        if char and hrp then
-            hrp.Anchored = false
-        end
+        if char and hrp then hrp.Anchored = false end
         Rayfield:Notify({Title = "안티 그랩", Content = "비활성화됨", Duration = 2})
     end
 end
