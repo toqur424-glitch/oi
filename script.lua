@@ -126,7 +126,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 상대 몸통(Torso)을 y=20에 고정하고 킥
+-- [KICK 탭] - 상대의 여러 부위를 y=20에 완전 고정
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -139,6 +139,8 @@ local steppedConn = nil
 local remoteThread = nil
 -- 리스폰 감지
 local respawnConn = nil
+-- 고정된 파트들의 AlignPosition들을 저장
+local activeAligns = {}
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -164,58 +166,95 @@ KickTab:CreateInput({
     end
 })
 
--- 고정할 몸통 부품 반환 (R6: Torso, R15: UpperTorso, 없으면 HumanoidRootPart)
-local function getTargetPart(character)
-    if not character then return nil end
-    return character:FindFirstChild("Torso") 
-        or character:FindFirstChild("UpperTorso") 
-        or character:FindFirstChild("HumanoidRootPart")
-end
+-- 고정할 부품 이름 목록 (존재하는 것만 사용)
+local FIXED_PART_NAMES = {
+    "Torso",
+    "UpperTorso",
+    "LowerTorso",
+    "HumanoidRootPart",
+    "Pelvis",
+    "SoundPart"
+}
 
--- 목표 위치: 월드 좌표 y=20, x/z는 몸통의 현재 위치 유지
+-- 목표 위치: 월드 좌표 y=20, x/z는 첫 번째 고정 부품의 현재 위치 유지
 local function getTargetPosition()
     if not selectedKickPlayer then return Vector3.new(0, 20, 0) end
     local tChar = selectedKickPlayer.Character
-    local targetPart = getTargetPart(tChar)
-    if targetPart then
-        return Vector3.new(targetPart.Position.X, 20, targetPart.Position.Z)
+    if not tChar then return Vector3.new(0, 20, 0) end
+    -- 우선순위로 HRP, Torso, UpperTorso 중 하나를 기준으로 x,z 유지
+    local refPart = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
+    if refPart then
+        return Vector3.new(refPart.Position.X, 20, refPart.Position.Z)
     end
     return Vector3.new(0, 20, 0)
 end
 
+local function clearAlignsFromTarget()
+    for _, data in pairs(activeAligns) do
+        pcall(function()
+            if data.alignPos and data.alignPos.Parent then
+                data.alignPos:Destroy()
+            end
+            if data.att0 and data.att0.Parent then
+                data.att0:Destroy()
+            end
+            if data.att1 and data.att1.Parent then
+                data.att1:Destroy()
+            end
+        end)
+    end
+    activeAligns = {}
+end
+
 local function setupAlignForTarget()
+    clearAlignsFromTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
-    local targetPart = getTargetPart(tChar)  -- 몸통
-    if not targetPart then return end
     
-    -- 앵커 해제
-    targetPart.Anchored = false
+    local targetPosition = getTargetPosition()
     
-    -- 기존 Align 제거
-    for _, v in pairs(targetPart:GetChildren()) do
-        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
-            v:Destroy()
+    for _, partName in ipairs(FIXED_PART_NAMES) do
+        local part = tChar:FindFirstChild(partName)
+        if part and part:IsA("BasePart") then
+            part.Anchored = false
+            
+            -- 기존 Align 제거
+            for _, v in pairs(part:GetChildren()) do
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                    v:Destroy()
+                end
+            end
+            
+            -- Attachment0 (파트에 부착)
+            local att0 = Instance.new("Attachment", part)
+            att0.Name = "KickAtt0_" .. partName
+            
+            -- Attachment1 (월드에 부착)
+            local att1 = Instance.new("Attachment", workspace.Terrain)
+            att1.Name = "KickAtt1_" .. partName
+            att1.WorldPosition = targetPosition
+            
+            -- AlignPosition (무한대 힘)
+            local alignPos = Instance.new("AlignPosition")
+            alignPos.Name = "KickAlign_" .. partName
+            alignPos.Attachment0 = att0
+            alignPos.Attachment1 = att1
+            alignPos.MaxForce = math.huge
+            alignPos.MaxVelocity = math.huge
+            alignPos.Responsiveness = math.huge
+            alignPos.RigidityEnabled = true
+            alignPos.Parent = part
+            
+            -- 저장
+            table.insert(activeAligns, {
+                alignPos = alignPos,
+                att0 = att0,
+                att1 = att1,
+                part = part
+            })
         end
     end
-    
-    -- AlignPosition (위치 고정, math.huge = 무한대 힘)
-    local att0 = Instance.new("Attachment", targetPart)
-    att0.Name = "KickAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
-    att1.Name = "KickAtt1"
-    att1.WorldPosition = getTargetPosition()
-    
-    local alignPos = Instance.new("AlignPosition")
-    alignPos.Name = "KickAlign"
-    alignPos.Attachment0 = att0
-    alignPos.Attachment1 = att1
-    alignPos.MaxForce = math.huge
-    alignPos.MaxVelocity = math.huge  -- 엄청 빠른 이동 속도
-    alignPos.Responsiveness = math.huge
-    alignPos.RigidityEnabled = true
-    alignPos.Parent = targetPart
 end
 
 local function startKickLoop()
@@ -231,45 +270,41 @@ local function startKickLoop()
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             task.wait(0.1)
             setupAlignForTarget()
-            local targetPart = getTargetPart(newChar)
-            if targetPart then
+            -- 시작 시 각 파트를 목표 위치로 즉시 이동
+            for _, data in pairs(activeAligns) do
                 pcall(function()
-                    targetPart.CFrame = CFrame.new(getTargetPosition())
+                    data.part.CFrame = CFrame.new(getTargetPosition())
                 end)
             end
         end)
     end
 
-    -- 시작 시: 몸통을 y=20으로 즉시 이동 + 고정
+    -- 시작 시: 고정 부품을 y=20으로 즉시 이동 + 고정
     local tChar = selectedKickPlayer.Character
-    local targetPart = getTargetPart(tChar)
-    if targetPart then
+    if tChar then
         setupAlignForTarget()
-        pcall(function()
-            targetPart.CFrame = CFrame.new(getTargetPosition())
-        end)
+        for _, data in pairs(activeAligns) do
+            pcall(function()
+                data.part.CFrame = CFrame.new(getTargetPosition())
+            end)
+        end
     end
     
     -- Stepped: 매 프레임 직접 CFrame 강제 + Align 목표 위치 갱신 (올리는 속도 최상)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
-        local tChar = selectedKickPlayer.Character
-        local targetPart = getTargetPart(tChar)
-        if not targetPart then return end
-        
-        -- 직접 CFrame을 목표 위치로 설정 (즉시 이동)
-        pcall(function()
-            targetPart.CFrame = CFrame.new(getTargetPosition())
-        end)
-        
-        -- Align 목표 위치도 갱신 (연속적인 무한대 힘 유지)
-        local align = targetPart:FindFirstChild("KickAlign")
-        if align and align:IsA("AlignPosition") then
-            local att1 = align.Attachment1
-            if att1 then
-                att1.WorldPosition = getTargetPosition()
-            end
+        local targetPosition = getTargetPosition()
+        for _, data in pairs(activeAligns) do
+            pcall(function()
+                -- 직접 CFrame을 목표 위치로 설정 (즉시 이동)
+                data.part.CFrame = CFrame.new(targetPosition)
+                
+                -- Align 목표 위치도 갱신 (연속적인 무한대 힘 유지)
+                if data.att1 then
+                    data.att1.WorldPosition = targetPosition
+                end
+            end)
         end
     end)
     
@@ -287,21 +322,23 @@ local function startKickLoop()
             if not selectedKickPlayer then continue end
             
             local tChar = selectedKickPlayer.Character
-            local targetPart = getTargetPart(tChar)
             local myChar = plr.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             
-            if not (myChar and myHRP and targetPart) then continue end
+            if not (myChar and myHRP and tChar) then continue end
             
-            kickCounter = kickCounter + 1
-            if kickCounter % 3 == 1 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
-                end)
-            else
-                pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
-                end)
+            -- 각 고정 파트에 대해 네트워크 소유권 설정
+            for _, data in pairs(activeAligns) do
+                kickCounter = kickCounter + 1
+                if kickCounter % 3 == 1 then
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(data.part, CFrame.lookAt(myHRP.Position, data.part.Position))
+                    end)
+                else
+                    pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(data.part)
+                    end)
+                end
             end
         end
     end)
@@ -321,20 +358,11 @@ local function stopKickLoop()
         respawnConn:Disconnect()
         respawnConn = nil
     end
-    if selectedKickPlayer and selectedKickPlayer.Character then
-        local targetPart = getTargetPart(selectedKickPlayer.Character)
-        if targetPart then
-            for _, v in pairs(targetPart:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
-                    v:Destroy()
-                end
-            end
-        end
-    end
+    clearAlignsFromTarget()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (몸통 고정, y=20, 초고속)",
+    Name = "블롭맨 오너 킥 (전신 다중 고정, y=20, 초고속)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -514,4 +542,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "상대 몸통 y=20 초고속 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "상대 전신 다중 고정, y=20 초고속", Duration = 3})
