@@ -168,7 +168,7 @@ KickTab:CreateInput({
 local function getTargetPosition()
     local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if myHRP then
-        return myHRP.Position + Vector3.new(0, 20, 0)
+        return myHRP.Position + Vector3.new(0, 20, 0)  -- 👈 내 머리 위 20
     end
     return Vector3.new(0, 20, 0)
 end
@@ -177,7 +177,7 @@ local function setupAlignForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
-    local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+    local tHRP = tChar:FindFirstChild("HumanoidRootPart")  -- 👈 상대의 HRP
     if not tHRP then return end
     
     -- 기존 Align 제거
@@ -197,7 +197,7 @@ local function setupAlignForTarget()
     alignPos.Name = "KickAlign"
     alignPos.Attachment0 = att0
     alignPos.Attachment1 = att1
-    alignPos.MaxForce = math.huge        -- 👈 상대 몸에 무한대 힘 적용
+    alignPos.MaxForce = math.huge        -- 👈 무한대 힘
     alignPos.MaxVelocity = math.huge
     alignPos.Responsiveness = math.huge
     alignPos.RigidityEnabled = true
@@ -212,7 +212,7 @@ local function setupAlignForTarget()
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
 
-    -- Humanoid 관련 코드 전부 제거됨
+    -- Humanoid 관련 코드는 완전히 제거됨
 end
 
 local function startKickLoop()
@@ -267,7 +267,7 @@ local function startKickLoop()
         if align and align:IsA("AlignPosition") then
             local att1 = align.Attachment1
             if att1 then
-                att1.WorldPosition = getTargetPosition()
+                att1.WorldPosition = getTargetPosition()  -- 👈 계속 내 머리 위 20으로 유지
             end
         end
         
@@ -346,7 +346,6 @@ local function stopKickLoop()
                 end
             end
         end
-        -- Humanoid 복구 코드 없음 (원래 값으로 되돌릴 필요 없음)
     end
 end
 
