@@ -117,7 +117,7 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] 25 스터드 반경 + BodyPosition(math.huge) + HRP/Torso 동시 고정 + 자동 복귀
+-- [수정된 함수] 250Hz + BodyPosition + AlignOrientation + Tool 고정
 function loopPlayerBlobF4()
     local initialized = false
     
@@ -137,90 +137,118 @@ function loopPlayerBlobF4()
         local charTorso = player.Character:FindFirstChild("Torso") or player.Character:FindFirstChild("UpperTorso")
 
         if myHRP and charHRP and charHUM then
-            -- 목표 위치: 내 머리 위 20
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 25 스터드 이상 벗어났거나, 아직 초기화 전이면 셋오너 킥 재실행
-            if (currentDist > 25 or not initialized) and not recoveringTargets[name] then
+            -- 범위 이탈 시 추적/룹티피 (기존 로직 유지)
+            if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true
                 
                 task.spawn(function()
-                    local originalMyCF = myHRP.CFrame
-                    
-                    -- 1. 상대를 내 머리 위로 순간이동
+                    local originalCF = myHRP.CFrame
                     pcall(function()
-                        charHRP.CFrame = originalMyCF * CFrame.new(0, 20, 0)
-                        if charTorso then charTorso.CFrame = originalMyCF * CFrame.new(0, 20, 0) end
+                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
                     end)
+                    task.wait(0.15)
                     
-                    -- 2. 셋오너 킥 연속 발사 (250Hz)
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 4 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
-                    
                     task.wait(0.05)
                     
-                    -- 3. 다시 끌어오기
                     pcall(function()
-                        charHRP.CFrame = originalMyCF * CFrame.new(0, 20, 0)
-                        if charTorso then charTorso.CFrame = originalMyCF * CFrame.new(0, 20, 0) end
+                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                        if charTorso then charTorso.CFrame = originalCF * CFrame.new(0, 20, 0) end
+                        myHRP.CFrame = originalCF
+                    end)
+                    task.wait(0.1)
+                    
+                    pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
                         for i = 1, 4 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
                     
-                    task.wait(0.1)
-                    
-                    -- 4. 최종적으로 목표 위치에 고정
-                    pcall(function()
-                        charHRP.CFrame = targetCF
-                        if charTorso then charTorso.CFrame = targetCF end
-                    end)
-                    
+                    task.wait(0.3)
                     recoveringTargets[name] = nil
                 end)
             end
             
-            -- 매 프레임 강제 고정 (BodyPosition + CFrame + 물리 제어)
+            -- 매 프레임 최대 고정 (BodyPosition + AlignOrientation + Tool 고정)
             pcall(function()
-                -- CFrame 직접 설정
-                charHRP.CFrame = targetCF
-                charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHRP.AssemblyAngularVelocity = Vector3.zero
-                
-                if charTorso then
-                    charTorso.CFrame = targetCF
-                    charTorso.AssemblyLinearVelocity = Vector3.zero
-                    charTorso.AssemblyAngularVelocity = Vector3.zero
-                end
-                
-                -- Humanoid 강제 물리 상태
-                charHUM.PlatformStand = true
-                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                
-                -- BodyPosition (HRP) – 무한 힘으로 고정
+                -- [1] HRP에 BodyPosition 및 AlignOrientation 설정
                 local bp = charHRP:FindFirstChild("BodyPosition") or Instance.new("BodyPosition", charHRP)
                 bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                 bp.Position = targetCF.Position
                 bp.D = 1000
                 bp.P = 1000
-                
-                -- BodyPosition (Torso) – 무한 힘으로 고정
+                bp.Enabled = true
+
+                local ao = charHRP:FindFirstChild("AlignOrientation") or Instance.new("AlignOrientation", charHRP)
+                ao.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                ao.Orientation = targetCF
+                ao.Responsiveness = 1000
+                ao.RigidityEnabled = true   -- ✅ 강성 고정 활성화
+                ao.Enabled = true
+
+                -- [2] Torso에도 동일하게 적용
                 if charTorso then
                     local bp2 = charTorso:FindFirstChild("BodyPosition") or Instance.new("BodyPosition", charTorso)
                     bp2.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     bp2.Position = targetCF.Position
                     bp2.D = 1000
                     bp2.P = 1000
+                    bp2.Enabled = true
+
+                    local ao2 = charTorso:FindFirstChild("AlignOrientation") or Instance.new("AlignOrientation", charTorso)
+                    ao2.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    ao2.Orientation = targetCF
+                    ao2.Responsiveness = 1000
+                    ao2.RigidityEnabled = true
+                    ao2.Enabled = true
                 end
-                
-                -- 셋오너 킥 250Hz 유지
+
+                -- [3] 타겟이 들고 있는 Tool(무기)도 고정
+                for _, tool in ipairs(player.Character:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+                        if handle then
+                            local bpTool = handle:FindFirstChild("BodyPosition") or Instance.new("BodyPosition", handle)
+                            bpTool.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                            bpTool.Position = targetCF.Position
+                            bpTool.D = 1000
+                            bpTool.P = 1000
+                            bpTool.Enabled = true
+                            
+                            -- 툴도 같은 위치로 강제 이동
+                            handle.CFrame = targetCF
+                            handle.AssemblyLinearVelocity = Vector3.zero
+                            handle.AssemblyAngularVelocity = Vector3.zero
+                        end
+                    end
+                end
+
+                -- [4] 직접 CFrame 강제 설정 (HRP + Torso)
+                charHRP.CFrame = targetCF
+                charHRP.AssemblyLinearVelocity = Vector3.zero
+                charHRP.AssemblyAngularVelocity = Vector3.zero
+
+                if charTorso then
+                    charTorso.CFrame = targetCF
+                    charTorso.AssemblyLinearVelocity = Vector3.zero
+                    charTorso.AssemblyAngularVelocity = Vector3.zero
+                end
+
+                -- [5] Humanoid 상태 강제
+                charHUM.PlatformStand = true
+                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+
+                -- [6] 네트워크 소유권 및 그래브라인 강화
                 for i = 1, 4 do
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 end
@@ -233,7 +261,7 @@ function loopPlayerBlobF4()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (25스터드 자동 복귀)",
+    Name = "블롭맨 오너 킥 실행 (범위 이탈 자동 추적)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -412,4 +440,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "25스터드 자동 복귀 + BodyPosition 강화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "무한 룹티피 버그 수정 및 Y=20 고정 완료", Duration = 3})
