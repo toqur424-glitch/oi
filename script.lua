@@ -211,15 +211,8 @@ local function setupAlignForTarget()
     alignRot.Responsiveness = math.huge
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
-    
-    -- Humanoid 무력화
-    local tHum = tChar:FindFirstChildOfClass("Humanoid")
-    if tHum then
-        tHum.WalkSpeed = 0
-        tHum.JumpPower = 0
-        tHum.AutoRotate = false
-        tHum:ChangeState(Enum.HumanoidStateType.Physics)
-    end
+
+    -- Humanoid 관련 코드 전부 제거됨
 end
 
 local function startKickLoop()
@@ -269,7 +262,7 @@ local function startKickLoop()
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
         
-        -- Align 목표 위치를 머리 위 20으로 계속 갱신 (상대가 25 이내에 있으면 계속 유지)
+        -- Align 목표 위치를 머리 위 20으로 계속 갱신
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align:IsA("AlignPosition") then
             local att1 = align.Attachment1
@@ -300,19 +293,10 @@ local function startKickLoop()
             
             local tChar = selectedKickPlayer.Character
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-            local tHum = tChar and tChar:FindFirstChild("Humanoid")
             local myChar = plr.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             
-            if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then continue end
-            
-            -- Humanoid 상태 강제 유지
-            pcall(function()
-                tHum:ChangeState(Enum.HumanoidStateType.Physics)
-                tHum.WalkSpeed = 0
-                tHum.JumpPower = 0
-                tHum.AutoRotate = false
-            end)
+            if not (myChar and myHRP and tHRP) then continue end
             
             -- 거리 체크:
             local dist = (tHRP.Position - myHRP.Position).Magnitude
@@ -323,8 +307,6 @@ local function startKickLoop()
                     myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 0, 4)) -- 상대 바로 앞으로
                 end)
             end
-            
-            -- 25 이내인 경우는 Align이 알아서 내 머리 위 20으로 계속 당김 (유지)
             
             -- SetNetworkOwner 1회, DestroyGrabLine 2회 (400Hz)
             kickCounter = kickCounter + 1
@@ -364,12 +346,7 @@ local function stopKickLoop()
                 end
             end
         end
-        local tHum = selectedKickPlayer.Character:FindFirstChild("Humanoid")
-        if tHum then
-            tHum.WalkSpeed = 16
-            tHum.JumpPower = 50
-            tHum.AutoRotate = true
-        end
+        -- Humanoid 복구 코드 없음 (원래 값으로 되돌릴 필요 없음)
     end
 end
 
