@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [탭 생성 - 원하는 대로 수정하세요]
+-- [탭 생성]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 -- GrabTab:CreateSection("=== 섹션 이름 ===")
@@ -44,15 +44,17 @@ local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local SettingsTab = Window:CreateTab("Settings", nil)
 -- SettingsTab:CreateButton({Name = "재설정", Callback = function() end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩이 포함된 버전입니다.", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 v2 포함 버전입니다.", Duration = 3})
 
 --=============================================
--- [안티 그랩 구현 (즉시 탈출 + 7스터드 점프)]
+-- [안티 그랩 v2 (강화 + 랜덤 텔레포트)]
 --=============================================
 local CharacterEvents = rs:WaitForChild("CharacterEvents")
 local GrabEvents = rs:WaitForChild("GrabEvents")
 local StruggleEvent = CharacterEvents:WaitForChild("Struggle")
 local RagdollRemote = CharacterEvents:WaitForChild("RagdollRemote")
+local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
+local DestroyGrabLine = GrabEvents:WaitForChild("DestroyGrabLine")
 
 _G.AntiGrab = false
 local antiGrabConnections = {}
@@ -70,33 +72,63 @@ local function getCharacterParts()
     return char, hrp, hum, head, isHeld
 end
 
+-- 랜덤 텔레포트 좌표 선택 (X, Y) -> (20, 30) 또는 (25, 70)
+local function getRandomTeleportCFrame()
+    local teleportPoints = {
+        CFrame.new(20, 30, 0),
+        CFrame.new(25, 70, 0)
+    }
+    return teleportPoints[math.random(1, #teleportPoints)]
+end
+
 local function escapeGrab(char, hrp, hum)
     if not char or not hrp or not hum then return end
     task.spawn(function()
-        -- 1. 즉시 위로 튀는 힘 부여 (약 7스터드 높이)
-        local bv = Instance.new("BodyVelocity")
-        bv.Velocity = Vector3.new(0, 52, 0)  -- 52 스터드/초 → 약 7스터드 높이
-        bv.MaxForce = Vector3.new(0, math.huge, 0)
-        bv.Parent = hrp
-        task.delay(0.15, function()
-            if bv.Parent then bv:Destroy() end
+        -- 1. 즉시 랜덤 위치로 텔레포트
+        local targetCF = getRandomTeleportCFrame()
+        hrp.CFrame = targetCF
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        
+        -- 2. 모든 파트 충돌 비활성화 (그랩 방지)
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+                part.CanQuery = false
+                part.Massless = false
+            end
+        end
+        
+        -- 3. 그랩 라인 강제 제거
+        pcall(function()
+            DestroyGrabLine:FireServer(hrp)
         end)
 
-        -- 2. 빠르게 Struggle & Ragdoll 발사 (0.05초 간격)
+        -- 4. 강력한 Struggle & Ragdoll 스팸 (0.03초 간격, 최대 2초)
         local startTime = tick()
-        local maxDuration = 1.5 -- 최대 1.5초 동안 시도
+        local maxDuration = 2.0
         while _G.AntiGrab and char.Parent and plr.Character == char and (tick() - startTime) < maxDuration do
             pcall(function()
                 StruggleEvent:FireServer(plr)
                 RagdollRemote:FireServer(hrp, 0)
+                -- 상대방 파트 소유권 탈취 시도 (그랩 해제 유도)
+                if hrp:FindFirstChild("PartOwner") then
+                    SetNetworkOwner:FireServer(hrp, hrp.CFrame)
+                end
             end)
-            task.wait(0.05)
+            task.wait(0.03)
         end
 
-        -- 3. 마무리 정리
+        -- 5. 마무리 정리
         if hrp and hrp.Parent then
             hrp.Anchored = false
-            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            -- 충돌 복원 (안전)
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                    part.CanQuery = true
+                end
+            end
         end
     end)
 end
@@ -154,7 +186,7 @@ local function toggleAntiGrab(value)
         if not antiGrabCharAddedConn then
             antiGrabCharAddedConn = plr.CharacterAdded:Connect(onCharacterAdded)
         end
-        Rayfield:Notify({Title = "안티 그랩", Content = "활성화됨 (즉시 탈출 + 7스터드 점프)", Duration = 2})
+        Rayfield:Notify({Title = "안티 그랩", Content = "활성화됨 (강화 + 랜덤 텔레포트)", Duration = 2})
     else
         for _, conn in ipairs(antiGrabConnections) do conn:Disconnect() end
         table.clear(antiGrabConnections)
