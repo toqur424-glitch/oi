@@ -62,15 +62,13 @@ local function startFKeyAttack(targetPlayer)
         if tgtHum then tgtHum.PlatformStand = true end
         
         local camCF = camera.CFrame
-        pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
+        tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20)
         
         for i = 1, 4 do
             if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
-                pcall(function()
-                    CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                    SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                    DestroyGrabLine:FireServer(tgtRoot)
-                end)
+                CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                DestroyGrabLine:FireServer(tgtRoot)
             end
         end
     end)
@@ -126,27 +124,25 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] 250Hz 네트워크 루프 + 직접 고정 + Tool 제약
+-- [수정된 함수] 250Hz 네트워크 루프 + 직접 고정 + Tool 제약 (pcall 제거)
 function loopPlayerBlobF4()
     local initialized = false
     local lastBPTool = nil
     local lastAOTool = nil
 
-    -- 250Hz 네트워크 루프 (셋오너 5회 + 디트로이트 3회 반복)
+    -- 250Hz 네트워크 루프 (셋오너 5회 + 디트로이트 3회 반복, pcall 없음)
     task.spawn(function()
         while blobLoopT4 and selectedKickPlayer and selectedKickPlayer.Character do
             local charHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             if charHRP and myHRP and CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
-                pcall(function()
-                    CreateGrabLine:FireServer(charHRP, CFrame.new())
-                    for _ = 1, 5 do
-                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    end
-                    for _ = 1, 3 do
-                        DestroyGrabLine:FireServer(charHRP)
-                    end
-                end)
+                CreateGrabLine:FireServer(charHRP, CFrame.new())
+                for _ = 1, 5 do
+                    SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                end
+                for _ = 1, 3 do
+                    DestroyGrabLine:FireServer(charHRP)
+                end
             end
             task.wait(0.004) -- 250Hz
         end
@@ -174,48 +170,40 @@ function loopPlayerBlobF4()
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 범위 이탈 시 추적/룹티피 (기존 로직 유지)
+            -- 범위 이탈 시 추적/룹티피 (기존 로직 유지, pcall 없음)
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true
                 
                 task.spawn(function()
                     local originalCF = myHRP.CFrame
-                    pcall(function()
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                    end)
+                    myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
                     task.wait(0.15)
                     
                     if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
-                        pcall(function()
-                            CreateGrabLine:FireServer(charHRP, CFrame.new())
-                            for _ = 1, 5 do
-                                SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            end
-                            for _ = 1, 3 do
-                                DestroyGrabLine:FireServer(charHRP)
-                            end
-                        end)
+                        CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        for _ = 1, 5 do
+                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        end
+                        for _ = 1, 3 do
+                            DestroyGrabLine:FireServer(charHRP)
+                        end
                     end
                     task.wait(0.05)
                     
-                    pcall(function()
-                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
-                        if charTorso then charTorso.CFrame = originalCF * CFrame.new(0, 20, 0) end
-                        myHRP.CFrame = originalCF
-                    end)
+                    charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
+                    if charTorso then charTorso.CFrame = originalCF * CFrame.new(0, 20, 0) end
+                    myHRP.CFrame = originalCF
                     task.wait(0.1)
                     
                     if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
-                        pcall(function()
-                            CreateGrabLine:FireServer(charHRP, CFrame.new())
-                            for _ = 1, 5 do
-                                SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            end
-                            for _ = 1, 3 do
-                                DestroyGrabLine:FireServer(charHRP)
-                            end
-                        end)
+                        CreateGrabLine:FireServer(charHRP, CFrame.new())
+                        for _ = 1, 5 do
+                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        end
+                        for _ = 1, 3 do
+                            DestroyGrabLine:FireServer(charHRP)
+                        end
                     end
                     
                     task.wait(0.3)
@@ -223,62 +211,58 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 최대 고정 (직접 CFrame + Tool 전용 물리 제약)
-            pcall(function()
-                -- [1] HRP 직접 고정 (CFrame + 속도 제로)
-                charHRP.CFrame = targetCF
-                charHRP.AssemblyLinearVelocity = Vector3.zero
-                charHRP.AssemblyAngularVelocity = Vector3.zero
+            -- 매 프레임 최대 고정 (직접 CFrame + Tool 전용 물리 제약, pcall 없음)
+            -- [1] HRP 직접 고정
+            charHRP.CFrame = targetCF
+            charHRP.AssemblyLinearVelocity = Vector3.zero
+            charHRP.AssemblyAngularVelocity = Vector3.zero
 
-                -- [2] Torso 직접 고정 (CFrame + 속도 제로)
-                if charTorso then
-                    charTorso.CFrame = targetCF
-                    charTorso.AssemblyLinearVelocity = Vector3.zero
-                    charTorso.AssemblyAngularVelocity = Vector3.zero
-                end
+            -- [2] Torso 직접 고정
+            if charTorso then
+                charTorso.CFrame = targetCF
+                charTorso.AssemblyLinearVelocity = Vector3.zero
+                charTorso.AssemblyAngularVelocity = Vector3.zero
+            end
 
-                -- [3] Humanoid 상태 강제
-                charHUM.PlatformStand = true
-                charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+            -- [3] Humanoid 상태 강제
+            charHUM.PlatformStand = true
+            charHUM:ChangeState(Enum.HumanoidStateType.Physics)
 
-                -- [4] Tool에만 BodyPosition & AlignOrientation 적용 (매 프레임 생성 후 파괴)
-                for _, tool in ipairs(player.Character:GetChildren()) do
-                    if tool:IsA("Tool") then
-                        local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
-                        if handle then
-                            -- 이전 프레임 제약 제거
-                            if lastBPTool then lastBPTool:Destroy() lastBPTool = nil end
-                            if lastAOTool then lastAOTool:Destroy() lastAOTool = nil end
+            -- [4] Tool에만 BodyPosition & AlignOrientation 적용 (매 프레임 생성 후 파괴)
+            for _, tool in ipairs(player.Character:GetChildren()) do
+                if tool:IsA("Tool") then
+                    local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+                    if handle then
+                        -- 이전 프레임 제약 제거
+                        if lastBPTool then lastBPTool:Destroy() lastBPTool = nil end
+                        if lastAOTool then lastAOTool:Destroy() lastAOTool = nil end
 
-                            -- 새 BodyPosition 생성
-                            local bpTool = Instance.new("BodyPosition", handle)
-                            bpTool.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                            bpTool.Position = targetCF.Position
-                            bpTool.D = 1000
-                            bpTool.P = 1000
-                            bpTool.Enabled = true
-                            lastBPTool = bpTool
+                        -- 새 BodyPosition 생성
+                        local bpTool = Instance.new("BodyPosition", handle)
+                        bpTool.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                        bpTool.Position = targetCF.Position
+                        bpTool.D = 1000
+                        bpTool.P = 1000
+                        bpTool.Enabled = true
+                        lastBPTool = bpTool
 
-                            -- 새 AlignOrientation 생성
-                            local aoTool = Instance.new("AlignOrientation", handle)
-                            aoTool.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                            aoTool.Orientation = targetCF
-                            aoTool.Responsiveness = 1000
-                            aoTool.RigidityEnabled = true
-                            aoTool.Enabled = true
-                            lastAOTool = aoTool
+                        -- 새 AlignOrientation 생성
+                        local aoTool = Instance.new("AlignOrientation", handle)
+                        aoTool.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                        aoTool.Orientation = targetCF
+                        aoTool.Responsiveness = 1000
+                        aoTool.RigidityEnabled = true
+                        aoTool.Enabled = true
+                        lastAOTool = aoTool
 
-                            -- Tool 자체도 직접 고정
-                            handle.CFrame = targetCF
-                            handle.AssemblyLinearVelocity = Vector3.zero
-                            handle.AssemblyAngularVelocity = Vector3.zero
-                        end
-                        break -- 첫 번째 툴만 처리
+                        -- Tool 자체도 직접 고정
+                        handle.CFrame = targetCF
+                        handle.AssemblyLinearVelocity = Vector3.zero
+                        handle.AssemblyAngularVelocity = Vector3.zero
                     end
+                    break -- 첫 번째 툴만 처리
                 end
-
-                -- [5] 네트워크 호출은 250Hz 루프에서 수행 (여기서는 없음)
-            end)
+            end
         end
         RunService.RenderStepped:Wait()
     end
@@ -298,7 +282,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합]
+-- [새로운 Pallet Ragdoll (Invis) 통합] (pcall 제거)
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
@@ -347,10 +331,8 @@ KickTab:CreateToggle({
                 if not soundPart then return end
 
                 if SetNetOwner2 and DestroyLine2 then
-                    pcall(function()
-                        SetNetOwner2:FireServer(soundPart, soundPart.CFrame)
-                        DestroyLine2:FireServer(soundPart)
-                    end)
+                    SetNetOwner2:FireServer(soundPart, soundPart.CFrame)
+                    DestroyLine2:FireServer(soundPart)
                 end
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
@@ -412,7 +394,7 @@ KickTab:CreateToggle({
                         end
                     end)
                 else
-                    pcall(function() DestroyToy:FireServer(child) end)
+                    DestroyToy:FireServer(child)
                 end
             end)
 
@@ -425,13 +407,11 @@ KickTab:CreateToggle({
                 if not h then return end
 
                 task.spawn(function()
-                    pcall(function()
-                        RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
-                            "PalletLightBrown",
-                            h.CFrame * CFrame.new(0, 10, 20),
-                            Vector3.zero
-                        )
-                    end)
+                    RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
+                        "PalletLightBrown",
+                        h.CFrame * CFrame.new(0, 10, 20),
+                        Vector3.zero
+                    )
                 end)
             end
 
@@ -447,14 +427,14 @@ KickTab:CreateToggle({
 
             local pallet = getgenv().PalletForRagdoll
             if pallet and pallet.Parent then
-                pcall(function() DestroyToy:FireServer(pallet) end)
+                DestroyToy:FireServer(pallet)
             end
 
             getgenv().PalletForRagdoll = nil
 
             local toysFolder = workspace:FindFirstChild(lpName .. "SpawnedInToys")
             if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
-                pcall(function() DestroyToy:FireServer(toysFolder.PalletForRagdoll) end)
+                DestroyToy:FireServer(toysFolder.PalletForRagdoll)
             end
         end
     end,
