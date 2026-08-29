@@ -127,7 +127,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아, 350Hz 정밀 타이머, 회전 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (1:1 번갈아, 400Hz 정밀 타이머)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -136,7 +136,7 @@ local kickCounter = 0
 
 -- Stepped: AlignPosition 갱신 (물리 직전, 보조)
 local steppedConn = nil
--- 리모트 호출 + Align 갱신: 정밀 타이머 (350Hz, 주 갱신)
+-- 리모트 호출 + Align 갱신: 정밀 타이머 (400Hz, 주 갱신)
 local remoteTask = nil
 -- 리스폰 감지
 local respawnConn = nil
@@ -240,8 +240,6 @@ local function startKickLoop()
                     local targetPos = savedKickPos and (savedKickPos.Position + Vector3.new(0, 15, 0)) or (myHRP2.Position + Vector3.new(0, 20, 0))
                     pcall(function()
                         hrp.CFrame = CFrame.new(targetPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
                     end)
                 end
             end
@@ -272,23 +270,14 @@ local function startKickLoop()
             align.Attachment1.WorldPosition = targetPos
         end
         
-        local rot = tHRP:FindFirstChild("KickRot")
-        if rot then
-            rot.CFrame = CFrame.Angles(0, 0, 0)
-        end
-        
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
-        local tHum = tChar:FindFirstChild("Humanoid")
-        if tHum then
-            tHum.PlatformStand = true
-            tHum:ChangeState(Enum.HumanoidStateType.Physics)
-        end
+        -- (회전 고정, 속도 제거, 플랫폼 스탠드 제거)
+        -- AlignOrientation은 MaxTorque = math.huge로 이미 고정됨
+        -- 다른 조작 없음
     end)
 
-    -- 2. 리모트 호출 + Align 갱신 (정밀 타이머, 350Hz, 주 갱신, 1:1 번갈아)
+    -- 2. 리모트 호출 + Align 갱신 (정밀 타이머, 400Hz, 주 갱신, 1:1 번갈아)
     remoteTask = task.spawn(function()
-        local interval = 0.002857 -- 350Hz
+        local interval = 0.0025 -- 400Hz (1/400)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -320,17 +309,7 @@ local function startKickLoop()
                 align.Attachment1.WorldPosition = targetPos
             end
             
-            local rot = tHRP:FindFirstChild("KickRot")
-            if rot then
-                rot.CFrame = CFrame.Angles(0, 0, 0)
-            end
-            
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-            if tHum then
-                tHum.PlatformStand = true
-                tHum:ChangeState(Enum.HumanoidStateType.Physics)
-            end
+            -- (회전 고정, 속도 제거, 플랫폼 스탠드 제거)
             
             if tHum and tHum.Health > 0 then
                 -- ★ 수정: KICK_RANGE(100) 이상이면 상대 위치로 룹텔포
@@ -346,8 +325,6 @@ local function startKickLoop()
                     pcall(function()
                         if savedKickPos then
                             tHRP.CFrame = savedKickPos * CFrame.new(0, 15, 0)
-                            tHRP.AssemblyLinearVelocity = Vector3.zero
-                            tHRP.AssemblyAngularVelocity = Vector3.zero
                         end
                     end)
                 end
@@ -396,7 +373,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (1:1 번갈아, 350Hz 정밀 타이머, 회전 고정)",
+    Name = "블롭맨 오너 킥 실행 (1:1 번갈아, 400Hz 정밀 타이머)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -576,4 +553,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아, 350Hz 정밀 타이머, 회전 고정, 범위 100", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "1:1 번갈아, 400Hz 정밀 타이머, Align 고정 (math.huge)", Duration = 3})
