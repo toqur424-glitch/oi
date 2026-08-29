@@ -124,27 +124,22 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] 250Hz 네트워크 루프 + 직접 고정 + Tool 제약 (pcall 제거)
+-- [수정된 함수] 300Hz 네트워크 루프 + Torso BodyPosition 고정
 function loopPlayerBlobF4()
     local initialized = false
-    local lastBPTool = nil
-    local lastAOTool = nil
+    local lastBPTorso = nil
 
-    -- 250Hz 네트워크 루프 (셋오너 5회 + 디트로이트 3회 반복, pcall 없음)
+    -- 300Hz 네트워크 루프 (셋오너 2회 + 디트로이트 1회)
     task.spawn(function()
         while blobLoopT4 and selectedKickPlayer and selectedKickPlayer.Character do
             local charHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-            if charHRP and myHRP and CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
-                CreateGrabLine:FireServer(charHRP, CFrame.new())
-                for _ = 1, 5 do
-                    SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                end
-                for _ = 1, 3 do
-                    DestroyGrabLine:FireServer(charHRP)
-                end
+            if charHRP and myHRP and SetNetworkOwner and DestroyGrabLine then
+                SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) -- 셋오너 2회
+                DestroyGrabLine:FireServer(charHRP) -- 디트로이트 1회
             end
-            task.wait(0.004) -- 250Hz
+            task.wait(1/300) -- 300Hz
         end
     end)
 
@@ -153,9 +148,8 @@ function loopPlayerBlobF4()
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
             initialized = false
-            -- 이전 툴 제약 정리
-            if lastBPTool then lastBPTool:Destroy() lastBPTool = nil end
-            if lastAOTool then lastAOTool:Destroy() lastAOTool = nil end
+            -- 이전 Torso 제약 정리
+            if lastBPTorso then lastBPTorso:Destroy() lastBPTorso = nil end
             RunService.RenderStepped:Wait()
             continue
         end
@@ -180,14 +174,10 @@ function loopPlayerBlobF4()
                     myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
                     task.wait(0.15)
                     
-                    if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
-                        CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for _ = 1, 5 do
-                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
-                        for _ = 1, 3 do
-                            DestroyGrabLine:FireServer(charHRP)
-                        end
+                    if SetNetworkOwner and DestroyGrabLine then
+                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        DestroyGrabLine:FireServer(charHRP)
                     end
                     task.wait(0.05)
                     
@@ -196,14 +186,10 @@ function loopPlayerBlobF4()
                     myHRP.CFrame = originalCF
                     task.wait(0.1)
                     
-                    if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
-                        CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for _ = 1, 5 do
-                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        end
-                        for _ = 1, 3 do
-                            DestroyGrabLine:FireServer(charHRP)
-                        end
+                    if SetNetworkOwner and DestroyGrabLine then
+                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                        DestroyGrabLine:FireServer(charHRP)
                     end
                     
                     task.wait(0.3)
@@ -211,14 +197,26 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 최대 고정 (직접 CFrame + Tool 전용 물리 제약, pcall 없음)
+            -- 매 프레임 최대 고정 (Torso BodyPosition + HRP CFrame)
             -- [1] HRP 직접 고정
             charHRP.CFrame = targetCF
             charHRP.AssemblyLinearVelocity = Vector3.zero
             charHRP.AssemblyAngularVelocity = Vector3.zero
 
-            -- [2] Torso 직접 고정
+            -- [2] Torso에 BodyPosition(math.huge) 적용 (있으면)
             if charTorso then
+                -- 이전 프레임 제약 제거
+                if lastBPTorso then lastBPTorso:Destroy() lastBPTorso = nil end
+                
+                local bpTorso = Instance.new("BodyPosition", charTorso)
+                bpTorso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bpTorso.Position = targetCF.Position
+                bpTorso.D = 1000
+                bpTorso.P = 1000
+                bpTorso.Enabled = true
+                lastBPTorso = bpTorso
+                
+                -- Torso 자체도 직접 고정 (추가 안정성)
                 charTorso.CFrame = targetCF
                 charTorso.AssemblyLinearVelocity = Vector3.zero
                 charTorso.AssemblyAngularVelocity = Vector3.zero
@@ -227,42 +225,6 @@ function loopPlayerBlobF4()
             -- [3] Humanoid 상태 강제
             charHUM.PlatformStand = true
             charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-
-            -- [4] Tool에만 BodyPosition & AlignOrientation 적용 (매 프레임 생성 후 파괴)
-            for _, tool in ipairs(player.Character:GetChildren()) do
-                if tool:IsA("Tool") then
-                    local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
-                    if handle then
-                        -- 이전 프레임 제약 제거
-                        if lastBPTool then lastBPTool:Destroy() lastBPTool = nil end
-                        if lastAOTool then lastAOTool:Destroy() lastAOTool = nil end
-
-                        -- 새 BodyPosition 생성
-                        local bpTool = Instance.new("BodyPosition", handle)
-                        bpTool.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                        bpTool.Position = targetCF.Position
-                        bpTool.D = 1000
-                        bpTool.P = 1000
-                        bpTool.Enabled = true
-                        lastBPTool = bpTool
-
-                        -- 새 AlignOrientation 생성
-                        local aoTool = Instance.new("AlignOrientation", handle)
-                        aoTool.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                        aoTool.Orientation = targetCF
-                        aoTool.Responsiveness = 1000
-                        aoTool.RigidityEnabled = true
-                        aoTool.Enabled = true
-                        lastAOTool = aoTool
-
-                        -- Tool 자체도 직접 고정
-                        handle.CFrame = targetCF
-                        handle.AssemblyLinearVelocity = Vector3.zero
-                        handle.AssemblyAngularVelocity = Vector3.zero
-                    end
-                    break -- 첫 번째 툴만 처리
-                end
-            end
         end
         RunService.RenderStepped:Wait()
     end
@@ -282,7 +244,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합] (pcall 제거)
+-- [새로운 Pallet Ragdoll (Invis) 통합]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
