@@ -17,12 +17,12 @@ local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
 --=============================================
--- [원격 이벤트 미리 가져오기 (안전)]
+-- [원격 이벤트 안전하게 가져오기]
 --=============================================
-local GrabEvents = rs:WaitForChild("GrabEvents")
-local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
-local DestroyGrabLine = GrabEvents:WaitForChild("DestroyGrabLine")
-local CreateGrabLine = GrabEvents:WaitForChild("CreateGrabLine")
+local GrabEvents = rs:FindFirstChild("GrabEvents")
+local SetNetworkOwner = GrabEvents and GrabEvents:FindFirstChild("SetNetworkOwner")
+local DestroyGrabLine = GrabEvents and GrabEvents:FindFirstChild("DestroyGrabLine")
+local CreateGrabLine = GrabEvents and GrabEvents:FindFirstChild("CreateGrabLine")
 
 --=============================================
 -- [UI 생성]
@@ -65,11 +65,13 @@ local function startFKeyAttack(targetPlayer)
         pcall(function() tgtRoot.CFrame = CFrame.new(camCF.Position + camCF.LookVector * 20) end)
         
         for i = 1, 4 do
-            pcall(function()
-                CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                DestroyGrabLine:FireServer(tgtRoot)
-            end)
+            if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
+                pcall(function()
+                    CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                    SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                    DestroyGrabLine:FireServer(tgtRoot)
+                end)
+            end
         end
     end)
 end
@@ -130,13 +132,14 @@ function loopPlayerBlobF4()
     local lastBPTool = nil
     local lastAOTool = nil
 
-    -- 250Hz 네트워크 루프 (셋오너 1번 + 디트로이트 1번 반복)
+    -- 250Hz 네트워크 루프 (CreateGrabLine → SetNetworkOwner → DestroyGrabLine 반복)
     task.spawn(function()
         while blobLoopT4 and selectedKickPlayer and selectedKickPlayer.Character do
             local charHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-            if charHRP and myHRP and SetNetworkOwner and DestroyGrabLine then
+            if charHRP and myHRP and CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
                 pcall(function()
+                    CreateGrabLine:FireServer(charHRP, CFrame.new())
                     SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                     DestroyGrabLine:FireServer(charHRP)
                 end)
@@ -179,11 +182,13 @@ function loopPlayerBlobF4()
                     end)
                     task.wait(0.15)
                     
-                    pcall(function()
-                        CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        DestroyGrabLine:FireServer(charHRP)
-                    end)
+                    if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
+                        pcall(function()
+                            CreateGrabLine:FireServer(charHRP, CFrame.new())
+                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            DestroyGrabLine:FireServer(charHRP)
+                        end)
+                    end
                     task.wait(0.05)
                     
                     pcall(function()
@@ -193,11 +198,13 @@ function loopPlayerBlobF4()
                     end)
                     task.wait(0.1)
                     
-                    pcall(function()
-                        CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                        DestroyGrabLine:FireServer(charHRP)
-                    end)
+                    if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
+                        pcall(function()
+                            CreateGrabLine:FireServer(charHRP, CFrame.new())
+                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            DestroyGrabLine:FireServer(charHRP)
+                        end)
+                    end
                     
                     task.wait(0.3)
                     recoveringTargets[name] = nil
@@ -289,8 +296,8 @@ KickTab:CreateToggle({
         local RS = game:GetService("ReplicatedStorage")
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
-        local SetNetOwner2 = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        local DestroyLine2 = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
+        local SetNetOwner2 = RS:FindFirstChild("GrabEvents") and RS.GrabEvents:FindFirstChild("SetNetworkOwner")
+        local DestroyLine2 = RS:FindFirstChild("GrabEvents") and RS.GrabEvents:FindFirstChild("DestroyGrabLine")
         local lpName = plr.Name
 
         local function clearAttackLoop()
@@ -327,10 +334,12 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                pcall(function()
-                    SetNetOwner2:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine2:FireServer(soundPart)
-                end)
+                if SetNetOwner2 and DestroyLine2 then
+                    pcall(function()
+                        SetNetOwner2:FireServer(soundPart, soundPart.CFrame)
+                        DestroyLine2:FireServer(soundPart)
+                    end)
+                end
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
