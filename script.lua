@@ -126,7 +126,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (상대 위치로 텔포, y 20 고정, math.huge)
+-- [KICK 탭] - 상대에게 텔레포트 후 킥, 25이내 유지 / 26이상 재텔레포트
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -244,20 +244,20 @@ local function startKickLoop()
         end)
     end
 
-    -- 시작 시 상대를 머리 위로 이동 + 공격자도 상대 위치로 텔레포트 (아까 방식)
+    -- 시작 시: 상대에게 텔레포트 후 상대를 내 머리 위 20으로 올림
     local tChar = selectedKickPlayer.Character
     local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
     local myChar = plr.Character
     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
     
     if tHRP and myHRP then
-        -- 1. 상대방을 내 머리 위 20으로 이동
+        -- 1. 공격자를 상대 위치로 텔레포트 (바로 앞)
+        pcall(function()
+            myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 0, 4))
+        end)
+        -- 2. 상대를 내 머리 위 20으로 이동
         pcall(function()
             tHRP.CFrame = CFrame.new(getTargetPosition())
-        end)
-        -- 2. 내가 상대방 위치로 텔레포트 (바로 앞에 붙기)
-        pcall(function()
-            myChar:PivotTo(tHRP.CFrame * CFrame.new(0, -20, 4))  -- y -20은 상대의 아래, 앞에 4
         end)
     end
     
@@ -269,7 +269,7 @@ local function startKickLoop()
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
         
-        -- Align 목표 위치를 머리 위 20으로 계속 갱신
+        -- Align 목표 위치를 머리 위 20으로 계속 갱신 (상대가 25 이내에 있으면 계속 유지)
         local align = tHRP:FindFirstChild("KickAlign")
         if align and align:IsA("AlignPosition") then
             local att1 = align.Attachment1
@@ -285,7 +285,7 @@ local function startKickLoop()
         end)
     end)
     
-    -- 리모트 호출 + Humanoid 상태 유지 (400Hz 스레드)
+    -- 리모트 호출 + 거리 기반 재텔레포트 (400Hz 스레드)
     remoteThread = task.spawn(function()
         local interval = 0.0025 -- 400Hz
         local nextTime = tick() + interval
@@ -314,13 +314,17 @@ local function startKickLoop()
                 tHum.AutoRotate = false
             end)
             
-            -- 거리 체크: 상대가 머리 위에서 멀어지면 공격자가 따라가기
-            local dist = (tHRP.Position - getTargetPosition()).Magnitude
-            if dist > 10 then
+            -- 거리 체크:
+            local dist = (tHRP.Position - myHRP.Position).Magnitude
+            
+            -- 상대가 26 스터드 이상 튀면 공격자가 상대에게 즉시 텔레포트
+            if dist > 26 then
                 pcall(function()
-                    myChar:PivotTo(CFrame.new(getTargetPosition()) * CFrame.new(0, -20, 4))
+                    myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 0, 4)) -- 상대 바로 앞으로
                 end)
             end
+            
+            -- 25 이내인 경우는 Align이 알아서 내 머리 위 20으로 계속 당김 (유지)
             
             -- SetNetworkOwner 1회, DestroyGrabLine 2회 (400Hz)
             kickCounter = kickCounter + 1
@@ -370,7 +374,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (상대 위치로 텔포, y 20 고정, math.huge, 400Hz)",
+    Name = "블롭맨 오너 킥 (상대에게 텔포 후 킥, 25이내 유지 / 26이상 재텔포)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -550,4 +554,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "상대 위치로 텔포, y 20 고정, math.huge, 400Hz", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "상대에게 텔포 후 킥, 25이내 유지 / 26이상 재텔포, y20 고정", Duration = 3})
