@@ -117,7 +117,7 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] 450Hz + BodyPosition + Struggle + Torso/HRP 동시 고정
+-- [수정된 함수] 250Hz + BodyPosition + Struggle + Torso/HRP 동시 고정
 function loopPlayerBlobF4()
     local initialized = false
     -- frameToggle 변수 제거 (항상 최대 빈도로 호출)
@@ -143,7 +143,7 @@ function loopPlayerBlobF4()
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local currentDist = (charHRP.Position - targetCF.Position).Magnitude
             
-            -- 범위 이탈 시 추적/룹티피 (기존 로직 유지, SetNetworkOwner 횟수 증가)
+            -- 범위 이탈 시 추적/룹티피 (기존 로직 유지, SetNetworkOwner 횟수 줄임)
             if (currentDist > 15 or not initialized) and not recoveringTargets[name] then
                 recoveringTargets[name] = true
                 initialized = true
@@ -157,8 +157,8 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        -- 450Hz 근접: 15번 연속 호출 (60fps 기준)
-                        for i = 1, 15 do
+                        -- 250Hz 근접: 4번 연속 호출 (60fps 기준)
+                        for i = 1, 4 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
@@ -173,7 +173,7 @@ function loopPlayerBlobF4()
                     
                     pcall(function()
                         rs.GrabEvents.CreateGrabLine:FireServer(charHRP, CFrame.new())
-                        for i = 1, 15 do
+                        for i = 1, 4 do
                             rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                         end
                     end)
@@ -183,7 +183,7 @@ function loopPlayerBlobF4()
                 end)
             end
             
-            -- 매 프레임 최대 고정 및 네트워크 소유권 강화
+            -- 매 프레임 최대 고정 및 네트워크 소유권 강화 (250Hz 근접)
             pcall(function()
                 -- HRP 고정
                 charHRP.CFrame = targetCF
@@ -217,8 +217,8 @@ function loopPlayerBlobF4()
                     bp2.P = 1000
                 end
                 
-                -- SetNetworkOwner 빈도 최대화 (60fps 기준 8번 호출 = 약 480Hz)
-                for i = 1, 8 do
+                -- SetNetworkOwner 빈도 250Hz (60fps 기준 4번 호출 = 약 240Hz)
+                for i = 1, 4 do
                     rs.GrabEvents.SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 end
                 -- 기존 그래브라인도 유지 (필요시)
