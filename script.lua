@@ -132,7 +132,7 @@ function loopPlayerBlobF4()
     local lastBPTool = nil
     local lastAOTool = nil
 
-    -- 250Hz 네트워크 루프 (CreateGrabLine → SetNetworkOwner → DestroyGrabLine 반복)
+    -- 250Hz 네트워크 루프 (셋오너 5회 + 디트로이트 3회 반복)
     task.spawn(function()
         while blobLoopT4 and selectedKickPlayer and selectedKickPlayer.Character do
             local charHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -140,11 +140,15 @@ function loopPlayerBlobF4()
             if charHRP and myHRP and CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
                 pcall(function()
                     CreateGrabLine:FireServer(charHRP, CFrame.new())
-                    SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                    DestroyGrabLine:FireServer(charHRP)
+                    for _ = 1, 5 do
+                        SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    end
+                    for _ = 1, 3 do
+                        DestroyGrabLine:FireServer(charHRP)
+                    end
                 end)
             end
-            task.wait(0.004) -- 250Hz (1/250 = 0.004초)
+            task.wait(0.004) -- 250Hz
         end
     end)
 
@@ -185,8 +189,12 @@ function loopPlayerBlobF4()
                     if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
                         pcall(function()
                             CreateGrabLine:FireServer(charHRP, CFrame.new())
-                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            DestroyGrabLine:FireServer(charHRP)
+                            for _ = 1, 5 do
+                                SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            end
+                            for _ = 1, 3 do
+                                DestroyGrabLine:FireServer(charHRP)
+                            end
                         end)
                     end
                     task.wait(0.05)
@@ -201,8 +209,12 @@ function loopPlayerBlobF4()
                     if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
                         pcall(function()
                             CreateGrabLine:FireServer(charHRP, CFrame.new())
-                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            DestroyGrabLine:FireServer(charHRP)
+                            for _ = 1, 5 do
+                                SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                            end
+                            for _ = 1, 3 do
+                                DestroyGrabLine:FireServer(charHRP)
+                            end
                         end)
                     end
                     
