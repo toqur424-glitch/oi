@@ -126,7 +126,7 @@ GrabTab:CreateKeybind({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (400Hz, 강화 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (400Hz, 최강 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -171,7 +171,7 @@ local function setupAlignForTarget()
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
     if not tHRP then return end
     
-    -- 기존 Align 제거
+    -- 기존 Align 제거 (중복 방지)
     for _, v in pairs(tHRP:GetChildren()) do
         if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyGyro") then
             v:Destroy()
@@ -203,22 +203,14 @@ local function setupAlignForTarget()
     alignRot.RigidityEnabled = true
     alignRot.Parent = tHRP
     
-    -- 3. BodyPosition (추가적인 위치 고정, 최대 힘)
-    local bodyPos = Instance.new("BodyPosition")
-    bodyPos.Name = "KickBodyPos"
-    bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bodyPos.MaxVelocity = Vector3.new(math.huge, math.huge, math.huge)
-    bodyPos.D = 1
-    bodyPos.P = 1e9
-    bodyPos.Parent = tHRP
-    
-    -- 4. BodyGyro (추가적인 회전 고정, 최대 힘)
-    local bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.Name = "KickBodyGyro"
-    bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    bodyGyro.D = 1
-    bodyGyro.P = 1e9
-    bodyGyro.Parent = tHRP
+    -- 3. Humanoid 조작 (완전 무력화)
+    local tHum = tChar:FindFirstChildOfClass("Humanoid")
+    if tHum then
+        tHum.WalkSpeed = 0
+        tHum.JumpPower = 0
+        tHum.AutoRotate = false
+        tHum:ChangeState(Enum.HumanoidStateType.Physics)
+    end
 end
 
 local function startKickLoop()
@@ -243,7 +235,7 @@ local function startKickLoop()
         end)
     end
     
-    -- Stepped: AlignPosition 및 BodyPosition 업데이트 (서버 물리 업데이트 전)
+    -- Stepped: AlignPosition 위치 업데이트 (서버 물리 업데이트 전)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -255,22 +247,12 @@ local function startKickLoop()
         if align and align:IsA("AlignPosition") then
             local att1 = align.Attachment1
             if att1 then
-                att1.CFrame = tHRP.CFrame
+                att1.CFrame = tHRP.CFrame  -- 현재 위치 기준으로 고정 목표 설정
             end
-        end
-        
-        local bodyPos = tHRP:FindFirstChild("KickBodyPos")
-        if bodyPos and bodyPos:IsA("BodyPosition") then
-            bodyPos.Position = tHRP.Position
-        end
-        
-        local bodyGyro = tHRP:FindFirstChild("KickBodyGyro")
-        if bodyGyro and bodyGyro:IsA("BodyGyro") then
-            bodyGyro.CFrame = tHRP.CFrame
         end
     end)
     
-    -- Heartbeat: 리모트 호출 (400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회 + 직접 고정)
+    -- Heartbeat: 리모트 호출 (400Hz) + 직접 고정
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -282,15 +264,24 @@ local function startKickLoop()
         
         if not (myChar and myHRP and tHRP and tHum and tHum.Health > 0) then return end
         
-        -- ★ 강화: 직접 CFrame 고정 + 속도 제거 + 플랫폼 스탠드 활성화
+        -- ★ 최강 직접 고정 (CFrame + 속도 0 + 회전 0)
         pcall(function()
-            tHRP.CFrame = CFrame.new(15, 16, tHRP.Position.Z)
+            tHRP.CFrame = CFrame.new(15, 16, tHRP.Position.Z) * CFrame.Angles(0, 0, 0)
+            tHRP.Velocity = Vector3.zero
+            tHRP.RotVelocity = Vector3.zero
             tHRP.AssemblyLinearVelocity = Vector3.zero
             tHRP.AssemblyAngularVelocity = Vector3.zero
-            tHum.PlatformStand = true  -- Humanoid를 물리 시뮬레이션에서 완전히 분리
         end)
         
-        -- FETCH: 거리 30 이상이면 자신이 대상에게 텔레포트
+        -- Humanoid 상태 강제 (Physics)
+        pcall(function()
+            tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            tHum.WalkSpeed = 0
+            tHum.JumpPower = 0
+            tHum.AutoRotate = false
+        end)
+        
+        -- 거리 30 이상이면 자신이 대상에게 텔레포트
         local dist = (tHRP.Position - myHRP.Position).Magnitude
         if dist > 30 then
             pcall(function()
@@ -301,7 +292,7 @@ local function startKickLoop()
             end)
         end
         
-        -- SetNetworkOwner 1번, DestroyGrabLine 2번 (400Hz)
+        -- SetNetworkOwner 1회, DestroyGrabLine 2회 (400Hz)
         kickCounter = kickCounter + 1
         if kickCounter % 3 == 1 then
             pcall(function()
@@ -335,18 +326,22 @@ local function stopKickLoop()
         local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
         if tHRP then
             for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("BodyPosition") or v:IsA("BodyGyro") then
+                if v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
                     v:Destroy()
                 end
             end
-            local tHum = selectedKickPlayer.Character:FindFirstChild("Humanoid")
-            if tHum then tHum.PlatformStand = false end
+        end
+        local tHum = selectedKickPlayer.Character:FindFirstChild("Humanoid")
+        if tHum then
+            tHum.WalkSpeed = 16
+            tHum.JumpPower = 50
+            tHum.AutoRotate = true
         end
     end
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회, 강화 고정)",
+    Name = "블롭맨 오너 킥 실행 (400Hz, 최강 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -526,4 +521,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, SetNetworkOwner 1회 / DestroyGrabLine 2회, 강화 고정 (Align + Body + CFrame)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "400Hz, 최강 고정 (Align + CFrame + Humanoid 무력화)", Duration = 3})
