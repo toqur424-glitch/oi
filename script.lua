@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (550Hz, HRP+Torso 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (750Hz, HRP+Torso 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -393,9 +393,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 550Hz 루프 (SetOwner 3회, DestroyGrabLine 1회)
+    -- 750Hz 루프 (SetOwner 3회, DestroyGrabLine 1회)
     remoteTask = task.spawn(function()
-        local interval = 0.001818181818  -- 550Hz (1/550)
+        local interval = 0.001333333333  -- 750Hz (1/750)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -472,7 +472,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (550Hz, HRP+Torso 고정, 최적화)",
+    Name = "블롭맨 오너 킥 실행 (750Hz, HRP+Torso 고정, 최적화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -650,4 +650,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "550Hz, HRP+Torso 고정, 셋오너 3:1 비율 (412Hz), 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "750Hz, HRP+Torso 고정, 셋오너 3:1 비율 (562Hz), 최적화 완료", Duration = 3})
