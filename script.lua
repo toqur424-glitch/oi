@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- 1:3 비율 (SetOwner 1번, Destroy 3번)
+local setOwnerRatio = 4  -- (기존 1:3 비율, 여기서는 사용되지 않음)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -221,7 +221,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (350Hz, BodyPosition 사용)
+-- [KICK 탭] - 블롭맨 오너 킥 (450Hz, HRP+Torso 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -231,8 +231,10 @@ local kickCounter = 0
 local steppedConn = nil
 local remoteTask = nil
 local respawnConn = nil
-local targetBP = nil
-local targetBG = nil
+local targetBP_HRP = nil
+local targetBG_HRP = nil
+local targetBP_Torso = nil
+local targetBG_Torso = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -258,36 +260,63 @@ KickTab:CreateInput({
     end
 })
 
+local function removeOldBodies(part)
+    if not part then return end
+    for _, v in pairs(part:GetChildren()) do
+        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
+            v:Destroy()
+        end
+    end
+end
+
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+    local tTorso = tChar:FindFirstChild("Torso")
     if not tHRP then return end
 
-    -- 기존 BodyPosition/BodyGyro 제거
-    for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
-            v:Destroy()
-        end
+    -- HRP 기존 Body 제거
+    removeOldBodies(tHRP)
+
+    -- HRP에 BodyPosition + BodyGyro 설치
+    targetBP_HRP = Instance.new("BodyPosition")
+    targetBP_HRP.Name = "KickBP_HRP"
+    targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    targetBP_HRP.P = 100000
+    targetBP_HRP.D = 1000
+    targetBP_HRP.Parent = tHRP
+
+    targetBG_HRP = Instance.new("BodyGyro")
+    targetBG_HRP.Name = "KickBG_HRP"
+    targetBG_HRP.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    targetBG_HRP.P = 100000
+    targetBG_HRP.D = 1000
+    targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
+    targetBG_HRP.Parent = tHRP
+
+    -- Torso에도 BodyPosition + BodyGyro 설치 (있을 경우)
+    if tTorso then
+        removeOldBodies(tTorso)
+        targetBP_Torso = Instance.new("BodyPosition")
+        targetBP_Torso.Name = "KickBP_Torso"
+        targetBP_Torso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        targetBP_Torso.P = 100000
+        targetBP_Torso.D = 1000
+        targetBP_Torso.Parent = tTorso
+
+        targetBG_Torso = Instance.new("BodyGyro")
+        targetBG_Torso.Name = "KickBG_Torso"
+        targetBG_Torso.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        targetBG_Torso.P = 100000
+        targetBG_Torso.D = 1000
+        targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
+        targetBG_Torso.Parent = tTorso
+    else
+        targetBP_Torso = nil
+        targetBG_Torso = nil
     end
-
-    targetBP = Instance.new("BodyPosition")
-    targetBP.Name = "KickBP"
-    targetBP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP.P = 100000
-    targetBP.D = 1000
-    targetBP.Parent = tHRP
-
-    targetBG = Instance.new("BodyGyro")
-    targetBG.Name = "KickBG"
-    targetBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG.P = 100000
-    targetBG.D = 1000
-    targetBG.CFrame = CFrame.Angles(0, 0, 0)
-    targetBG.Parent = tHRP
-
-    return targetBP, targetBG
 end
 
 local function startKickLoop()
@@ -320,7 +349,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 위치 업데이트 (BodyPosition 사용)
+    -- 매 프레임 위치 업데이트 (HRP + Torso 동시 고정)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -328,26 +357,41 @@ local function startKickLoop()
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        local tTorso = tChar and tChar:FindFirstChild("Torso")
         
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- BodyPosition이 없으면 생성
-        if not targetBP or targetBP.Parent ~= tHRP then
+        -- HRP BodyPosition 없으면 생성
+        if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
         
-        if targetBP then
-            targetBP.Position = targetPos
+        -- HRP 업데이트
+        if targetBP_HRP then
+            targetBP_HRP.Position = targetPos
         end
-        if targetBG then
-            targetBG.CFrame = CFrame.Angles(0, 0, 0)
+        if targetBG_HRP then
+            targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
+        end
+        
+        -- Torso 업데이트 (있을 경우)
+        if tTorso and targetBP_Torso and targetBP_Torso.Parent == tTorso then
+            targetBP_Torso.Position = targetPos
+            if targetBG_Torso then
+                targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
+            end
         end
         
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
+        if tTorso then
+            tTorso.AssemblyLinearVelocity = Vector3.zero
+            tTorso.AssemblyAngularVelocity = Vector3.zero
+        end
+        
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
@@ -355,9 +399,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz로 SetOwner/DestroyGrabLine 전송 (수정: 셋오너 2:1 비율)
+    -- 450Hz 루프 (SetOwner 2회, DestroyGrabLine 1회)
     remoteTask = task.spawn(function()
-        local interval = 0.002857142857  -- 350Hz (1/350)
+        local interval = 0.002222222222  -- 450Hz (1/450)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -386,7 +430,7 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                -- 수정된 부분: 3회 중 2회는 SetNetworkOwner, 1회는 DestroyGrabLine
+                -- 3회 중 2회는 SetNetworkOwner, 1회는 DestroyGrabLine
                 if kickCounter % 3 ~= 0 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
@@ -417,21 +461,24 @@ local function stopKickLoop()
         respawnConn = nil
     end
     if selectedKickPlayer and selectedKickPlayer.Character then
-        local tHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local tChar = selectedKickPlayer.Character
+        local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+        local tTorso = tChar:FindFirstChild("Torso")
         if tHRP then
-            for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
-                    v:Destroy()
-                end
-            end
+            removeOldBodies(tHRP)
+        end
+        if tTorso then
+            removeOldBodies(tTorso)
         end
     end
-    targetBP = nil
-    targetBG = nil
+    targetBP_HRP = nil
+    targetBG_HRP = nil
+    targetBP_Torso = nil
+    targetBG_Torso = nil
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (350Hz, BodyPosition, 최적화)",
+    Name = "블롭맨 오너 킥 실행 (450Hz, HRP+Torso 고정, 최적화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -609,4 +656,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "안티그랩 유지, X=7, Y=20, 350Hz, BodyPosition 사용, 핑 최적화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "450Hz, HRP+Torso 고정, 셋오너 2:1 비율, 최적화 완료", Duration = 3})
