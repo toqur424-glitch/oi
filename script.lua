@@ -355,7 +355,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 350Hz로 SetOwner/DestroyGrabLine 전송
+    -- 350Hz로 SetOwner/DestroyGrabLine 전송 (수정: 셋오너 2:1 비율)
     remoteTask = task.spawn(function()
         local interval = 0.002857142857  -- 350Hz (1/350)
         local nextTime = tick() + interval
@@ -386,7 +386,8 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                if kickCounter % setOwnerRatio == 1 then
+                -- 수정된 부분: 3회 중 2회는 SetNetworkOwner, 1회는 DestroyGrabLine
+                if kickCounter % 3 ~= 0 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
