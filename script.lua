@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- (미사용, 5:1 비율로 대체됨)
+local setOwnerRatio = 4  -- (미사용, 3:2 비율로 대체됨)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (650Hz, HRP+Torso 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (650Hz, HRP+Torso 고정, 3:2 비율)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -275,10 +275,8 @@ local function setupBodiesForTarget()
     local tTorso = tChar:FindFirstChild("Torso")
     if not tHRP then return end
 
-    -- HRP 기존 Body 제거
     removeOldBodies(tHRP)
 
-    -- HRP에 BodyPosition + BodyGyro 설치
     targetBP_HRP = Instance.new("BodyPosition")
     targetBP_HRP.Name = "KickBP_HRP"
     targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -294,7 +292,6 @@ local function setupBodiesForTarget()
     targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
     targetBG_HRP.Parent = tHRP
 
-    -- Torso에도 BodyPosition + BodyGyro 설치
     if tTorso then
         removeOldBodies(tTorso)
         targetBP_Torso = Instance.new("BodyPosition")
@@ -346,7 +343,6 @@ local function startKickLoop()
         end)
     end
 
-    -- 매 프레임 위치 업데이트 (HRP + Torso 동시 고정)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -393,7 +389,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 650Hz 루프 (SetOwner 5회, DestroyGrabLine 1회)
+    -- 650Hz 루프 (SetOwner 3회, DestroyGrabLine 2회 - 3:2 비율)
     remoteTask = task.spawn(function()
         local interval = 0.001538461538  -- 650Hz (1/650)
         local nextTime = tick() + interval
@@ -424,8 +420,8 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                -- 6회 중 5회는 SetNetworkOwner, 1회는 DestroyGrabLine
-                if kickCounter % 6 ~= 0 then
+                -- 5회 중 3회(1,2,3)는 SetNetworkOwner, 2회(4,5)는 DestroyGrabLine
+                if kickCounter % 5 == 1 or kickCounter % 5 == 2 or kickCounter % 5 == 3 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
@@ -472,7 +468,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (650Hz, HRP+Torso 고정, 최적화)",
+    Name = "블롭맨 오너 킥 실행 (650Hz, HRP+Torso 고정, 3:2 비율)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -650,4 +646,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "650Hz, HRP+Torso 고정, 셋오너 5:1 비율 (542Hz), 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "650Hz, HRP+Torso 고정, 셋오너 390Hz/디트로이트 260Hz (3:2 비율), 최적화 완료", Duration = 3})
