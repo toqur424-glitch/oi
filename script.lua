@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- (미사용, 3:2 비율로 대체됨)
+local setOwnerRatio = 4  -- (미사용, 3:1 비율로 대체됨)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (650Hz, HRP+Torso 고정, 3:2 비율)
+-- [KICK 탭] - 블롭맨 오너 킥 (800Hz, HRP+Torso 고정, 3:1 비율)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,9 +389,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 650Hz 루프 (SetOwner 3회, DestroyGrabLine 2회 - 3:2 비율)
+    -- 800Hz 루프 (SetOwner 3회, DestroyGrabLine 1회 - 3:1 비율)
     remoteTask = task.spawn(function()
-        local interval = 0.001538461538  -- 650Hz (1/650)
+        local interval = 0.00125  -- 800Hz (1/800)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -420,8 +420,8 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                -- 5회 중 3회(1,2,3)는 SetNetworkOwner, 2회(4,5)는 DestroyGrabLine
-                if kickCounter % 5 == 1 or kickCounter % 5 == 2 or kickCounter % 5 == 3 then
+                -- 4회 중 3회(1,2,3)는 SetNetworkOwner, 1회(4)는 DestroyGrabLine
+                if kickCounter % 4 ~= 0 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
@@ -468,7 +468,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (650Hz, HRP+Torso 고정, 3:2 비율)",
+    Name = "블롭맨 오너 킥 실행 (800Hz, HRP+Torso 고정, 3:1 비율)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -646,4 +646,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "650Hz, HRP+Torso 고정, 셋오너 390Hz/디트로이트 260Hz (3:2 비율), 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "800Hz, HRP+Torso 고정, 셋오너 600Hz/디트로이트 200Hz (3:1 비율), 최적화 완료", Duration = 3})
