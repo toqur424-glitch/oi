@@ -52,7 +52,9 @@ if BeingHeld then
                 local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
                 if tHRP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                     for i = 1, 5 do
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
+                        pcall(function()
+                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
+                        end)
                         task.wait()
                     end
                 end
@@ -146,10 +148,14 @@ local function startFKeyAttack(targetPlayer)
 
         fCounter = fCounter + 1
         if pattern[(fCounter - 1) % #pattern + 1] == 1 then
-            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+            end)
         else
-            rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-            rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+            pcall(function()
+                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+            end)
         end
     end)
 end
@@ -327,9 +333,11 @@ local function startKickLoop()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    hrp.CFrame = CFrame.new(targetPos)
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                    hrp.AssemblyAngularVelocity = Vector3.zero
+                    pcall(function()
+                        hrp.CFrame = CFrame.new(targetPos)
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    end)
                 end
             end
         end)
@@ -406,15 +414,21 @@ local function startKickLoop()
             if tHum and tHum.Health > 0 then
                 local dist = (tHRP.Position - myHRP.Position).Magnitude
                 if dist > 30 then
-                    myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                    pcall(function()
+                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                    end)
                 end
                 
                 kickCounter = kickCounter + 1
                 if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
                 else
-                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
                 end
             end
         end
@@ -516,8 +530,10 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                DestroyLine:FireServer(soundPart)
+                pcall(function()
+                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
+                    DestroyLine:FireServer(soundPart)
+                end)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
@@ -575,7 +591,9 @@ KickTab:CreateToggle({
                         end
                     end)
                 else
-                    DestroyToy:FireServer(child)
+                    pcall(function()
+                        DestroyToy:FireServer(child)
+                    end)
                 end
             end)
 
@@ -588,11 +606,13 @@ KickTab:CreateToggle({
                 if not h then return end
 
                 task.spawn(function()
-                    RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
-                        "PalletLightBrown",
-                        h.CFrame * CFrame.new(0, 10, 20),
-                        Vector3.zero
-                    )
+                    pcall(function()
+                        RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
+                            "PalletLightBrown",
+                            h.CFrame * CFrame.new(0, 10, 20),
+                            Vector3.zero
+                        )
+                    end)
                 end)
             end
 
@@ -608,13 +628,17 @@ KickTab:CreateToggle({
 
             local pallet = getgenv().PalletForRagdoll
             if pallet and pallet.Parent then
-                DestroyToy:FireServer(pallet)
+                pcall(function()
+                    DestroyToy:FireServer(pallet)
+                end)
             end
 
             getgenv().PalletForRagdoll = nil
 
             if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
-                DestroyToy:FireServer(toysFolder.PalletForRagdoll)
+                pcall(function()
+                    DestroyToy:FireServer(toysFolder.PalletForRagdoll)
+                end)
             end
         end
     end,
@@ -626,4 +650,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "750Hz, HRP+Torso 고정, 셋오너 450Hz/디트로이트 300Hz (3:2), pcall 제거 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "750Hz, HRP+Torso 고정, 셋오너 450Hz/디트로이트 300Hz (3:2), 모든 호출 pcall 적용", Duration = 3})
