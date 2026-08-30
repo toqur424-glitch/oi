@@ -52,9 +52,7 @@ if BeingHeld then
                 local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
                 if tHRP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                     for i = 1, 5 do
-                        pcall(function()
-                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
-                        end)
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
                         task.wait()
                     end
                 end
@@ -66,7 +64,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 5  -- 4:1 비율 (셋오너 4회, 디트로이트 1회)
+local setOwnerRatio = 3  -- 2:1 비율 (셋오너 2회, 디트로이트 1회)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -147,15 +145,12 @@ local function startFKeyAttack(targetPlayer)
         end
 
         fCounter = fCounter + 1
-        if fCounter % setOwnerRatio ~= 0 then
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-            end)
+        -- 3회 중 2회(1,2)는 셋오너, 1회(3)는 디트로이트
+        if fCounter % 3 ~= 0 then
+            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
         else
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
+            rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+            rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
         end
     end)
 end
@@ -219,7 +214,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (550Hz, HRP+Torso 고정, 4:1 비율)
+-- [KICK 탭] - 블롭맨 오너 킥 (550Hz, HRP+Torso 고정, 2:1 비율)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -333,11 +328,9 @@ local function startKickLoop()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                    end)
+                    hrp.CFrame = CFrame.new(targetPos)
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
                 end
             end
         end)
@@ -389,7 +382,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 550Hz 루프 (SetOwner 4회, DestroyGrabLine 1회 - 4:1 비율)
+    -- 550Hz 루프 (셋오너 2회, 디트로이트 1회 - 2:1 비율)
     remoteTask = task.spawn(function()
         local interval = 0.001818181818  -- 550Hz (1/550)
         local nextTime = tick() + interval
@@ -414,22 +407,16 @@ local function startKickLoop()
             if tHum and tHum.Health > 0 then
                 local dist = (tHRP.Position - myHRP.Position).Magnitude
                 if dist > 30 then
-                    pcall(function()
-                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                    end)
+                    myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
                 end
                 
                 kickCounter = kickCounter + 1
-                -- 5회 중 4회(1,2,3,4)는 SetNetworkOwner, 1회(5)는 DestroyGrabLine
-                if kickCounter % 5 ~= 0 then
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
+                -- 3회 중 2회(1,2)는 셋오너, 1회(3)는 디트로이트
+                if kickCounter % 3 ~= 0 then
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 else
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                    end)
+                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                 end
             end
         end
@@ -468,7 +455,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (550Hz, HRP+Torso 고정, 4:1 비율)",
+    Name = "블롭맨 오너 킥 실행 (550Hz, HRP+Torso 고정, 2:1 비율)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -531,10 +518,8 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                pcall(function()
-                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine:FireServer(soundPart)
-                end)
+                SetNetOwner:FireServer(soundPart, soundPart.CFrame)
+                DestroyLine:FireServer(soundPart)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
@@ -565,7 +550,6 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 진동: 위아래 15스터드, 20Hz
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
@@ -593,7 +577,7 @@ KickTab:CreateToggle({
                         end
                     end)
                 else
-                    pcall(function() DestroyToy:FireServer(child) end)
+                    DestroyToy:FireServer(child)
                 end
             end)
 
@@ -606,13 +590,11 @@ KickTab:CreateToggle({
                 if not h then return end
 
                 task.spawn(function()
-                    pcall(function()
-                        RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
-                            "PalletLightBrown",
-                            h.CFrame * CFrame.new(0, 10, 20),
-                            Vector3.zero
-                        )
-                    end)
+                    RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
+                        "PalletLightBrown",
+                        h.CFrame * CFrame.new(0, 10, 20),
+                        Vector3.zero
+                    )
                 end)
             end
 
@@ -628,13 +610,13 @@ KickTab:CreateToggle({
 
             local pallet = getgenv().PalletForRagdoll
             if pallet and pallet.Parent then
-                pcall(function() DestroyToy:FireServer(pallet) end)
+                DestroyToy:FireServer(pallet)
             end
 
             getgenv().PalletForRagdoll = nil
 
             if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
-                pcall(function() DestroyToy:FireServer(toysFolder.PalletForRagdoll) end)
+                DestroyToy:FireServer(toysFolder.PalletForRagdoll)
             end
         end
     end,
@@ -646,4 +628,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "550Hz, HRP+Torso 고정, 셋오너 440Hz/디트로이트 110Hz (4:1 비율), 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "550Hz, HRP+Torso 고정, 셋오너 2:1 비율 (366Hz/183Hz), 최적화 완료", Duration = 3})
