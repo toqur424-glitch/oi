@@ -124,23 +124,23 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] 셋오너로 Y20 이동 후 BodyPosition 고정
+-- [완전 수정된 함수] 이동 → 고정 단계 분리
 function loopPlayerBlobF4()
-    local initialized = false
     local lastBP_HRP = nil
     local lastBP_Torso = nil
+    local isLocked = false          -- 고정 여부
 
-    -- 300Hz 네트워크 루프 (셋오너 2회 + 디트로이트 1회)
+    -- 300Hz 네트워크 루프 (셋오너 2회 + 디트로이트 1회) - 항상 실행
     task.spawn(function()
         while blobLoopT4 and selectedKickPlayer and selectedKickPlayer.Character do
             local charHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
             if charHRP and myHRP and SetNetworkOwner and DestroyGrabLine then
                 SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position)) -- 셋오너 2회
-                DestroyGrabLine:FireServer(charHRP) -- 디트로이트 1회
+                SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                DestroyGrabLine:FireServer(charHRP)
             end
-            task.wait(1/300) -- 300Hz
+            task.wait(1/300)
         end
     end)
 
@@ -148,15 +148,14 @@ function loopPlayerBlobF4()
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-            initialized = false
-            -- 이전 BodyPosition 제거
+            -- 상태 초기화
             if lastBP_HRP then lastBP_HRP:Destroy() lastBP_HRP = nil end
             if lastBP_Torso then lastBP_Torso:Destroy() lastBP_Torso = nil end
+            isLocked = false
             RunService.RenderStepped:Wait()
             continue
         end
 
-        local name = player.Name
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local charHRP = player.Character.HumanoidRootPart
         local charHUM = player.Character:FindFirstChild("Humanoid")
@@ -165,49 +164,23 @@ function loopPlayerBlobF4()
         if myHRP and charHRP and charHUM then
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local targetPos = targetCF.Position
-            
-            -- ===== 상대를 내 머리 위 20으로 이동 (미도달 상태) =====
-            if not initialized then
-                charHRP.CFrame = targetCF
-                if charTorso then charTorso.CFrame = targetCF end
-            end
+            local dist = (charHRP.Position - targetPos).Magnitude
 
-            -- ===== 범위 이탈 시 추적/룹티피 =====
-            if (charHRP.Position - targetPos).Magnitude > 15 or not initialized then
-                if not recoveringTargets[name] then
-                    recoveringTargets[name] = true
-                    initialized = true
-                    
-                    task.spawn(function()
-                        local originalCF = myHRP.CFrame
-                        myHRP.CFrame = charHRP.CFrame * CFrame.new(0, 2, 0)
-                        task.wait(0.15)
-                        
-                        if SetNetworkOwner and DestroyGrabLine then
-                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            DestroyGrabLine:FireServer(charHRP)
-                        end
-                        task.wait(0.05)
-                        
-                        charHRP.CFrame = originalCF * CFrame.new(0, 20, 0)
-                        if charTorso then charTorso.CFrame = originalCF * CFrame.new(0, 20, 0) end
-                        myHRP.CFrame = originalCF
-                        task.wait(0.1)
-                        
-                        if SetNetworkOwner and DestroyGrabLine then
-                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
-                            DestroyGrabLine:FireServer(charHRP)
-                        end
-                        
-                        task.wait(0.3)
-                        recoveringTargets[name] = nil
-                    end)
+            if not isLocked then
+                -- ========== 이동 단계 ==========
+                -- 소유권이 확보된 상태에서 CFrame 강제 이동
+                charHRP.CFrame = targetCF
+                if charTorso then
+                    charTorso.CFrame = targetCF
+                end
+
+                -- 목표에 충분히 가까워지면 고정 시작
+                if dist < 3 then
+                    isLocked = true
                 end
             else
-                -- ===== 도달 후: BodyPosition(math.huge) 고정 + Struggle 강화 =====
-                -- HRP에 BodyPosition 적용
+                -- ========== 고정 단계 ==========
+                -- HRP BodyPosition
                 if lastBP_HRP then lastBP_HRP:Destroy() lastBP_HRP = nil end
                 local bp_HRP = Instance.new("BodyPosition", charHRP)
                 bp_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -217,7 +190,7 @@ function loopPlayerBlobF4()
                 bp_HRP.Enabled = true
                 lastBP_HRP = bp_HRP
 
-                -- Torso에도 BodyPosition 적용
+                -- Torso BodyPosition
                 if charTorso then
                     if lastBP_Torso then lastBP_Torso:Destroy() lastBP_Torso = nil end
                     local bp_Torso = Instance.new("BodyPosition", charTorso)
@@ -229,19 +202,26 @@ function loopPlayerBlobF4()
                     lastBP_Torso = bp_Torso
                 end
 
-                -- Struggle 강제
+                -- Struggle 강화
                 charHUM.PlatformStand = true
                 charHUM:ChangeState(Enum.HumanoidStateType.Physics)
-                
-                -- Ragdoll 상태 강제 해제
+
+                -- Ragdoll 해제
                 local ragdolledVal = charHUM:FindFirstChild("Ragdolled")
                 if ragdolledVal and ragdolledVal.Value == true then
                     ragdolledVal.Value = false
                 end
-                
-                -- FreeFall 상태 방지
+
+                -- FreeFall 방지
                 if charHUM:GetState() == Enum.HumanoidStateType.Freefall then
                     charHUM:ChangeState(Enum.HumanoidStateType.Physics)
+                end
+
+                -- 거리가 멀어지면 다시 이동 모드로 전환 (만약을 대비)
+                if dist > 10 then
+                    isLocked = false
+                    if lastBP_HRP then lastBP_HRP:Destroy() lastBP_HRP = nil end
+                    if lastBP_Torso then lastBP_Torso:Destroy() lastBP_Torso = nil end
                 end
             end
         end
@@ -422,17 +402,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [Settings 탭 - 복사 기능]
+-- [Settings 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
-SettingsTab:CreateButton({
-    Name = "📋 스크립트 복사",
-    Callback = function()
-        local script = "여기에 스크립트 내용을 넣으세요" -- 실제로는 전체 코드가 필요
-        game:GetService("GuiService"):SetClipboard(script)
-        Rayfield:Notify({Title = "복사 완료", Content = "클립보드에 복사되었습니다.", Duration = 2})
-    end
-})
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "무한 룹티피 버그 수정 및 Y=20 고정 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Y=20 이동 후 BodyPosition 고정 적용", Duration = 3})
