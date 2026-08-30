@@ -52,9 +52,7 @@ if BeingHeld then
                 local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
                 if tHRP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                     for i = 1, 5 do
-                        pcall(function()
-                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
-                        end)
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
                         task.wait()
                     end
                 end
@@ -148,14 +146,10 @@ local function startFKeyAttack(targetPlayer)
 
         fCounter = fCounter + 1
         if pattern[(fCounter - 1) % #pattern + 1] == 1 then
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-            end)
+            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
         else
-            pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
+            rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
+            rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
         end
     end)
 end
@@ -219,7 +213,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (450Hz, 2:1 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (600Hz, 2:1 패턴)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -333,11 +327,9 @@ local function startKickLoop()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
-                    pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                    end)
+                    hrp.CFrame = CFrame.new(targetPos)
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
                 end
             end
         end)
@@ -389,9 +381,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 450Hz 루프 (셋오너 2회, 디트로이트 1회 - 2:1 비율)
+    -- 600Hz 루프 (셋오너 2회, 디트로이트 1회)
     remoteTask = task.spawn(function()
-        local interval = 0.002222222222  -- 450Hz (1/450)
+        local interval = 0.001666666667  -- 600Hz (1/600)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -414,22 +406,15 @@ local function startKickLoop()
             if tHum and tHum.Health > 0 then
                 local dist = (tHRP.Position - myHRP.Position).Magnitude
                 if dist > 30 then
-                    pcall(function()
-                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                    end)
+                    myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
                 end
                 
                 kickCounter = kickCounter + 1
-                -- 3회 주기: 1,2번째는 SetNetworkOwner, 3번째는 DestroyGrabLine
                 if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 else
-                    pcall(function()
-                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                    end)
+                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                 end
             end
         end
@@ -468,7 +453,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (450Hz, 셋오너 300Hz/디트로이트 150Hz)",
+    Name = "블롭맨 오너 킥 실행 (600Hz, 셋오너 400Hz/디트로이트 200Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -531,10 +516,8 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                pcall(function()
-                    SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine:FireServer(soundPart)
-                end)
+                SetNetOwner:FireServer(soundPart, soundPart.CFrame)
+                DestroyLine:FireServer(soundPart)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
                 if partOwner and partOwner.Value == lpName then
@@ -565,7 +548,6 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 진동: 위아래 15스터드, 20Hz
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
@@ -593,7 +575,7 @@ KickTab:CreateToggle({
                         end
                     end)
                 else
-                    pcall(function() DestroyToy:FireServer(child) end)
+                    DestroyToy:FireServer(child)
                 end
             end)
 
@@ -606,13 +588,11 @@ KickTab:CreateToggle({
                 if not h then return end
 
                 task.spawn(function()
-                    pcall(function()
-                        RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
-                            "PalletLightBrown",
-                            h.CFrame * CFrame.new(0, 10, 20),
-                            Vector3.zero
-                        )
-                    end)
+                    RS.MenuToys.SpawnToyRemoteFunction:InvokeServer(
+                        "PalletLightBrown",
+                        h.CFrame * CFrame.new(0, 10, 20),
+                        Vector3.zero
+                    )
                 end)
             end
 
@@ -628,13 +608,13 @@ KickTab:CreateToggle({
 
             local pallet = getgenv().PalletForRagdoll
             if pallet and pallet.Parent then
-                pcall(function() DestroyToy:FireServer(pallet) end)
+                DestroyToy:FireServer(pallet)
             end
 
             getgenv().PalletForRagdoll = nil
 
             if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
-                pcall(function() DestroyToy:FireServer(toysFolder.PalletForRagdoll) end)
+                DestroyToy:FireServer(toysFolder.PalletForRagdoll)
             end
         end
     end,
@@ -646,4 +626,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "450Hz, 셋오너 300Hz/디트로이트 150Hz, HRP+Torso 고정 유지, pcall 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "600Hz, 셋오너 400Hz/디트로이트 200Hz, HRP+Torso 고정 유지, pcall 제거", Duration = 3})
