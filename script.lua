@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- (미사용, 3:1 비율로 대체됨)
+local setOwnerRatio = 5  -- 4:1 비율 (셋오너 4회, 디트로이트 1회)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -147,7 +147,7 @@ local function startFKeyAttack(targetPlayer)
         end
 
         fCounter = fCounter + 1
-        if fCounter % setOwnerRatio == 1 then
+        if fCounter % setOwnerRatio ~= 0 then
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
             end)
@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (800Hz, HRP+Torso 고정, 3:1 비율)
+-- [KICK 탭] - 블롭맨 오너 킥 (550Hz, HRP+Torso 고정, 4:1 비율)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,9 +389,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 800Hz 루프 (SetOwner 3회, DestroyGrabLine 1회 - 3:1 비율)
+    -- 550Hz 루프 (SetOwner 4회, DestroyGrabLine 1회 - 4:1 비율)
     remoteTask = task.spawn(function()
-        local interval = 0.00125  -- 800Hz (1/800)
+        local interval = 0.001818181818  -- 550Hz (1/550)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -420,8 +420,8 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                -- 4회 중 3회(1,2,3)는 SetNetworkOwner, 1회(4)는 DestroyGrabLine
-                if kickCounter % 4 ~= 0 then
+                -- 5회 중 4회(1,2,3,4)는 SetNetworkOwner, 1회(5)는 DestroyGrabLine
+                if kickCounter % 5 ~= 0 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
@@ -468,7 +468,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (800Hz, HRP+Torso 고정, 3:1 비율)",
+    Name = "블롭맨 오너 킥 실행 (550Hz, HRP+Torso 고정, 4:1 비율)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -646,4 +646,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "800Hz, HRP+Torso 고정, 셋오너 600Hz/디트로이트 200Hz (3:1 비율), 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "550Hz, HRP+Torso 고정, 셋오너 440Hz/디트로이트 110Hz (4:1 비율), 최적화 완료", Duration = 3})
