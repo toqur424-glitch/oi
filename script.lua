@@ -66,7 +66,7 @@ end
 --=============================================
 -- [공통 변수]
 --=============================================
-local setOwnerRatio = 4  -- (기존 1:3 비율, 여기서는 사용되지 않음)
+local setOwnerRatio = 4  -- (미사용, 3:1 비율로 대체됨)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩 (고정력 강화)
@@ -137,7 +137,6 @@ local function startFKeyAttack(targetPlayer)
         local camCF = camera.CFrame
         local holdPos = camCF.Position + camCF.LookVector * 20
 
-        -- AlignPosition으로 고정 (매 프레임 위치 업데이트)
         local align = tgtRoot:FindFirstChild("FKeyAlign")
         if align and align.Attachment1 then
             align.Attachment1.WorldPosition = holdPos
@@ -147,7 +146,6 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- SetOwner와 DestroyGrabLine 번갈아 전송 (1:3 비율)
         fCounter = fCounter + 1
         if fCounter % setOwnerRatio == 1 then
             pcall(function()
@@ -221,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (450Hz, HRP+Torso 고정)
+-- [KICK 탭] - 블롭맨 오너 킥 (550Hz, HRP+Torso 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -296,7 +294,7 @@ local function setupBodiesForTarget()
     targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
     targetBG_HRP.Parent = tHRP
 
-    -- Torso에도 BodyPosition + BodyGyro 설치 (있을 경우)
+    -- Torso에도 BodyPosition + BodyGyro 설치
     if tTorso then
         removeOldBodies(tTorso)
         targetBP_Torso = Instance.new("BodyPosition")
@@ -328,7 +326,6 @@ local function startKickLoop()
     kickCounter = 0
 
     if selectedKickPlayer then
-        -- 리셋 감지 및 자동 재부착
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
@@ -364,12 +361,10 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- HRP BodyPosition 없으면 생성
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
         
-        -- HRP 업데이트
         if targetBP_HRP then
             targetBP_HRP.Position = targetPos
         end
@@ -377,7 +372,6 @@ local function startKickLoop()
             targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        -- Torso 업데이트 (있을 경우)
         if tTorso and targetBP_Torso and targetBP_Torso.Parent == tTorso then
             targetBP_Torso.Position = targetPos
             if targetBG_Torso then
@@ -399,9 +393,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 450Hz 루프 (SetOwner 2회, DestroyGrabLine 1회)
+    -- 550Hz 루프 (SetOwner 3회, DestroyGrabLine 1회)
     remoteTask = task.spawn(function()
-        local interval = 0.002222222222  -- 450Hz (1/450)
+        local interval = 0.001818181818  -- 550Hz (1/550)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -430,8 +424,8 @@ local function startKickLoop()
                 end
                 
                 kickCounter = kickCounter + 1
-                -- 3회 중 2회는 SetNetworkOwner, 1회는 DestroyGrabLine
-                if kickCounter % 3 ~= 0 then
+                -- 4회 중 3회는 SetNetworkOwner, 1회는 DestroyGrabLine
+                if kickCounter % 4 ~= 0 then
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
@@ -478,7 +472,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (450Hz, HRP+Torso 고정, 최적화)",
+    Name = "블롭맨 오너 킥 실행 (550Hz, HRP+Torso 고정, 최적화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -656,4 +650,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "450Hz, HRP+Torso 고정, 셋오너 2:1 비율, 최적화 완료", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "550Hz, HRP+Torso 고정, 셋오너 3:1 비율 (412Hz), 최적화 완료", Duration = 3})
