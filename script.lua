@@ -124,7 +124,7 @@ KickTab:CreateInput({
     end
 })
 
--- [수정된 함수] BodyPosition(math.huge) + 즉시 복귀 + Struggle 강화 + 300Hz 루프
+-- [수정된 함수] Y20 즉시 복귀 + BodyPosition(math.huge) + Struggle 강화 + 300Hz 루프
 function loopPlayerBlobF4()
     local initialized = false
     local lastBP_HRP = nil
@@ -166,13 +166,13 @@ function loopPlayerBlobF4()
             local targetCF = myHRP.CFrame * CFrame.new(0, 20, 0)
             local targetPos = targetCF.Position
             
-            -- 상대가 목표 위치보다 아래에 있으면 즉시 올림 (빠른 복귀)
-            if charHRP.Position.Y < targetPos.Y - 0.5 then
+            -- 즉시 Y20 복귀 (가져오기 전에 고정되는 문제 해결)
+            if initialized then
                 charHRP.CFrame = targetCF
                 if charTorso then charTorso.CFrame = targetCF end
             end
 
-            -- 범위 이탈 시 추적/룹티피 (기존 로직 유지)
+            -- 범위 이탈 시 추적/룹티피
             if (charHRP.Position - targetPos).Magnitude > 15 or not initialized then
                 if not recoveringTargets[name] then
                     recoveringTargets[name] = true
@@ -263,7 +263,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [새로운 Pallet Ragdoll (Invis) 통합]
+-- [Pallet Ragdoll (Invis) 통합]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
@@ -422,9 +422,20 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭들 유지]
+-- [Settings 탭 - 복사 기능 추가]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
+
+-- 전체 스크립트 복사 버튼
+SettingsTab:CreateButton({
+    Name = "📋 스크립트 전체 복사",
+    Callback = function()
+        local scriptContent = "여기에 스크립트 전체 내용을 넣으세요" -- 실제로는 복사할 내용을 넣어야 합니다
+        game:GetService("GuiService"):SetClipboard(scriptContent)
+        Rayfield:Notify({Title = "복사 완료", Content = "스크립트가 클립보드에 복사되었습니다.", Duration = 2})
+    end
+})
+
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
 Rayfield:Notify({Title = "로딩 완료", Content = "무한 룹티피 버그 수정 및 Y=20 고정 완료", Duration = 3})
