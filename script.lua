@@ -124,21 +124,22 @@ KickTab:CreateInput({
     end
 })
 
--- [완전 수정된 함수] 이동 → 고정 단계 분리
+-- [수정된 함수] 이동 단계에서 CreateGrabLine 포함
 function loopPlayerBlobF4()
     local lastBP_HRP = nil
     local lastBP_Torso = nil
-    local isLocked = false          -- 고정 여부
+    local isLocked = false
 
-    -- 300Hz 네트워크 루프 (셋오너 2회 + 디트로이트 1회) - 항상 실행
+    -- 300Hz 네트워크 루프 (CreateGrabLine → SetNetworkOwner → DestroyGrabLine 2회)
     task.spawn(function()
         while blobLoopT4 and selectedKickPlayer and selectedKickPlayer.Character do
             local charHRP = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-            if charHRP and myHRP and SetNetworkOwner and DestroyGrabLine then
-                SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+            if charHRP and myHRP and CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
+                CreateGrabLine:FireServer(charHRP, CFrame.new())
                 SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
                 DestroyGrabLine:FireServer(charHRP)
+                DestroyGrabLine:FireServer(charHRP) -- 디트로이트 2번
             end
             task.wait(1/300)
         end
@@ -148,7 +149,6 @@ function loopPlayerBlobF4()
         local player = selectedKickPlayer
         
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-            -- 상태 초기화
             if lastBP_HRP then lastBP_HRP:Destroy() lastBP_HRP = nil end
             if lastBP_Torso then lastBP_Torso:Destroy() lastBP_Torso = nil end
             isLocked = false
@@ -168,7 +168,15 @@ function loopPlayerBlobF4()
 
             if not isLocked then
                 -- ========== 이동 단계 ==========
-                -- 소유권이 확보된 상태에서 CFrame 강제 이동
+                -- CreateGrabLine 호출하여 그랩 효과 발생
+                if CreateGrabLine and SetNetworkOwner and DestroyGrabLine then
+                    CreateGrabLine:FireServer(charHRP, CFrame.new())
+                    SetNetworkOwner:FireServer(charHRP, CFrame.lookAt(myHRP.Position, charHRP.Position))
+                    DestroyGrabLine:FireServer(charHRP)
+                    DestroyGrabLine:FireServer(charHRP)
+                end
+
+                -- CFrame 강제 이동
                 charHRP.CFrame = targetCF
                 if charTorso then
                     charTorso.CFrame = targetCF
@@ -217,7 +225,7 @@ function loopPlayerBlobF4()
                     charHUM:ChangeState(Enum.HumanoidStateType.Physics)
                 end
 
-                -- 거리가 멀어지면 다시 이동 모드로 전환 (만약을 대비)
+                -- 거리가 멀어지면 다시 이동 모드로 전환
                 if dist > 10 then
                     isLocked = false
                     if lastBP_HRP then lastBP_HRP:Destroy() lastBP_HRP = nil end
