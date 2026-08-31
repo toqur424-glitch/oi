@@ -64,9 +64,9 @@ if BeingHeld then
 end
 
 --=============================================
--- [공통 패턴 - 2:1 (셋오너 2회, 디트로이트 1회)]
+-- [공통 패턴 - 5:2 (셋오너 5회, 디트로이트 2회)]
 --=============================================
-local pattern = {1,1,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
+local pattern = {1,1,1,1,1,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (600Hz, 2:1 패턴, 핑 최적화)
+-- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 워치독 제거)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,9 +389,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 600Hz 루프 (2:1 패턴 + 소유권 워치독)
+    -- 770Hz 루프 (5:2 패턴, 워치독 없음)
     remoteTask = task.spawn(function()
-        local interval = 0.001666666667  -- 600Hz (1/600)
+        local interval = 0.001298701299  -- 770Hz (1/770)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -419,15 +419,7 @@ local function startKickLoop()
                 end)
             end
             
-            -- 소유권 워치독: PartOwner가 내가 아니면 추가 SetNetworkOwner
-            local partOwner = tHRP:FindFirstChild("PartOwner")
-            if not partOwner or partOwner.Value ~= plr.Name then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
-            end
-            
-            -- 정상 패턴 진행 (2:1)
+            -- 정상 패턴 진행 (5:2)
             kickCounter = kickCounter + 1
             if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
                 pcall(function()
@@ -475,7 +467,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (600Hz, 셋오너 400Hz/디트로이트 200Hz, 핑 최적화)",
+    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, 핑 최적화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -652,4 +644,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "600Hz, 셋오너 400Hz/디트로이트 200Hz, 핑 최적화 및 정확도 강화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, 워치독 제거, 핑 최적화", Duration = 3})
