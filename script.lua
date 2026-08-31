@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 워치독 제거)
+-- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 초정밀 호출)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,47 +389,77 @@ local function startKickLoop()
         end
     end)
 
-    -- 770Hz 루프 (5:2 패턴, 워치독 없음)
+    -- 770Hz 초정밀 루프 (5:2 패턴, 저강도 소유권 워치독)
     remoteTask = task.spawn(function()
         local interval = 0.001298701299  -- 770Hz (1/770)
-        local nextTime = tick() + interval
+        local nextTime = os.clock() + interval
+        local lastOwnerCheck = os.clock()
         
         while kickLoopRunning do
-            while tick() < nextTime do
-                task.wait(0.0001)
-            end
-            nextTime = nextTime + interval
+            -- 프레임 동기화 대기
+            RunService.Heartbeat:Wait()
             
-            if not selectedKickPlayer then continue end
-            
-            local tChar = selectedKickPlayer.Character
-            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-            local tHum = tChar and tChar:FindFirstChild("Humanoid")
-            local myChar = plr.Character
-            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            
-            if not (myChar and myHRP) then continue end
-            if not (tChar and tHRP) then continue end
-            if not tHum or tHum.Health <= 0 then continue end
-            
-            local dist = (tHRP.Position - myHRP.Position).Magnitude
-            if dist > 30 then
-                pcall(function()
-                    myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                end)
+            -- 지연 시 nextTime 리셋 (누적 지연 방지)
+            if os.clock() > nextTime + interval * 2 then
+                nextTime = os.clock() + interval
             end
             
-            -- 정상 패턴 진행 (5:2)
-            kickCounter = kickCounter + 1
-            if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
-            else
-                pcall(function()
-                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                end)
+            -- 0.1초 간격 저강도 소유권 확인
+            if os.clock() - lastOwnerCheck > 0.1 then
+                lastOwnerCheck = os.clock()
+                if selectedKickPlayer and selectedKickPlayer.Character then
+                    local hrp = selectedKickPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local po = hrp:FindFirstChild("PartOwner")
+                        if not po or po.Value ~= plr.Name then
+                            pcall(function()
+                                rs.GrabEvents.SetNetworkOwner:FireServer(hrp, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, hrp.Position))
+                            end)
+                        end
+                    end
+                end
+            end
+            
+            -- 정확한 주기 도달 시 호출
+            if os.clock() >= nextTime then
+                nextTime = nextTime + interval
+                
+                if not selectedKickPlayer then continue end
+                
+                local tChar = selectedKickPlayer.Character
+                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                local tHum = tChar and tChar:FindFirstChild("Humanoid")
+                local myChar = plr.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                
+                -- HRP 존재 및 워크스페이스 확인 (정확도 강화)
+                if not (myChar and myHRP and myHRP.Parent) then continue end
+                if not (tChar and tHRP and tHRP.Parent == workspace) then continue end
+                if not tHum or tHum.Health <= 0 then continue end
+                
+                local dist = (tHRP.Position - myHRP.Position).Magnitude
+                if dist > 30 then
+                    pcall(function()
+                        myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                    end)
+                end
+                
+                -- 5:2 패턴 진행
+                kickCounter = kickCounter + 1
+                local patternIndex = (kickCounter - 1) % #pattern + 1
+                
+                if pattern[patternIndex] == 1 then
+                    -- 셋오너: 상대 HRP에 초정밀 호출
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
+                else
+                    -- 디트로이트: 상대 HRP에 호출
+                    pcall(function()
+                        rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                end
             end
         end
     end)
@@ -467,7 +497,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, 핑 최적화)",
+    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, 초정밀 호출)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -644,4 +674,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, 워치독 제거, 핑 최적화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, 초정밀 호출 및 저강도 워치독 적용", Duration = 3})
