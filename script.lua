@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 워치독 포함)
+-- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 디트로이트 보장)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,7 +389,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 770Hz 루프 (5:2 패턴 + 소유권 워치독)
+    -- 770Hz 루프 (5:2 패턴 + 소유권 워치독, 디트로이트 보장)
     remoteTask = task.spawn(function()
         local interval = 0.001298701299  -- 770Hz (1/770)
         local nextTime = tick() + interval
@@ -419,17 +419,15 @@ local function startKickLoop()
                 end)
             end
             
-            -- ★ 소유권 워치독: PartOwner가 내가 아니면 즉시 SetNetworkOwner 발사
+            -- 소유권 워치독: 없으면 SetNetworkOwner 추가 발사, 하지만 패턴은 건너뛰지 않음
             local partOwner = tHRP:FindFirstChild("PartOwner")
             if not partOwner or partOwner.Value ~= plr.Name then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
-                kickCounter = 0 -- 패턴 리셋 (다음 루프부터 새로 시작)
-                continue
             end
             
-            -- 정상 패턴 진행
+            -- 정상 패턴 진행 (SetNetworkOwner 5회, DestroyGrabLine 2회)
             kickCounter = kickCounter + 1
             if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
                 pcall(function()
@@ -477,7 +475,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, 소유권 워치독)",
+    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, 디트로이트 보장)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -654,4 +652,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, 소유권 워치독 추가", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, 디트로이트 호출 보장", Duration = 3})
