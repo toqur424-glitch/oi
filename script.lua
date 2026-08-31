@@ -1,4 +1,13 @@
 --=============================================
+-- [변경 사항 목록 (여기를 수정하면 실행 시 알림에 반영됨)]
+--=============================================
+local 변경사항 = {
+    "1. 셋오너 480Hz / 디트로이트 200Hz (680Hz 루프, 5:2 패턴)",
+    "2. 킥 타겟 고정 좌표: X=0, Y=20 (수직 위로 고정)",
+    "3. 안티그랩, 팔레트 레그돌 등 기존 기능 유지"
+}
+
+--=============================================
 -- [초기 로드 및 게임 체크]
 --=============================================
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -64,9 +73,9 @@ if BeingHeld then
 end
 
 --=============================================
--- [공통 패턴 - 셋오너 500Hz, 디트로이트 220Hz]
+-- [공통 패턴 - 셋오너 5회, 디트로이트 2회 (680Hz 루프)]
 --=============================================
-local pattern = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0}  -- 25회 셋오너, 11회 디트로이트
+local pattern = {1,1,1,1,1,0,0}  -- 5회 셋오너, 2회 디트로이트
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -219,7 +228,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (720Hz, 셋오너 500Hz/디트로이트 220Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (680Hz, 5:2 패턴)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -332,7 +341,7 @@ local function startKickLoop()
                 setupBodiesForTarget()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- 수정: x=0
+                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- x=0, y=20
                     pcall(function()
                         hrp.CFrame = CFrame.new(targetPos)
                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -355,7 +364,7 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- 수정: x=0
+        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- x=0, y=20
         
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
@@ -389,9 +398,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 720Hz 루프 (셋오너 500Hz, 디트로이트 220Hz)
+    -- 680Hz 루프 (5:2 패턴 → 셋오너 485Hz, 디트로이트 194Hz 근사)
     remoteTask = task.spawn(function()
-        local interval = 0.001388888889  -- 720Hz (1/720)
+        local interval = 0.001470588235  -- 680Hz (1/680)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -427,7 +436,7 @@ local function startKickLoop()
                 end)
             end
             
-            -- 정상 패턴 진행 (셋오너 25회, 디트로이트 11회)
+            -- 정상 패턴 진행 (셋오너 5회, 디트로이트 2회)
             kickCounter = kickCounter + 1
             if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
                 pcall(function()
@@ -475,7 +484,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (720Hz, 셋오너 500Hz/디트로이트 220Hz)",
+    Name = "블롭맨 오너 킥 실행 (680Hz, 셋오너 480Hz/디트로이트 200Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -650,6 +659,18 @@ KickTab:CreateToggle({
 -- [나머지 필수 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
-SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
+SettingsTab:CreateButton({
+    Name = "재설정",
+    Callback = function()
+        Rayfield:Notify({Title = "알림", Content = "초기화 완료"})
+    end
+})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "720Hz, 셋오너 500Hz/디트로이트 220Hz", Duration = 3})
+--=============================================
+-- [스크립트 실행 시 변경 사항 알림]
+--=============================================
+Rayfield:Notify({
+    Title = "⚠️ 변경 사항 안내",
+    Content = table.concat(변경사항, "\n"),
+    Duration = 5
+})
