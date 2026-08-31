@@ -64,9 +64,9 @@ if BeingHeld then
 end
 
 --=============================================
--- [공통 패턴 - 2:1 (셋오너 2회, 디트로이트 1회)]
+-- [공통 패턴 - 5:2 (셋오너 5회, 디트로이트 2회)]
 --=============================================
-local pattern = {1,1,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
+local pattern = {1,1,1,1,1,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (750Hz, 2:1 패턴, 고정력 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (420Hz, 5:2 패턴, 고정력 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -275,15 +275,13 @@ local function setupBodiesForTarget()
     local tTorso = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
     if not tHRP then return end
 
-    -- 기존 Body 제거
     removeOldBodies(tHRP)
 
-    -- HRP BodyPosition 강화
     targetBP_HRP = Instance.new("BodyPosition")
     targetBP_HRP.Name = "KickBP_HRP"
     targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP_HRP.P = 1000000  -- 비례 강화
-    targetBP_HRP.D = 10000    -- 미분 강화
+    targetBP_HRP.P = 1000000
+    targetBP_HRP.D = 10000
     targetBP_HRP.Parent = tHRP
 
     targetBG_HRP = Instance.new("BodyGyro")
@@ -294,7 +292,6 @@ local function setupBodiesForTarget()
     targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
     targetBG_HRP.Parent = tHRP
 
-    -- Torso BodyPosition 강화
     if tTorso then
         removeOldBodies(tTorso)
         targetBP_Torso = Instance.new("BodyPosition")
@@ -360,12 +357,10 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
-        -- HRP BodyPosition 없으면 재설정
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
         
-        -- HRP 업데이트
         if targetBP_HRP then
             targetBP_HRP.Position = targetPos
         end
@@ -373,7 +368,6 @@ local function startKickLoop()
             targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
         end
         
-        -- Torso 업데이트
         if tTorso and targetBP_Torso and targetBP_Torso.Parent == tTorso then
             targetBP_Torso.Position = targetPos
             if targetBG_Torso then
@@ -381,7 +375,6 @@ local function startKickLoop()
             end
         end
         
-        -- 물리 속도 강제 제거
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         if tTorso then
@@ -389,7 +382,6 @@ local function startKickLoop()
             tTorso.AssemblyAngularVelocity = Vector3.zero
         end
         
-        -- Humanoid 물리 간섭 제거
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
@@ -397,9 +389,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 750Hz 루프 (셋오너 2회, 디트로이트 1회, pcall 적용)
+    -- 420Hz 루프 (셋오너 5회, 디트로이트 2회)
     remoteTask = task.spawn(function()
-        local interval = 0.001333333333  -- 750Hz (1/750)
+        local interval = 0.002380952381  -- 420Hz (1/420)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -429,12 +421,10 @@ local function startKickLoop()
             
             kickCounter = kickCounter + 1
             if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
-                -- 셋오너: 상대 HRP에 정확히 호출
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
             else
-                -- 디트로이트: 상대 HRP에 호출
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
@@ -476,7 +466,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (750Hz, 셋오너 500Hz/디트로이트 250Hz, HRP+Torso 고정 초강화)",
+    Name = "블롭맨 오너 킥 실행 (420Hz, 셋오너 300Hz/디트로이트 120Hz, HRP+Torso 고정 초강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -550,8 +540,8 @@ KickTab:CreateToggle({
                         if v:IsA("BasePart") then
                             v.CanCollide = false
                             v.CanQuery = false
-                            v.Transparency = 0.5   -- 50% 투명도
-                            v.Massless = true       -- 몸통 통과
+                            v.Transparency = 0.5
+                            v.Massless = true
                         end
                     end
 
@@ -573,7 +563,6 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 진동: 위아래 15스터드, 20Hz
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
@@ -654,4 +643,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "750Hz, 셋오너 500Hz/디트로이트 250Hz, HRP+Torso 고정 초강화, pcall 및 정확도 최적화", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "420Hz, 셋오너 300Hz/디트로이트 120Hz, HRP+Torso 고정 초강화, pcall 적용", Duration = 3})
