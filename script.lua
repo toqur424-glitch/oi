@@ -62,12 +62,9 @@ if BeingHeld then
 end
 
 --=============================================
--- [공통 패턴 - 40:23 (셋오너 40회, 디트로이트 23회)]
+-- [공통 패턴 - 6:3 (셋오너 6회, 디트로이트 3회)]
 --=============================================
-local pattern = {}
-for i = 1, 40 do table.insert(pattern, 1) end
-for i = 1, 23 do table.insert(pattern, 0) end
--- 패턴 길이 63
+local pattern = {1,1,1,1,1,1,0,0,0}  -- 1 = SetOwner, 0 = Destroy
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -216,7 +213,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (630Hz, 40:23 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (750Hz, 6:3 패턴)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -384,9 +381,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 630Hz 루프 (셋오너 40회, 디트로이트 23회 - 40:23 비율)
+    -- 750Hz 루프 (셋오너 6회, 디트로이트 3회 - 6:3 비율)
     remoteTask = task.spawn(function()
-        local interval = 0.001587301587  -- 630Hz (1/630)
+        local interval = 0.001333333333  -- 750Hz (1/750)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -456,7 +453,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (630Hz, 셋오너 400Hz/디트로이트 230Hz)",
+    Name = "블롭맨 오너 킥 실행 (750Hz, 셋오너 500Hz/디트로이트 250Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -629,4 +626,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "630Hz, 셋오너 400Hz/디트로이트 230Hz, HRP+Torso 고정 유지, pcall 제거", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "750Hz, 셋오너 500Hz/디트로이트 250Hz, HRP+Torso 고정 유지, pcall 제거", Duration = 3})
