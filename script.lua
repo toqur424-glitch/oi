@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (420Hz, 5:2 패턴, 고정력 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 고정력 강화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,9 +389,9 @@ local function startKickLoop()
         end
     end)
 
-    -- 420Hz 루프 (셋오너 5회, 디트로이트 2회)
+    -- 770Hz 루프 (셋오너 5회, 디트로이트 2회, pcall 적용)
     remoteTask = task.spawn(function()
-        local interval = 0.002380952381  -- 420Hz (1/420)
+        local interval = 0.001298701299  -- 770Hz (1/770)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
@@ -421,10 +421,12 @@ local function startKickLoop()
             
             kickCounter = kickCounter + 1
             if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
+                -- 셋오너: 상대 HRP에 호출
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
             else
+                -- 디트로이트: 상대 HRP에 호출
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
@@ -466,7 +468,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (420Hz, 셋오너 300Hz/디트로이트 120Hz, HRP+Torso 고정 초강화)",
+    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, HRP+Torso 고정 초강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -643,4 +645,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "420Hz, 셋오너 300Hz/디트로이트 120Hz, HRP+Torso 고정 초강화, pcall 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, HRP+Torso 고정 초강화, pcall 적용", Duration = 3})
