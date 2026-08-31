@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 고정력 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 충돌 방지)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,12 +389,19 @@ local function startKickLoop()
         end
     end)
 
-    -- 770Hz 루프 (셋오너 5회, 디트로이트 2회, pcall 적용)
+    -- 770Hz 루프 (셋오너 5회, 디트로이트 2회, 충돌 방지 로직 포함)
     remoteTask = task.spawn(function()
         local interval = 0.001298701299  -- 770Hz (1/770)
         local nextTime = tick() + interval
         
         while kickLoopRunning do
+            -- 팔레트 레그돌이 활성화되어 있으면 잠시 대기하여 충돌 방지
+            if getgenv().PalletRagdollActive then
+                task.wait(0.002)
+                nextTime = tick() + interval
+                continue
+            end
+            
             while tick() < nextTime do
                 task.wait(0.0001)
             end
@@ -421,12 +428,15 @@ local function startKickLoop()
             
             kickCounter = kickCounter + 1
             if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
-                -- 셋오너: 상대 HRP에 호출
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
+                -- 셋오너 호출 전에 PartOwner 확인 (이미 소유권이 있으면 생략하여 정확도 향상)
+                local partOwner = tHRP:FindFirstChild("PartOwner")
+                if not partOwner or partOwner.Value ~= plr.Name then
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
+                end
             else
-                -- 디트로이트: 상대 HRP에 호출
+                -- 디트로이트 호출
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
@@ -468,7 +478,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, HRP+Torso 고정 초강화)",
+    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, 충돌 방지)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -511,6 +521,8 @@ KickTab:CreateToggle({
                 return
             end
 
+            -- 팔레트 레그돌 활성화 플래그 설정
+            getgenv().PalletRagdollActive = true
             getgenv().palletRagdollActive = true
             getgenv().PalletForRagdoll = nil
             
@@ -617,6 +629,8 @@ KickTab:CreateToggle({
 
             getgenv().spawnNewPallet()
         else
+            -- 팔레트 레그돌 비활성화 플래그 해제
+            getgenv().PalletRagdollActive = false
             getgenv().palletRagdollActive = false
             clearAttackLoop()
 
@@ -645,4 +659,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, HRP+Torso 고정 초강화, pcall 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, 충돌 방지 및 정확도 강화", Duration = 3})
