@@ -332,7 +332,7 @@ local function startKickLoop()
                 setupBodiesForTarget()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- 수정됨
+                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
                     pcall(function()
                         hrp.CFrame = CFrame.new(targetPos)
                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -355,7 +355,7 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- 수정됨
+        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
@@ -389,7 +389,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 770Hz 루프 (5:2 패턴 + 소유권 워치독, 디트로이트 보장)
+    -- 770Hz 루프 (5:2 패턴, 항상 호출)
     remoteTask = task.spawn(function()
         local interval = 0.001298701299  -- 770Hz (1/770)
         local nextTime = tick() + interval
@@ -419,20 +419,15 @@ local function startKickLoop()
                 end)
             end
             
-            -- 소유권 워치독: 없으면 SetNetworkOwner 추가 발사, 하지만 패턴은 건너뛰지 않음
-            local partOwner = tHRP:FindFirstChild("PartOwner")
-            if not partOwner or partOwner.Value ~= plr.Name then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
-            end
-            
-            -- 정상 패턴 진행 (SetNetworkOwner 5회, DestroyGrabLine 2회)
+            -- 정상 패턴 진행 (무조건 호출하되, 대상이 유효할 때만)
             kickCounter = kickCounter + 1
             if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
+                -- 부품이 여전히 워크스페이스에 있을 때만 호출
+                if tHRP.Parent then
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
+                end
             else
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
