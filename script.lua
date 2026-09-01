@@ -404,13 +404,11 @@ local function startKickLoop()
             
             local tChar = selectedKickPlayer.Character
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-            local tHum = tChar and tChar:FindFirstChild("Humanoid")
             local myChar = plr.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             
             if not (myChar and myHRP) then continue end
             if not (tChar and tHRP) then continue end
-            if not tHum or tHum.Health <= 0 then continue end
             
             local dist = (tHRP.Position - myHRP.Position).Magnitude
             if dist > 30 then
@@ -419,15 +417,12 @@ local function startKickLoop()
                 end)
             end
             
-            -- 정상 패턴 진행 (무조건 호출하되, 대상이 유효할 때만)
+            -- 정상 패턴 진행 (항상 호출, tHum 조건 제거)
             kickCounter = kickCounter + 1
             if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
-                -- 부품이 여전히 워크스페이스에 있을 때만 호출
-                if tHRP.Parent then
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                end
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
             else
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
