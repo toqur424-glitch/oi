@@ -152,8 +152,8 @@ local function startFKeyAttack(targetPlayer)
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
             end)
         else
+            -- CreateGrabLine 제거, DestroyGrabLine만 호출
             pcall(function()
-                rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, CFrame.new())
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
         end
@@ -425,11 +425,10 @@ local function startKickLoop()
                     kickCounter = kickCounter + 1
                 end
             else
-                -- DestroyGrabLine 호출 (9300Hz)
+                -- DestroyGrabLine 호출 (9300Hz) - CreateGrabLine 제거됨
                 if now >= nextDestroyTime then
                     if tHRP then
                         pcall(function()
-                            rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                             rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                         end)
                     end
@@ -652,4 +651,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 10000Hz / Destroy 9300Hz, 5:3 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 10000Hz / Destroy 9300Hz, 5:3 패턴 적용 (CreateGrabLine 제거됨)", Duration = 3})
