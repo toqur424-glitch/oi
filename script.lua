@@ -332,7 +332,7 @@ local function startKickLoop()
                 setupBodiesForTarget()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- 수정됨
                     pcall(function()
                         hrp.CFrame = CFrame.new(targetPos)
                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -355,7 +355,7 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
+        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- 수정됨
         
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
