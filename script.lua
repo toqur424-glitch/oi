@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (680Hz, 5:2 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (680Hz, 5:2 패턴, 최적화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -233,6 +233,16 @@ local targetBP_HRP = nil
 local targetBG_HRP = nil
 local targetBP_Torso = nil
 local targetBG_Torso = nil
+
+-- 소유권 확인 함수
+local function hasOwnership(part)
+    if not part then return false end
+    local partOwner = part:FindFirstChild("PartOwner")
+    if partOwner and partOwner.Value == plr.Name then return true end
+    local netOwner = part:GetNetworkOwner()
+    if netOwner == plr then return true end
+    return false
+end
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -389,10 +399,12 @@ local function startKickLoop()
         end
     end)
 
-    -- 680Hz 루프 (5:2 패턴 → 셋오너 485Hz, 디트로이트 194Hz 근사)
+    -- 680Hz 루프 (5:2 패턴, 셋오너 50Hz 제한)
     remoteTask = task.spawn(function()
         local interval = 0.001470588235  -- 680Hz (1/680)
         local nextTime = tick() + interval
+        local lastSetOwnerTime = 0
+        local SET_OWNER_INTERVAL = 0.02  -- 50Hz로 제한 (1/0.02 = 50)
         
         while kickLoopRunning do
             while tick() < nextTime do
@@ -419,21 +431,17 @@ local function startKickLoop()
                 end)
             end
             
-            -- 소유권 워치독: 없으면 SetNetworkOwner 추가 발사
-            local partOwner = tHRP:FindFirstChild("PartOwner")
-            if not partOwner or partOwner.Value ~= plr.Name then
+            -- 소유권이 없을 때만, 50Hz 주기로 셋오너 호출 (핑 최적화)
+            if not hasOwnership(tHRP) and tick() - lastSetOwnerTime >= SET_OWNER_INTERVAL then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
+                lastSetOwnerTime = tick()
             end
             
-            -- 정상 패턴 진행 (셋오너 5회, 디트로이트 2회)
+            -- 패턴에 따라 디트로이트 호출 (셋오너는 위에서만 처리)
             kickCounter = kickCounter + 1
-            if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
-            else
+            if pattern[(kickCounter - 1) % #pattern + 1] == 0 then
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
@@ -475,7 +483,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (680Hz, 셋오너 480Hz/디트로이트 200Hz)",
+    Name = "블롭맨 오너 킥 실행 (680Hz, 셋오너 50Hz 제한, 최적화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -660,4 +668,4 @@ SettingsTab:CreateButton({
 --=============================================
 -- [로딩 완료 알림]
 --=============================================
-Rayfield:Notify({Title = "로딩 완료", Content = "680Hz, 셋오너 480Hz/디트로이트 200Hz", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "최적화 적용 (셋오너 50Hz 제한)", Duration = 3})
