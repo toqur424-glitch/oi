@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (3000Hz/2400Hz, 5:3 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (5000Hz/3500Hz, 5:3 패턴)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,10 +389,10 @@ local function startKickLoop()
         end
     end)
 
-    -- 5:3 패턴 + 각각 3000Hz / 2400Hz 호출 + 원거리 텔레포트
+    -- 5:3 패턴 + 각각 5000Hz / 3500Hz 호출 + 원거리 텔레포트
     remoteTask = task.spawn(function()
-        local setInterval = 1/3000      -- 3000Hz
-        local destroyInterval = 1/2400  -- 2400Hz
+        local setInterval = 1/5000      -- 5000Hz
+        local destroyInterval = 1/3500  -- 3500Hz
         local nextSetTime = tick()
         local nextDestroyTime = tick()
 
@@ -414,7 +414,7 @@ local function startKickLoop()
             end
 
             if pattern[patternIndex] == 1 then
-                -- SetNetworkOwner 호출 (3000Hz)
+                -- SetNetworkOwner 호출 (5000Hz)
                 if now >= nextSetTime then
                     if tHRP and myHRP then
                         pcall(function()
@@ -425,7 +425,7 @@ local function startKickLoop()
                     kickCounter = kickCounter + 1
                 end
             else
-                -- DestroyGrabLine 호출 (2400Hz)
+                -- DestroyGrabLine 호출 (3500Hz)
                 if now >= nextDestroyTime then
                     if tHRP then
                         pcall(function()
@@ -475,7 +475,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetOwner 3000Hz / Destroy 2400Hz, 5:3 패턴)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 5000Hz / Destroy 3500Hz, 5:3 패턴)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -652,4 +652,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 3000Hz / Destroy 2400Hz, 5:3 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 5000Hz / Destroy 3500Hz, 5:3 패턴 적용", Duration = 3})
