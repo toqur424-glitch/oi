@@ -277,7 +277,7 @@ local function setupBodiesForTarget()
 
     removeOldBodies(tHRP)
 
-    -- BodyPosition (math.huge) 생성 -> 상대를 완전히 고정
+    -- HumanoidRootPart 완전 고정 (BodyPosition math.huge)
     targetBP_HRP = Instance.new("BodyPosition")
     targetBP_HRP.Name = "KickBP_HRP"
     targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -295,6 +295,7 @@ local function setupBodiesForTarget()
 
     if tTorso then
         removeOldBodies(tTorso)
+        -- 몸통(Torso) 완전 고정
         targetBP_Torso = Instance.new("BodyPosition")
         targetBP_Torso.Name = "KickBP_Torso"
         targetBP_Torso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -358,7 +359,7 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
-        -- BodyPosition 재설정 (로직 추가)
+        -- BodyPosition 재설정 (항상 유지)
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
@@ -377,7 +378,7 @@ local function startKickLoop()
             end
         end
         
-        -- 속도 강제 0으로 고정
+        -- 속도 강제 0
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         if tTorso then
