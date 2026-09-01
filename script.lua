@@ -64,9 +64,9 @@ if BeingHeld then
 end
 
 --=============================================
--- [공통 패턴 - 셋오너 5회, 디트로이트 2회 (680Hz 루프)]
+-- [공통 패턴 - 5:2 (셋오너 5회, 디트로이트 2회)]
 --=============================================
-local pattern = {1,1,1,1,1,0,0}  -- 5회 셋오너, 2회 디트로이트
+local pattern = {1,1,1,1,1,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (680Hz, 5:2 패턴, 최적화)
+-- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 디트로이트 보장)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -233,16 +233,6 @@ local targetBP_HRP = nil
 local targetBG_HRP = nil
 local targetBP_Torso = nil
 local targetBG_Torso = nil
-
--- 소유권 확인 함수
-local function hasOwnership(part)
-    if not part then return false end
-    local partOwner = part:FindFirstChild("PartOwner")
-    if partOwner and partOwner.Value == plr.Name then return true end
-    local netOwner = part:GetNetworkOwner()
-    if netOwner == plr then return true end
-    return false
-end
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -342,7 +332,7 @@ local function startKickLoop()
                 setupBodiesForTarget()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- x=0, y=20
+                    local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
                     pcall(function()
                         hrp.CFrame = CFrame.new(targetPos)
                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -365,7 +355,7 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)  -- x=0, y=20
+        local targetPos = myHRP.Position + Vector3.new(7, 20, 0)
         
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
@@ -399,12 +389,10 @@ local function startKickLoop()
         end
     end)
 
-    -- 680Hz 루프 (5:2 패턴, 셋오너 50Hz 제한)
+    -- 770Hz 루프 (5:2 패턴 + 소유권 워치독, 디트로이트 보장)
     remoteTask = task.spawn(function()
-        local interval = 0.001470588235  -- 680Hz (1/680)
+        local interval = 0.001298701299  -- 770Hz (1/770)
         local nextTime = tick() + interval
-        local lastSetOwnerTime = 0
-        local SET_OWNER_INTERVAL = 0.02  -- 50Hz로 제한 (1/0.02 = 50)
         
         while kickLoopRunning do
             while tick() < nextTime do
@@ -431,17 +419,21 @@ local function startKickLoop()
                 end)
             end
             
-            -- 소유권이 없을 때만, 50Hz 주기로 셋오너 호출 (핑 최적화)
-            if not hasOwnership(tHRP) and tick() - lastSetOwnerTime >= SET_OWNER_INTERVAL then
+            -- 소유권 워치독: 없으면 SetNetworkOwner 추가 발사, 하지만 패턴은 건너뛰지 않음
+            local partOwner = tHRP:FindFirstChild("PartOwner")
+            if not partOwner or partOwner.Value ~= plr.Name then
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
-                lastSetOwnerTime = tick()
             end
             
-            -- 패턴에 따라 디트로이트 호출 (셋오너는 위에서만 처리)
+            -- 정상 패턴 진행 (SetNetworkOwner 5회, DestroyGrabLine 2회)
             kickCounter = kickCounter + 1
-            if pattern[(kickCounter - 1) % #pattern + 1] == 0 then
+            if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            else
                 pcall(function()
                     rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
@@ -483,7 +475,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (680Hz, 셋오너 50Hz 제한, 최적화)",
+    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, 디트로이트 보장)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -658,14 +650,6 @@ KickTab:CreateToggle({
 -- [나머지 필수 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
-SettingsTab:CreateButton({
-    Name = "재설정",
-    Callback = function()
-        Rayfield:Notify({Title = "알림", Content = "초기화 완료"})
-    end
-})
+SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
---=============================================
--- [로딩 완료 알림]
---=============================================
-Rayfield:Notify({Title = "로딩 완료", Content = "최적화 적용 (셋오너 50Hz 제한)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, 디트로이트 호출 보장", Duration = 3})
