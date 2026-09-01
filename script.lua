@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (60000Hz/57000Hz, 5:3 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (100000Hz/97000Hz, 5:3 패턴)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,10 +389,10 @@ local function startKickLoop()
         end
     end)
 
-    -- 5:3 패턴 + 각각 60000Hz / 57000Hz 호출 + 원거리 텔레포트
+    -- 5:3 패턴 + 각각 100000Hz / 97000Hz 호출 + 원거리 텔레포트
     remoteTask = task.spawn(function()
-        local setInterval = 1/60000      -- 60000Hz (변경됨)
-        local destroyInterval = 1/57000  -- 57000Hz (변경됨)
+        local setInterval = 1/100000      -- 100000Hz (변경됨)
+        local destroyInterval = 1/97000   -- 97000Hz (변경됨)
         local nextSetTime = tick()
         local nextDestroyTime = tick()
 
@@ -414,7 +414,7 @@ local function startKickLoop()
             end
 
             if pattern[patternIndex] == 1 then
-                -- SetNetworkOwner 호출 (60000Hz)
+                -- SetNetworkOwner 호출 (100000Hz)
                 if now >= nextSetTime then
                     if tHRP and myHRP then
                         pcall(function()
@@ -425,7 +425,7 @@ local function startKickLoop()
                     kickCounter = kickCounter + 1
                 end
             else
-                -- DestroyGrabLine 호출 (57000Hz) - CreateGrabLine 제거됨
+                -- DestroyGrabLine 호출 (97000Hz) - CreateGrabLine 제거됨
                 if now >= nextDestroyTime then
                     if tHRP then
                         pcall(function()
@@ -474,7 +474,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetOwner 60000Hz / Destroy 57000Hz, 5:3 패턴)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 100000Hz / Destroy 97000Hz, 5:3 패턴)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -651,4 +651,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 60000Hz / Destroy 57000Hz, 5:3 패턴 적용 (CreateGrabLine 제거됨)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 100000Hz / Destroy 97000Hz, 5:3 패턴 적용 (CreateGrabLine 제거됨)", Duration = 3})
