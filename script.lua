@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (770Hz, 5:2 패턴, 디트로이트 보장)
+-- [KICK 탭] - 블롭맨 오너 킥 (550Hz/340Hz, 5:2 패턴)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,46 +389,48 @@ local function startKickLoop()
         end
     end)
 
-    -- 770Hz 루프 (5:2 패턴, 항상 호출)
+    -- 5:2 패턴 + 각각 550Hz / 340Hz 호출
     remoteTask = task.spawn(function()
-        local interval = 0.001298701299  -- 770Hz (1/770)
-        local nextTime = tick() + interval
-        
+        local setInterval = 1/550      -- 550Hz
+        local destroyInterval = 1/340  -- 340Hz
+        local nextSetTime = tick()
+        local nextDestroyTime = tick()
+
         while kickLoopRunning do
-            while tick() < nextTime do
-                task.wait(0.0001)
-            end
-            nextTime = nextTime + interval
-            
-            if not selectedKickPlayer then continue end
-            
-            local tChar = selectedKickPlayer.Character
-            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-            local myChar = plr.Character
-            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            
-            if not (myChar and myHRP) then continue end
-            if not (tChar and tHRP) then continue end
-            
-            local dist = (tHRP.Position - myHRP.Position).Magnitude
-            if dist > 30 then
-                pcall(function()
-                    myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                end)
-            end
-            
-            -- 정상 패턴 진행 (항상 호출, tHum 조건 제거)
-            kickCounter = kickCounter + 1
-            if pattern[(kickCounter - 1) % #pattern + 1] == 1 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
+            local now = tick()
+            local patternIndex = (kickCounter - 1) % #pattern + 1
+
+            if pattern[patternIndex] == 1 then
+                -- SetNetworkOwner 호출 (550Hz)
+                if now >= nextSetTime then
+                    local tChar = selectedKickPlayer and selectedKickPlayer.Character
+                    local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                    if tHRP and myHRP then
+                        pcall(function()
+                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                        end)
+                    end
+                    nextSetTime = now + setInterval
+                    kickCounter = kickCounter + 1
+                end
             else
-                pcall(function()
-                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                end)
+                -- DestroyGrabLine 호출 (340Hz)
+                if now >= nextDestroyTime then
+                    local tChar = selectedKickPlayer and selectedKickPlayer.Character
+                    local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                    if tHRP then
+                        pcall(function()
+                            rs.GrabEvents.CreateGrabLine:FireServer(tHRP, CFrame.new())
+                            rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                        end)
+                    end
+                    nextDestroyTime = now + destroyInterval
+                    kickCounter = kickCounter + 1
+                end
             end
+
+            task.wait(0.0001) -- 고해상도 대기
         end
     end)
 end
@@ -465,7 +467,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (770Hz, 셋오너 550Hz/디트로이트 220Hz, 디트로이트 보장)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 550Hz / Destroy 340Hz, 5:2 패턴)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -642,4 +644,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "770Hz, 셋오너 550Hz/디트로이트 220Hz, 디트로이트 호출 보장", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 550Hz / Destroy 340Hz, 5:2 패턴 적용", Duration = 3})
