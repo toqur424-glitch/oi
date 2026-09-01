@@ -219,7 +219,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (5000Hz/3500Hz, 5:3 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (5000Hz/3500Hz, 5:3 패턴, BodyPosition 고정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -277,6 +277,7 @@ local function setupBodiesForTarget()
 
     removeOldBodies(tHRP)
 
+    -- BodyPosition (math.huge) 생성 -> 상대를 완전히 고정
     targetBP_HRP = Instance.new("BodyPosition")
     targetBP_HRP.Name = "KickBP_HRP"
     targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -357,6 +358,7 @@ local function startKickLoop()
         
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         
+        -- BodyPosition 재설정 (로직 추가)
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
@@ -375,6 +377,7 @@ local function startKickLoop()
             end
         end
         
+        -- 속도 강제 0으로 고정
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
         if tTorso then
@@ -382,6 +385,7 @@ local function startKickLoop()
             tTorso.AssemblyAngularVelocity = Vector3.zero
         end
         
+        -- Humanoid 고정
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
@@ -475,7 +479,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetOwner 5000Hz / Destroy 3500Hz, 5:3 패턴)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 5000Hz / Destroy 3500Hz, 5:3 패턴, BodyPosition 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -652,4 +656,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 5000Hz / Destroy 3500Hz, 5:3 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 5000Hz / Destroy 3500Hz, 5:3 패턴, BodyPosition 고정 적용", Duration = 3})
