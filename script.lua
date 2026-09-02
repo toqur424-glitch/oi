@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지] (BeingHeld 로직 제거됨)
+-- [안티그랩: 탈출 리모트 차단] (BeingHeld 로직 제거됨)
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -42,8 +42,6 @@ end
 if ReleaseGrab then
     ReleaseGrab.OnClientEvent:Connect(function(...) return end)
 end
-
--- BeingHeld 관련 코드 전부 삭제됨
 
 --=============================================
 -- [공통 패턴 - 5:3 (셋오너 5회, 디트로이트 3회)]
@@ -296,7 +294,7 @@ local function setupBodiesForTarget()
 end
 
 local function startKickLoop()
-    if remoteTask then task.cancel(remoteTask) end
+    if remoteTask then remoteTask:Disconnect() end
     if steppedConn then steppedConn:Disconnect() end
     if respawnConn then respawnConn:Disconnect() end
     
@@ -370,51 +368,37 @@ local function startKickLoop()
         end
     end)
 
-    -- 5:3 패턴 + 매 프레임 호출 (시간 기반 계산은 사실상 즉시 충족됨)
-    remoteTask = task.spawn(function()
-        local setInterval = 1/10000000000000000      -- 1경Hz (10^16)
-        local destroyInterval = 1/9700000000000000   -- 9700만조Hz (9.7 * 10^15)
-        local nextSetTime = tick()
-        local nextDestroyTime = tick()
-
-        while kickLoopRunning do
-            local now = tick()
-            local patternIndex = (kickCounter - 1) % #pattern + 1
-
-            local tChar = selectedKickPlayer and selectedKickPlayer.Character
-            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-            local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-
-            if tHRP and myHRP then
-                local dist = (tHRP.Position - myHRP.Position).Magnitude
-                if dist > 30 then
-                    pcall(function()
-                        plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                    end)
-                end
-
-                if pattern[patternIndex] == 1 then
-                    -- 셋오너 (SetNetworkOwner) - 1경Hz
-                    if now >= nextSetTime then
-                        pcall(function()
-                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                        end)
-                        nextSetTime = now + setInterval
-                        kickCounter = kickCounter + 1
-                    end
-                else
-                    -- 디트로이트 (DestroyGrabLine) - 9700만조Hz
-                    if now >= nextDestroyTime then
-                        pcall(function()
-                            rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                        end)
-                        nextDestroyTime = now + destroyInterval
-                        kickCounter = kickCounter + 1
-                    end
-                end
+    -- ✅ 매 프레임마다 패턴에 따라 호출 (시간 조건 제거, 누락 방지)
+    remoteTask = RunService.Heartbeat:Connect(function()
+        if not kickLoopRunning then return end
+        
+        local tChar = selectedKickPlayer and selectedKickPlayer.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        
+        if tHRP and myHRP then
+            -- 원거리 텔레포트
+            local dist = (tHRP.Position - myHRP.Position).Magnitude
+            if dist > 30 then
+                pcall(function()
+                    plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                end)
             end
 
-            task.wait() -- 매 프레임마다 실행
+            local patternIndex = (kickCounter - 1) % #pattern + 1
+            if pattern[patternIndex] == 1 then
+                -- 셋오너 (SetNetworkOwner)
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            else
+                -- 디트로이트 (DestroyGrabLine) - 상대 HRP에 호출
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                end)
+            end
+            
+            kickCounter = kickCounter + 1
         end
     end)
 end
@@ -426,7 +410,7 @@ local function stopKickLoop()
         steppedConn = nil
     end
     if remoteTask then
-        task.cancel(remoteTask)
+        remoteTask:Disconnect()
         remoteTask = nil
     end
     if respawnConn then
@@ -628,4 +612,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (안티그랩 제거됨)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (매 프레임 호출, 안티그랩 제거됨)", Duration = 3})
