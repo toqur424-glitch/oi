@@ -44,9 +44,9 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - 5:3 (셋오너 5회, 디스트로이트 3회)]
+-- [공통 패턴 - 5:3 (셋오너 5회, 디스로이트 3회)]
 --=============================================
-local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = Destroy (HRP 파괴)
+local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = Destroy
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -392,9 +392,9 @@ local function startKickLoop()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
             else
-                -- ✅ 변경된 부분: 디스트로이트 (HRP 파괴)
+                -- 디스로이트 (Destroy) - 상대 HRP에 호출
                 pcall(function()
-                    tHRP:Destroy()
+                    rs.GrabEvents.Destroy:FireServer(tHRP)
                 end)
             end
             
@@ -461,7 +461,7 @@ KickTab:CreateToggle({
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
+        local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")  -- 이 부분은 그대로 둠
         local lpName = plr.Name
         local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
 
