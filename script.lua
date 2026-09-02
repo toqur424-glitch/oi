@@ -119,7 +119,7 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- ✅ 셋오너만 호출 (DestroyGrabLine 없음)
+        -- 셋오너만 호출 (GrabLine 관련 없음)
         pcall(function()
             rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
         end)
@@ -185,7 +185,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (셋오너만 사용, 700Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (셋오너만, 900Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -286,9 +286,9 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- 700Hz 제한용 변수
+    -- 900Hz 제한용 변수
     local lastFireTime = 0
-    local fireInterval = 1/700  -- 0.00142857초
+    local fireInterval = 1/900  -- 0.001111...초
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -357,7 +357,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 셋오너 호출을 700Hz로 제한
+    -- 셋오너 호출을 900Hz로 제한 (DestroyGrabLine/CreateGrabLine 없음)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -374,7 +374,7 @@ local function startKickLoop()
                 end)
             end
 
-            -- 700Hz 제한: 마지막 호출 시간이 1/700초 이상 지났을 때만 호출
+            -- 900Hz 제한
             local now = tick()
             if now - lastFireTime >= fireInterval then
                 lastFireTime = now
@@ -418,7 +418,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetNetworkOwner 700Hz)",
+    Name = "블롭맨 오너 킥 실행 (SetNetworkOwner 900Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -444,7 +444,7 @@ KickTab:CreateToggle({
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        -- DestroyGrabLine 완전 제거됨
+        -- GrabLine 관련 없음
         local lpName = plr.Name
         local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
 
@@ -481,7 +481,7 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                -- SetNetworkOwner만 호출 (DestroyGrabLine 제거됨)
+                -- SetNetworkOwner만 호출 (GrabLine 관련 없음)
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
                 end)
@@ -595,4 +595,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "DestroyGrabLine 완전 제거됨. 셋오너 호출 700Hz 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "GrabLine 관련 완전 제거됨. 셋오너 호출 900Hz 적용", Duration = 3})
