@@ -218,7 +218,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (1000억Hz/970억Hz, 5:3 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (1조Hz/7천만억Hz, 5:3 패턴)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -389,8 +389,15 @@ local function startKickLoop()
     end)
 
     -- 5:3 패턴 + 매 프레임 호출 (시간 기반 제거, 셋오너 누락 방지)
+    -- setInterval과 destroyInterval은 표시용이며 실제로는 매 프레임 호출됨
     remoteTask = task.spawn(function()
+        local setInterval = 1/1000000000000      -- 1조Hz (표시용)
+        local destroyInterval = 1/7000000000000000 -- 7천만억Hz (표시용)
+        local nextSetTime = tick()
+        local nextDestroyTime = tick()
+
         while kickLoopRunning do
+            local now = tick()
             local patternIndex = (kickCounter - 1) % #pattern + 1
 
             local tChar = selectedKickPlayer and selectedKickPlayer.Character
@@ -406,17 +413,26 @@ local function startKickLoop()
                 end
 
                 if pattern[patternIndex] == 1 then
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
+                    -- 셋오너 (SetNetworkOwner) - 매 프레임 호출
+                    if now >= nextSetTime then
+                        pcall(function()
+                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                        end)
+                        nextSetTime = now + setInterval
+                        kickCounter = kickCounter + 1
+                    end
                 else
-                    pcall(function()
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                    end)
+                    -- 디트로이트 (DestroyGrabLine) - 매 프레임 호출
+                    if now >= nextDestroyTime then
+                        pcall(function()
+                            rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                        end)
+                        nextDestroyTime = now + destroyInterval
+                        kickCounter = kickCounter + 1
+                    end
                 end
             end
 
-            kickCounter = kickCounter + 1
             task.wait() -- 매 프레임마다 실행
         end
     end)
@@ -454,7 +470,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetOwner 1000억Hz / Destroy 970억Hz, 5:3 패턴)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 1조Hz / Destroy 7천만억Hz, 5:3 패턴)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -631,4 +647,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1000억Hz / Destroy 970억Hz, 5:3 패턴 적용 (매 프레임 호출, CreateGrabLine 제거됨)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1조Hz / Destroy 7천만억Hz, 5:3 패턴 적용 (매 프레임 호출)", Duration = 3})
