@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지]
+-- [안티그랩: 탈출 리모트 차단 + 소유권 강제 유지] (BeingHeld 로직 제거됨)
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -43,25 +43,7 @@ if ReleaseGrab then
     ReleaseGrab.OnClientEvent:Connect(function(...) return end)
 end
 
-local BeingHeld = plr:WaitForChild("IsHeld", 10)
-if BeingHeld then
-    BeingHeld:GetPropertyChangedSignal("Value"):Connect(function()
-        if BeingHeld.Value then
-            task.spawn(function()
-                local tChar = selectedKickPlayer and selectedKickPlayer.Character
-                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                if tHRP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                    for i = 1, 5 do
-                        pcall(function()
-                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(plr.Character.HumanoidRootPart.Position, tHRP.Position))
-                        end)
-                        task.wait()
-                    end
-                end
-            end)
-        end
-    end)
-end
+-- BeingHeld 관련 코드 전부 삭제됨
 
 --=============================================
 -- [공통 패턴 - 5:3 (셋오너 5회, 디트로이트 3회)]
@@ -646,4 +628,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (매 프레임 호출)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (안티그랩 제거됨)", Duration = 3})
