@@ -44,9 +44,8 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - 1:7 (셋오너 1회, 디트로이트 7회)]
+-- [공통 패턴 - 제거됨 (항상 셋오너만 사용)]
 --=============================================
-local pattern = {1,0,0,0,0,0,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -129,12 +128,8 @@ local function startFKeyAttack(targetPlayer)
         fCounter = fCounter + 1
         if pattern[(fCounter - 1) % #pattern + 1] == 1 then
             pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, tgtRoot.CFrame)  -- CFrame을 tgtRoot.CFrame으로 변경
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
             end)
-            -- 즉시 DestroyGrabLine 3회 연속
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot) end)
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot) end)
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot) end)
         else
             pcall(function()
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
@@ -202,7 +197,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (강화 버전)
+-- [KICK 탭] - 블롭맨 오너 킥 (SetNetworkOwner만 사용)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -216,8 +211,6 @@ local targetBP_HRP = nil
 local targetBG_HRP = nil
 local targetBP_Torso = nil
 local targetBG_Torso = nil
-local watcherConn = nil
-local watcherConn2 = nil  -- HRP 감시용 추가
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -264,14 +257,14 @@ local function setupBodiesForTarget()
 
     targetBP_HRP = Instance.new("BodyPosition")
     targetBP_HRP.Name = "KickBP_HRP"
-    targetBP_HRP.MaxForce = Vector3.new(9e9, 9e9, 9e9)  -- 최대 강도
+    targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
     targetBP_HRP.P = 1000000
     targetBP_HRP.D = 10000
     targetBP_HRP.Parent = tHRP
 
     targetBG_HRP = Instance.new("BodyGyro")
     targetBG_HRP.Name = "KickBG_HRP"
-    targetBG_HRP.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    targetBG_HRP.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
     targetBG_HRP.P = 1000000
     targetBG_HRP.D = 10000
     targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
@@ -281,14 +274,14 @@ local function setupBodiesForTarget()
         removeOldBodies(tTorso)
         targetBP_Torso = Instance.new("BodyPosition")
         targetBP_Torso.Name = "KickBP_Torso"
-        targetBP_Torso.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        targetBP_Torso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         targetBP_Torso.P = 1000000
         targetBP_Torso.D = 10000
         targetBP_Torso.Parent = tTorso
 
         targetBG_Torso = Instance.new("BodyGyro")
         targetBG_Torso.Name = "KickBG_Torso"
-        targetBG_Torso.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        targetBG_Torso.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         targetBG_Torso.P = 1000000
         targetBG_Torso.D = 10000
         targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
@@ -297,37 +290,6 @@ local function setupBodiesForTarget()
         targetBP_Torso = nil
         targetBG_Torso = nil
     end
-end
-
--- 강화: PartOwner 감시 (Head와 HRP 모두)
-local function watchPartOwner(targetPlayer)
-    if watcherConn then watcherConn:Disconnect() watcherConn = nil end
-    if watcherConn2 then watcherConn2:Disconnect() watcherConn2 = nil end
-    
-    local tChar = targetPlayer.Character
-    if not tChar then return end
-    local head = tChar:WaitForChild("Head", 5)
-    local tHRP = tChar:WaitForChild("HumanoidRootPart", 5)
-    
-    -- Head 감시
-    watcherConn = head.ChildAdded:Connect(function(child)
-        if child.Name == "PartOwner" then
-            task.wait(0) -- 한 틱 대기
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)
-        end
-    end)
-    
-    -- HRP 감시
-    watcherConn2 = tHRP.ChildAdded:Connect(function(child)
-        if child.Name == "PartOwner" then
-            task.wait(0)
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)
-        end
-    end)
 end
 
 local function startKickLoop()
@@ -339,8 +301,6 @@ local function startKickLoop()
     kickCounter = 0
 
     if selectedKickPlayer then
-        watchPartOwner(selectedKickPlayer)
-        
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
             local hum = newChar:WaitForChild("Humanoid", 5)
@@ -348,7 +308,6 @@ local function startKickLoop()
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
                 setupBodiesForTarget()
-                watchPartOwner(selectedKickPlayer)
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
@@ -408,7 +367,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 매 프레임마다 패턴에 따라 호출 (SetNetworkOwner 1회 + 즉시 DestroyGrabLine 3회)
+    -- ✅ 매 프레임마다 SetNetworkOwner만 호출 (디트로이트 제거)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -425,25 +384,10 @@ local function startKickLoop()
                 end)
             end
 
-            local patternIndex = (kickCounter - 1) % #pattern + 1
-            if pattern[patternIndex] == 1 then
-                -- 셋오너 (SetNetworkOwner) 호출 (CFrame을 상대의 것으로)
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, tHRP.CFrame)  -- 여기서 CFrame을 tHRP.CFrame으로 변경
-                end)
-                -- 즉시 DestroyGrabLine 3회 연속
-                pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)
-                pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)
-                pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)
-                pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(tHRP) end)  -- 4회
-            else
-                -- 디트로이트 (DestroyGrabLine) - 상대 HRP에 호출
-                pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                end)
-            end
-            
-            kickCounter = kickCounter + 1
+            -- 셋오너만 호출
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+            end)
         end
     end)
 end
@@ -461,14 +405,6 @@ local function stopKickLoop()
     if respawnConn then
         respawnConn:Disconnect()
         respawnConn = nil
-    end
-    if watcherConn then
-        watcherConn:Disconnect()
-        watcherConn = nil
-    end
-    if watcherConn2 then
-        watcherConn2:Disconnect()
-        watcherConn2 = nil
     end
     if selectedKickPlayer and selectedKickPlayer.Character then
         local tChar = selectedKickPlayer.Character
@@ -488,7 +424,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetOwner 1회 + Destroy 4회 패턴)",
+    Name = "블롭맨 오너 킥 실행 (SetNetworkOwner 1경Hz 연속 호출)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -665,4 +601,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1회 + Destroy 4회 패턴 적용 (감지 확률 최소화)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetNetworkOwner 1경Hz 연속 호출 (디트로이트 제거됨)", Duration = 3})
