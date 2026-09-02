@@ -44,11 +44,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - 제거됨 (항상 셋오너만 사용)]
---=============================================
-
---=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩
+-- [GRAB 탭] - 카메라 조준 킥 그랩 (셋오너만 사용)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -57,7 +53,6 @@ getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
-local fCounter = 0
 local selectedGrabPlayer = nil
 
 local function setupFKeyAlign(targetPlayer)
@@ -97,7 +92,6 @@ end
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
-    fCounter = 0
     setupFKeyAlign(targetPlayer)
 
     fAttackConnection = RunService.Heartbeat:Connect(function()
@@ -125,16 +119,10 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        fCounter = fCounter + 1
-        if pattern[(fCounter - 1) % #pattern + 1] == 1 then
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-            end)
-        else
-            pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
-        end
+        -- ✅ 셋오너만 호출 (DestroyGrabLine 없음)
+        pcall(function()
+            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+        end)
     end)
 end
 
@@ -182,7 +170,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (고정력 강화)",
+    Name = "카메라 조준 킥 그랩 실행 (고정력 강화, 셋오너만)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -197,12 +185,11 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (SetNetworkOwner만 사용)
+-- [KICK 탭] - 블롭맨 오너 킥 (셋오너만 사용)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
-local kickCounter = 0
 
 local steppedConn = nil
 local remoteTask = nil
@@ -298,7 +285,6 @@ local function startKickLoop()
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
-    kickCounter = 0
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -367,7 +353,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 매 프레임마다 SetNetworkOwner만 호출 (디트로이트 제거)
+    -- ✅ 매 프레임마다 SetNetworkOwner만 호출 (DestroyGrabLine 없음)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -424,7 +410,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetNetworkOwner 1경Hz 연속 호출)",
+    Name = "블롭맨 오너 킥 실행 (SetNetworkOwner만 연속 호출)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -450,7 +436,7 @@ KickTab:CreateToggle({
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
+        -- DestroyGrabLine 완전 제거됨
         local lpName = plr.Name
         local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
 
@@ -487,9 +473,9 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
+                -- SetNetworkOwner만 호출 (DestroyGrabLine 제거됨)
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine:FireServer(soundPart)
                 end)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
@@ -601,4 +587,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetNetworkOwner 1경Hz 연속 호출 (디트로이트 제거됨)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "DestroyGrabLine 완전 제거됨. SetNetworkOwner만 사용", Duration = 3})
