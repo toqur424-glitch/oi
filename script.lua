@@ -185,7 +185,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (셋오너만 사용)
+-- [KICK 탭] - 블롭맨 오너 킥 (셋오너만 사용, 700Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -286,6 +286,10 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
+    -- 700Hz 제한용 변수
+    local lastFireTime = 0
+    local fireInterval = 1/700  -- 0.00142857초
+
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
             local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
@@ -353,7 +357,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 매 프레임마다 SetNetworkOwner만 호출 (DestroyGrabLine 없음)
+    -- ✅ 셋오너 호출을 700Hz로 제한
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -362,7 +366,7 @@ local function startKickLoop()
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         
         if tHRP and myHRP then
-            -- 원거리 텔레포트
+            -- 원거리 텔레포트 (항상 체크)
             local dist = (tHRP.Position - myHRP.Position).Magnitude
             if dist > 30 then
                 pcall(function()
@@ -370,10 +374,14 @@ local function startKickLoop()
                 end)
             end
 
-            -- 셋오너만 호출
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-            end)
+            -- 700Hz 제한: 마지막 호출 시간이 1/700초 이상 지났을 때만 호출
+            local now = tick()
+            if now - lastFireTime >= fireInterval then
+                lastFireTime = now
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            end
         end
     end)
 end
@@ -410,7 +418,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetNetworkOwner만 연속 호출)",
+    Name = "블롭맨 오너 킥 실행 (SetNetworkOwner 700Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -587,4 +595,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "DestroyGrabLine 완전 제거됨. SetNetworkOwner만 사용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "DestroyGrabLine 완전 제거됨. 셋오너 호출 700Hz 적용", Duration = 3})
