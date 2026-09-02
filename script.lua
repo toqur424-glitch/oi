@@ -152,7 +152,6 @@ local function startFKeyAttack(targetPlayer)
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
             end)
         else
-            -- CreateGrabLine 제거, DestroyGrabLine만 호출 (상대 HRP에 호출)
             pcall(function()
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
@@ -389,21 +388,15 @@ local function startKickLoop()
         end
     end)
 
-    -- 5:3 패턴 + 각각 1000억Hz / 970억Hz 호출 + 원거리 텔레포트
+    -- 5:3 패턴 + 각각 1000억Hz / 970억Hz 호출 + 원거리 텔레포트 (수정됨: 시간 대신 연속 호출)
     remoteTask = task.spawn(function()
-        local setInterval = 1/100000000000      -- 1000억Hz (변경됨)
-        local destroyInterval = 1/97000000000   -- 970억Hz (변경됨)
-        local nextSetTime = tick()
-        local nextDestroyTime = tick()
-
         while kickLoopRunning do
-            local now = tick()
             local patternIndex = (kickCounter - 1) % #pattern + 1
 
-            -- 원거리 텔레포트 (거리 30 이상일 때)
             local tChar = selectedKickPlayer and selectedKickPlayer.Character
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+
             if tHRP and myHRP then
                 local dist = (tHRP.Position - myHRP.Position).Magnitude
                 if dist > 30 then
@@ -411,33 +404,20 @@ local function startKickLoop()
                         plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
                     end)
                 end
-            end
 
-            if pattern[patternIndex] == 1 then
-                -- SetNetworkOwner 호출 (1000억Hz)
-                if now >= nextSetTime then
-                    if tHRP and myHRP then
-                        pcall(function()
-                            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                        end)
-                    end
-                    nextSetTime = now + setInterval
-                    kickCounter = kickCounter + 1
-                end
-            else
-                -- DestroyGrabLine 호출 (970억Hz) - 상대 HRP에 호출, CreateGrabLine 제거됨
-                if now >= nextDestroyTime then
-                    if tHRP then
-                        pcall(function()
-                            rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                        end)
-                    end
-                    nextDestroyTime = now + destroyInterval
-                    kickCounter = kickCounter + 1
+                if pattern[patternIndex] == 1 then
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
+                else
+                    pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
                 end
             end
 
-            task.wait(0.0001) -- 고해상도 대기
+            kickCounter = kickCounter + 1
+            task.wait() -- 프레임마다 반복
         end
     end)
 end
