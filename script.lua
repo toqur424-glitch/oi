@@ -388,7 +388,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 5:3 패턴 + 각각 1000억Hz / 970억Hz 호출 + 원거리 텔레포트 (수정됨: 시간 대신 연속 호출)
+    -- 5:3 패턴 + 매 프레임 호출 (시간 기반 제거, 셋오너 누락 방지)
     remoteTask = task.spawn(function()
         while kickLoopRunning do
             local patternIndex = (kickCounter - 1) % #pattern + 1
@@ -417,7 +417,7 @@ local function startKickLoop()
             end
 
             kickCounter = kickCounter + 1
-            task.wait() -- 프레임마다 반복
+            task.wait() -- 매 프레임마다 실행
         end
     end)
 end
@@ -631,4 +631,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1000억Hz / Destroy 970억Hz, 5:3 패턴 적용 (CreateGrabLine 제거됨)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1000억Hz / Destroy 970억Hz, 5:3 패턴 적용 (매 프레임 호출, CreateGrabLine 제거됨)", Duration = 3})
