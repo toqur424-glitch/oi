@@ -44,9 +44,9 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - 5:3 (셋오너 5회, 디트로이트 3회)]
+-- [공통 패턴 - 5:3 (셋오너 5회, 디스트로이트 3회)]
 --=============================================
-local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
+local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = Destroy (HRP 파괴)
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -392,9 +392,9 @@ local function startKickLoop()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
             else
-                -- 디트로이트 (DestroyGrabLine) - 상대 HRP에 호출
+                -- ✅ 변경된 부분: 디스트로이트 (HRP 파괴)
                 pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    tHRP:Destroy()
                 end)
             end
             
