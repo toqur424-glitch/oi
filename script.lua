@@ -19,8 +19,8 @@ local rs = ReplicatedStorage
 --=============================================
 -- [사용자 정의 클린업 함수]
 --=============================================
--- 셋오너 / 디트로이트 호출 직전에 실행됩니다.
--- 필요에 따라 원하는 정리 로직을 추가하세요.
+-- 셋오너 / 디트로이트 호출 후 실행됩니다.
+-- 필요에 따라 상대방의 임시 효과(Align 등)를 제거하는 로직을 추가하세요.
 function cleanupSignals()
     -- 예: 타겟 HRP에 남아있는 AlignPosition/AlignOrientation 제거
     -- if selectedKickPlayer and selectedKickPlayer.Character then
@@ -391,11 +391,6 @@ local function startKickLoop()
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
 
-        -- 🔥 cleanupSignals 호출 (셋오너/디트로이트 직전)
-        if cleanupSignals then
-            cleanupSignals()
-        end
-
         local tChar = selectedKickPlayer and selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
@@ -420,6 +415,11 @@ local function startKickLoop()
                 pcall(function()
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                 end)
+            end
+
+            -- 🔥 호출 후 cleanupSignals 실행 (상대 정리)
+            if cleanupSignals then
+                cleanupSignals()
             end
             
             kickCounter = kickCounter + 1
@@ -636,4 +636,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (매 프레임 호출, cleanupSignals 연동)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (호출 후 cleanupSignals 실행)", Duration = 3})
