@@ -184,7 +184,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (5:1 패턴, 셋오너 100000Hz / 디트로이트 15000Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (5:1 패턴, 셋오너 100000Hz / 디트로이트 90000Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -290,7 +290,7 @@ local function startKickLoop()
     local lastSetOwnerTime = 0
     local setOwnerInterval = 1/100000   -- 셋오너 100,000Hz
     local lastDestroyTime = 0
-    local destroyInterval = 1/15000    -- 디트로이트 15,000Hz
+    local destroyInterval = 1/90000    -- 디트로이트 90,000Hz
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -359,7 +359,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 메인 루프: 패턴(5:1)과 속도(셋오너 100000Hz, 디트로이트 15000Hz) 적용
+    -- 메인 루프: 패턴(5:1)과 속도(셋오너 100000Hz, 디트로이트 90000Hz) 적용
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -433,7 +433,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (셋오너 5번 100000Hz + 디트로이트 1번 15000Hz)",
+    Name = "블롭맨 오너 킥 (셋오너 5번 100000Hz + 디트로이트 1번 90000Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -608,4 +608,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 5번(100000Hz) + 디트로이트 1번(15000Hz, Destroy 사용) 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 5번(100000Hz) + 디트로이트 1번(90000Hz, Destroy 사용) 패턴 적용", Duration = 3})
