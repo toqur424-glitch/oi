@@ -359,7 +359,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 메인 루프: 패턴(5:1)과 속도(각각 10000/15000Hz) 적용
+    -- 메인 루프: 패턴(5:1)과 속도(각각 10000/15000Hz) 적용, 디트로이트는 Destroy 사용
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -387,12 +387,12 @@ local function startKickLoop()
                     end)
                     patternCounter = patternCounter + 1
                 end
-            -- 디트로이트 호출 구간 (1번)
+            -- 디트로이트 호출 구간 (1번) - DestroyGrabLine → Destroy
             else
                 if now - lastDestroyTime >= destroyInterval then
                     lastDestroyTime = now
                     pcall(function()
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                        rs.GrabEvents.Destroy:FireServer(tHRP)
                     end)
                     patternCounter = 0
                 end
@@ -608,4 +608,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 5번(10000Hz) + 디트로이트 1번(15000Hz) 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 5번(10000Hz) + 디트로이트 1번(15000Hz, Destroy 사용) 패턴 적용", Duration = 3})
