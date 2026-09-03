@@ -185,7 +185,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (셋오너만, 3000Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (셋오너 3500Hz + 디트로이트 1600Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -286,9 +286,11 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- 3000Hz 제한용 변수
-    local lastFireTime = 0
-    local fireInterval = 1/3000  -- 0.000333...초
+    -- 셋오너 / 디트로이트 타이머 변수
+    local lastSetOwnerTime = 0
+    local setOwnerInterval = 1/3500
+    local lastDestroyTime = 0
+    local destroyInterval = 1/1600
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -357,7 +359,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 셋오너 호출을 3000Hz로 제한 (DestroyGrabLine/CreateGrabLine 없음)
+    -- 셋오너 3500Hz / 디트로이트 1600Hz, 모두 HumanoidRootPart로 호출
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -366,7 +368,7 @@ local function startKickLoop()
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         
         if tHRP and myHRP then
-            -- 원거리 텔레포트 (항상 체크)
+            -- 원거리 텔레포트
             local dist = (tHRP.Position - myHRP.Position).Magnitude
             if dist > 30 then
                 pcall(function()
@@ -374,12 +376,21 @@ local function startKickLoop()
                 end)
             end
 
-            -- 3000Hz 제한
             local now = tick()
-            if now - lastFireTime >= fireInterval then
-                lastFireTime = now
+
+            -- 셋오너 호출 (3500Hz)
+            if now - lastSetOwnerTime >= setOwnerInterval then
+                lastSetOwnerTime = now
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            end
+
+            -- 디트로이트 호출 (1600Hz)
+            if now - lastDestroyTime >= destroyInterval then
+                lastDestroyTime = now
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                 end)
             end
         end
@@ -418,7 +429,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetNetworkOwner 3000Hz)",
+    Name = "블롭맨 오너 킥 실행 (셋오너 3500Hz + 디트로이트 1600Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -595,4 +606,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "GrabLine 관련 완전 제거됨. 셋오너 호출 3000Hz 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 3500Hz + 디트로이트 1600Hz, 모두 HRP 호출 (CreateGrabLine 없음)", Duration = 3})
