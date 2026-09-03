@@ -49,27 +49,49 @@ end
 local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
 --=============================================
--- [유틸 함수: 감지 신호 제거]
+-- [개선된 신호 제거 함수]
+-- - 모든 BasePart에서 PartOwner 제거
+-- - Humanoid 상태 리셋
+-- - GrabParts 모델 제거
+-- - Weld/Constraint 제거
 --=============================================
-local function cleanupSignals(targetChar, targetRoot)
+local function cleanupSignals(targetChar)
     if not targetChar then return end
-    local targetRoot = targetRoot or targetChar:FindFirstChild("HumanoidRootPart")
-    if not targetRoot then return end
 
-    -- 1. PartOwner 제거
-    pcall(function()
-        local po = targetRoot:FindFirstChild("PartOwner")
-        if po then po:Destroy() end
-    end)
+    -- 1. 모든 BasePart에서 PartOwner 및 관련 신호 제거
+    for _, part in pairs(targetChar:GetChildren()) do
+        if part:IsA("BasePart") then
+            -- PartOwner 제거
+            pcall(function()
+                local po = part:FindFirstChild("PartOwner")
+                if po then po:Destroy() end
+            end)
+            -- Weld 관련 제거
+            pcall(function()
+                for _, child in pairs(part:GetChildren()) do
+                    if child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("JointInstance") then
+                        child:Destroy()
+                    end
+                end
+            end)
+        end
+    end
 
-    -- 2. IsHeld 값 강제 false (Humanoid 아래 또는 로컬 변수)
+    -- 2. Humanoid 상태 초기화
     local hum = targetChar:FindFirstChildOfClass("Humanoid")
     if hum then
-        local isHeld = hum:FindFirstChild("IsHeld")
-        if isHeld then isHeld.Value = false end
-        -- 게임에 따라 "HeldBy" 등의 변수도 제거
-        local heldBy = hum:FindFirstChild("HeldBy")
-        if heldBy then heldBy:Destroy() end
+        pcall(function()
+            local isHeld = hum:FindFirstChild("IsHeld")
+            if isHeld then isHeld.Value = false end
+            local heldBy = hum:FindFirstChild("HeldBy")
+            if heldBy then heldBy:Destroy() end
+            -- 추가적인 상태 변수 제거
+            for _, child in pairs(hum:GetChildren()) do
+                if child.Name == "HeldBy" or child.Name == "Grabbed" then
+                    child:Destroy()
+                end
+            end
+        end)
     end
 
     -- 3. GrabParts 모델 제거 (서버가 생성한 것 중 본인 것만)
@@ -84,14 +106,17 @@ local function cleanupSignals(targetChar, targetRoot)
         end
     end)
 
-    -- 4. WeldHRP 비활성화 (루트 파트의 모든 Weld 제거)
-    pcall(function()
-        for _, child in pairs(targetRoot:GetChildren()) do
-            if child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("JointInstance") then
-                child:Destroy()
+    -- 4. 루트 파트에 대한 추가 정리 (BodyPosition/BodyGyro 등 방해물 제거는 하지 않음)
+    local root = targetChar:FindFirstChild("HumanoidRootPart")
+    if root then
+        -- AlignPosition/AlignOrientation 중 FKeyAlign 등 공격용이 아닌 것 제거
+        pcall(function()
+            for _, child in pairs(root:GetChildren()) do
+                if child:IsA("AlignPosition") and child.Name ~= "FKeyAlign" then child:Destroy() end
+                if child:IsA("AlignOrientation") and child.Name ~= "FKeyRot" then child:Destroy() end
             end
-        end
-    end)
+        end)
+    end
 end
 
 --=============================================
@@ -177,18 +202,14 @@ local function startFKeyAttack(targetPlayer)
             pcall(function()
                 rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
             end)
-            -- ★ 신호 제거 (SetNetworkOwner 후)
-            task.defer(function()
-                cleanupSignals(tgtChar, tgtRoot)
-            end)
+            -- 즉시 신호 제거 (SetNetworkOwner 후)
+            cleanupSignals(tgtChar)
         else
             pcall(function()
                 rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
-            -- ★ 신호 제거 (DestroyGrabLine 후)
-            task.defer(function()
-                cleanupSignals(tgtChar, tgtRoot)
-            end)
+            -- 즉시 신호 제거 (DestroyGrabLine 후)
+            cleanupSignals(tgtChar)
         end
     end)
 end
@@ -445,19 +466,15 @@ local function startKickLoop()
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
-                -- ★ 신호 제거 (SetNetworkOwner 후)
-                task.defer(function()
-                    cleanupSignals(tChar, tHRP)
-                end)
+                -- 즉시 신호 제거 (SetNetworkOwner 후)
+                cleanupSignals(tChar)
             else
                 -- 디트로이트 (DestroyGrabLine) - 상대 HRP에 호출
                 pcall(function()
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                 end)
-                -- ★ 신호 제거 (DestroyGrabLine 후)
-                task.defer(function()
-                    cleanupSignals(tChar, tHRP)
-                end)
+                -- 즉시 신호 제거 (DestroyGrabLine 후)
+                cleanupSignals(tChar)
             end
             
             kickCounter = kickCounter + 1
@@ -674,4 +691,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 + 안티디텍트 적용 (양쪽 신호 제거)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 + 강화된 안티디텍트 적용", Duration = 3})
