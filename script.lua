@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Fixed)",
+    Name = "🔥 FSOF Extreme Kick Hub (Fixed + Anti-Detect)",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단]
+-- [안티그랩: 탈출 리모트 차단] (BeingHeld 로직 제거됨)
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -44,6 +44,57 @@ if ReleaseGrab then
 end
 
 --=============================================
+-- [공통 패턴 - 5:3 (셋오너 5회, 디트로이트 3회)]
+--=============================================
+local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
+
+--=============================================
+-- [유틸 함수: 감지 신호 제거]
+--=============================================
+local function cleanupSignals(targetChar, targetRoot)
+    if not targetChar then return end
+    local targetRoot = targetRoot or targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetRoot then return end
+
+    -- 1. PartOwner 제거
+    pcall(function()
+        local po = targetRoot:FindFirstChild("PartOwner")
+        if po then po:Destroy() end
+    end)
+
+    -- 2. IsHeld 값 강제 false (Humanoid 아래 또는 로컬 변수)
+    local hum = targetChar:FindFirstChildOfClass("Humanoid")
+    if hum then
+        local isHeld = hum:FindFirstChild("IsHeld")
+        if isHeld then isHeld.Value = false end
+        -- 게임에 따라 "HeldBy" 등의 변수도 제거
+        local heldBy = hum:FindFirstChild("HeldBy")
+        if heldBy then heldBy:Destroy() end
+    end
+
+    -- 3. GrabParts 모델 제거 (서버가 생성한 것 중 본인 것만)
+    pcall(function()
+        local grabFolder = workspace:FindFirstChild("GrabParts")
+        if grabFolder then
+            for _, model in pairs(grabFolder:GetChildren()) do
+                if model:FindFirstChild("PartOwner") and model.PartOwner.Value == plr.Name then
+                    model:Destroy()
+                end
+            end
+        end
+    end)
+
+    -- 4. WeldHRP 비활성화 (루트 파트의 모든 Weld 제거)
+    pcall(function()
+        for _, child in pairs(targetRoot:GetChildren()) do
+            if child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("JointInstance") then
+                child:Destroy()
+            end
+        end
+    end)
+end
+
+--=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
@@ -53,6 +104,7 @@ getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
 local fAttackConnection = nil
 local fAttackTarget = nil
+local fCounter = 0
 local selectedGrabPlayer = nil
 
 local function setupFKeyAlign(targetPlayer)
@@ -92,6 +144,7 @@ end
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
+    fCounter = 0
     setupFKeyAlign(targetPlayer)
 
     fAttackConnection = RunService.Heartbeat:Connect(function()
@@ -119,9 +172,20 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        pcall(function()
-            rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-        end)
+        fCounter = fCounter + 1
+        if pattern[(fCounter - 1) % #pattern + 1] == 1 then
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+            end)
+            -- ★ 방법 C: 즉시 신호 제거 (다음 프레임에 실행)
+            task.defer(function()
+                cleanupSignals(tgtChar, tgtRoot)
+            end)
+        else
+            pcall(function()
+                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+            end)
+        end
     end)
 end
 
@@ -169,7 +233,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (고정력 강화, 셋오너만)",
+    Name = "카메라 조준 킥 그랩 실행 (고정력 강화)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -184,11 +248,12 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (5:1 패턴, 셋오너 100000Hz / 디트로이트 90000Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (1경Hz/9700만조Hz, 5:3 패턴 + 신호 제거)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
+local kickCounter = 0
 
 local steppedConn = nil
 local remoteTask = nil
@@ -284,13 +349,7 @@ local function startKickLoop()
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
-
-    -- 패턴 및 속도 변수
-    local patternCounter = 0
-    local lastSetOwnerTime = 0
-    local setOwnerInterval = 1/100000   -- 셋오너 100,000Hz
-    local lastDestroyTime = 0
-    local destroyInterval = 1/90000    -- 디트로이트 90,000Hz
+    kickCounter = 0
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -359,7 +418,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 메인 루프: 패턴(5:1)과 속도(셋오너 100000Hz, 디트로이트 90000Hz) 적용
+    -- ✅ 매 프레임마다 패턴에 따라 호출 (시간 조건 제거, 누락 방지) + 신호 제거
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -376,27 +435,24 @@ local function startKickLoop()
                 end)
             end
 
-            local now = tick()
-
-            -- 셋오너 호출 구간 (5번)
-            if patternCounter < 5 then
-                if now - lastSetOwnerTime >= setOwnerInterval then
-                    lastSetOwnerTime = now
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                    patternCounter = patternCounter + 1
-                end
-            -- 디트로이트 호출 구간 (1번) - Destroy 사용
+            local patternIndex = (kickCounter - 1) % #pattern + 1
+            if pattern[patternIndex] == 1 then
+                -- 셋오너 (SetNetworkOwner)
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+                -- ★ 방법 C: 즉시 신호 제거 (다음 프레임에 실행)
+                task.defer(function()
+                    cleanupSignals(tChar, tHRP)
+                end)
             else
-                if now - lastDestroyTime >= destroyInterval then
-                    lastDestroyTime = now
-                    pcall(function()
-                        rs.GrabEvents.Destroy:FireServer(tHRP)
-                    end)
-                    patternCounter = 0
-                end
+                -- 디트로이트 (DestroyGrabLine) - 상대 HRP에 호출
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                end)
             end
+            
+            kickCounter = kickCounter + 1
         end
     end)
 end
@@ -433,7 +489,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 (셋오너 5번 100000Hz + 디트로이트 1번 90000Hz)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 + 안티디텍트)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -448,7 +504,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis)]
+-- [팔레트 레그돌 (Invis) - 사인파로 부드럽게 출입] (기존 유지)
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 사인파 출입 (몸통 관통)",
@@ -459,6 +515,7 @@ KickTab:CreateToggle({
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
+        local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
         local lpName = plr.Name
         local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
 
@@ -497,6 +554,7 @@ KickTab:CreateToggle({
 
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
+                    DestroyLine:FireServer(soundPart)
                 end)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
@@ -603,9 +661,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [설정 탭]
+-- [나머지 필수 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 5번(100000Hz) + 디트로이트 1번(90000Hz, Destroy 사용) 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 + 안티디텍트 적용", Duration = 3})
