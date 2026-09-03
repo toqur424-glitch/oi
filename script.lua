@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단] (BeingHeld 로직 제거됨)
+-- [안티그랩: 탈출 리모트 차단]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -44,7 +44,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩 (셋오너만 사용)
+-- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -119,7 +119,6 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- 셋오너만 호출 (GrabLine 관련 없음)
         pcall(function()
             rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
         end)
@@ -185,7 +184,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (셋오너 3500Hz + 디트로이트 1600Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (5:1 패턴, 셋오너 10000Hz / 디트로이트 15000Hz)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -286,11 +285,12 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- 셋오너 / 디트로이트 타이머 변수
+    -- 패턴 및 속도 변수
+    local patternCounter = 0
     local lastSetOwnerTime = 0
-    local setOwnerInterval = 1/3500
+    local setOwnerInterval = 1/10000   -- 셋오너 10000Hz
     local lastDestroyTime = 0
-    local destroyInterval = 1/1600
+    local destroyInterval = 1/15000    -- 디트로이트 15000Hz
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -359,7 +359,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 셋오너 3500Hz / 디트로이트 1600Hz, 모두 HumanoidRootPart로 호출
+    -- 메인 루프: 패턴(5:1)과 속도(각각 10000/15000Hz) 적용
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -378,20 +378,24 @@ local function startKickLoop()
 
             local now = tick()
 
-            -- 셋오너 호출 (3500Hz)
-            if now - lastSetOwnerTime >= setOwnerInterval then
-                lastSetOwnerTime = now
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                end)
-            end
-
-            -- 디트로이트 호출 (1600Hz)
-            if now - lastDestroyTime >= destroyInterval then
-                lastDestroyTime = now
-                pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                end)
+            -- 셋오너 호출 구간 (5번)
+            if patternCounter < 5 then
+                if now - lastSetOwnerTime >= setOwnerInterval then
+                    lastSetOwnerTime = now
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    end)
+                    patternCounter = patternCounter + 1
+                end
+            -- 디트로이트 호출 구간 (1번)
+            else
+                if now - lastDestroyTime >= destroyInterval then
+                    lastDestroyTime = now
+                    pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    end)
+                    patternCounter = 0
+                end
             end
         end
     end)
@@ -429,7 +433,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너 3500Hz + 디트로이트 1600Hz)",
+    Name = "블롭맨 오너 킥 (셋오너 5번 10000Hz + 디트로이트 1번 15000Hz)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -444,7 +448,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 사인파로 부드럽게 출입]
+-- [팔레트 레그돌 (Invis)]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 사인파 출입 (몸통 관통)",
@@ -455,7 +459,6 @@ KickTab:CreateToggle({
         local RunService = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
-        -- GrabLine 관련 없음
         local lpName = plr.Name
         local toysFolder = workspace:WaitForChild(lpName .. "SpawnedInToys", 5)
 
@@ -492,7 +495,6 @@ KickTab:CreateToggle({
                 local soundPart = child:WaitForChild("SoundPart", 3)
                 if not soundPart then return end
 
-                -- SetNetworkOwner만 호출 (GrabLine 관련 없음)
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
                 end)
@@ -601,9 +603,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭]
+-- [설정 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 3500Hz + 디트로이트 1600Hz, 모두 HRP 호출 (CreateGrabLine 없음)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 5번(10000Hz) + 디트로이트 1번(15000Hz) 패턴 적용", Duration = 3})
