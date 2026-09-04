@@ -213,18 +213,27 @@ local targetBG_HRP = nil
 local targetBP_Torso = nil
 local targetBG_Torso = nil
 
--- ✅ 추가: cleanupSignals 함수 정의
+-- ✅ 정밀하게 개선된 cleanupSignals 함수 (타입 검사, pcall, 상태 초기화)
 local function cleanupSignals()
-    if steppedConn then
-        steppedConn:Disconnect()
+    -- 1. 루프 실행 플래그 및 카운터 완전 초기화
+    kickLoopRunning = false
+    kickCounter = 0
+
+    -- 2. Stepped 연결 해제 (타입 검사 + pcall로 안전하게)
+    if steppedConn and typeof(steppedConn) == "RBXScriptConnection" then
+        pcall(function() steppedConn:Disconnect() end)
         steppedConn = nil
     end
-    if remoteTask then
-        remoteTask:Disconnect()
+
+    -- 3. Heartbeat 연결 해제 (타입 검사 + pcall로 안전하게)
+    if remoteTask and typeof(remoteTask) == "RBXScriptConnection" then
+        pcall(function() remoteTask:Disconnect() end)
         remoteTask = nil
     end
-    if respawnConn then
-        respawnConn:Disconnect()
+
+    -- 4. CharacterAdded 연결 해제 (타입 검사 + pcall로 안전하게)
+    if respawnConn and typeof(respawnConn) == "RBXScriptConnection" then
+        pcall(function() respawnConn:Disconnect() end)
         respawnConn = nil
     end
 end
@@ -310,7 +319,7 @@ local function setupBodiesForTarget()
 end
 
 local function startKickLoop()
-    -- ✅ 기존의 개별 disconnect를 cleanupSignals()로 대체
+    -- ✅ cleanupSignals로 이전 모든 연결 및 루프 상태 완전 제거
     cleanupSignals()
     
     kickLoopRunning = true
@@ -420,7 +429,7 @@ end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    -- ✅ 기존의 개별 disconnect 블록을 cleanupSignals()로 대체
+    -- ✅ cleanupSignals로 모든 연결 완전 해제 및 상태 초기화
     cleanupSignals()
     
     if selectedKickPlayer and selectedKickPlayer.Character then
