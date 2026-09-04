@@ -49,7 +49,34 @@ end
 local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩
+-- [★ 추가: 감지 우회용 파트 선택 함수]
+--=============================================
+local function getLimbPart(char)
+    -- Head / HumanoidRootPart / Torso 제외한 팔다리만 선택
+    local limbs = {
+        char:FindFirstChild("Right Arm"),
+        char:FindFirstChild("Left Arm"),
+        char:FindFirstChild("Right Leg"),
+        char:FindFirstChild("Left Leg"),
+        char:FindFirstChild("RightHand"),
+        char:FindFirstChild("LeftHand"),
+        char:FindFirstChild("RightUpperArm"),
+        char:FindFirstChild("LeftUpperArm")
+    }
+    local valid = {}
+    for _, v in pairs(limbs) do
+        if v and v:IsA("BasePart") then
+            table.insert(valid, v)
+        end
+    end
+    if #valid > 0 then
+        return valid[math.random(1, #valid)]
+    end
+    return char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")
+end
+
+--=============================================
+-- [GRAB 탭] - 카메라 조준 킥 그랩 (물리 제어 없이 원격만)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -61,45 +88,10 @@ local fAttackTarget = nil
 local fCounter = 0
 local selectedGrabPlayer = nil
 
-local function setupFKeyAlign(targetPlayer)
-    local tChar = targetPlayer and targetPlayer.Character
-    local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-    if not tHRP then return end
-
-    for _, v in pairs(tHRP:GetChildren()) do
-        if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
-        if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
-    end
-
-    local att0 = Instance.new("Attachment", tHRP)
-    att0.Name = "FKeyAtt0"
-    local att1 = Instance.new("Attachment", workspace.Terrain)
-    att1.Name = "FKeyAtt1"
-
-    local alignPos = Instance.new("AlignPosition")
-    alignPos.Name = "FKeyAlign"
-    alignPos.Attachment0 = att0
-    alignPos.Attachment1 = att1
-    alignPos.MaxForce = math.huge
-    alignPos.MaxVelocity = math.huge
-    alignPos.Responsiveness = math.huge
-    alignPos.RigidityEnabled = true
-    alignPos.Parent = tHRP
-
-    local alignRot = Instance.new("AlignOrientation")
-    alignRot.Name = "FKeyRot"
-    alignRot.Attachment0 = att0
-    alignRot.MaxTorque = math.huge
-    alignRot.Responsiveness = math.huge
-    alignRot.RigidityEnabled = true
-    alignRot.Parent = tHRP
-end
-
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
     fCounter = 0
-    setupFKeyAlign(targetPlayer)
 
     fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
@@ -111,38 +103,27 @@ local function startFKeyAttack(targetPlayer)
         
         if not myRoot or not tgtRoot then return end
         
+        -- 물리 제어 제거 (AlignPosition/AlignOrientation 사용 안 함)
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
-        
-        local camCF = camera.CFrame
-        local holdPos = camCF.Position + camCF.LookVector * 20
-
-        local align = tgtRoot:FindFirstChild("FKeyAlign")
-        if align and align.Attachment1 then
-            align.Attachment1.WorldPosition = holdPos
-        end
-        local rot = tgtRoot:FindFirstChild("FKeyRot")
-        if rot then
-            rot.CFrame = CFrame.Angles(0, 0, 0)
-        end
 
         fCounter = fCounter + 1
         if pattern[(fCounter - 1) % #pattern + 1] == 1 then
-            -- ✅ 수정: Torso/UpperTorso에 SetNetworkOwner 호출 (안티그랩 감지 회피)
-            local tgtTorso = tgtChar and (tgtChar:FindFirstChild("Torso") or tgtChar:FindFirstChild("UpperTorso"))
-            if tgtTorso then
+            -- ✅ 감지 우회: 팔다리(무작위)에 SetNetworkOwner 호출
+            local targetPart = getLimbPart(tgtChar)
+            if targetPart then
                 pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtTorso, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
-                end)
-            else
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
                 end)
             end
         else
-            pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
-            end)
+            -- ✅ 감지 우회: 같은 팔다리에 DestroyGrabLine 호출
+            local targetPart = getLimbPart(tgtChar)
+            if targetPart then
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                end)
+            end
         end
     end)
 end
@@ -152,16 +133,6 @@ local function stopFKeyAttack()
     if fAttackConnection then
         fAttackConnection:Disconnect()
         fAttackConnection = nil
-    end
-
-    if fAttackTarget and fAttackTarget.Character then
-        local tHRP = fAttackTarget.Character:FindFirstChild("HumanoidRootPart")
-        if tHRP then
-            for _, v in pairs(tHRP:GetChildren()) do
-                if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
-                if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
-            end
-        end
     end
     fAttackTarget = nil
 end
@@ -206,7 +177,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (1경Hz/9700만조Hz, 5:3 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (감지 우회 적용)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -216,10 +187,11 @@ local kickCounter = 0
 local steppedConn = nil
 local remoteTask = nil
 local respawnConn = nil
-local targetBP_HRP = nil
-local targetBG_HRP = nil
-local targetBP_Torso = nil
-local targetBG_Torso = nil
+-- 물리 제어 제거로 인해 변수 제거
+-- local targetBP_HRP = nil
+-- local targetBG_HRP = nil
+-- local targetBP_Torso = nil
+-- local targetBG_Torso = nil
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -245,62 +217,6 @@ KickTab:CreateInput({
     end
 })
 
-local function removeOldBodies(part)
-    if not part then return end
-    for _, v in pairs(part:GetChildren()) do
-        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
-            v:Destroy()
-        end
-    end
-end
-
-local function setupBodiesForTarget()
-    if not selectedKickPlayer then return end
-    local tChar = selectedKickPlayer.Character
-    if not tChar then return end
-    local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-    local tTorso = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
-    if not tHRP then return end
-
-    removeOldBodies(tHRP)
-
-    targetBP_HRP = Instance.new("BodyPosition")
-    targetBP_HRP.Name = "KickBP_HRP"
-    targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP_HRP.P = 1000000
-    targetBP_HRP.D = 10000
-    targetBP_HRP.Parent = tHRP
-
-    targetBG_HRP = Instance.new("BodyGyro")
-    targetBG_HRP.Name = "KickBG_HRP"
-    targetBG_HRP.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG_HRP.P = 1000000
-    targetBG_HRP.D = 10000
-    targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
-    targetBG_HRP.Parent = tHRP
-
-    if tTorso then
-        removeOldBodies(tTorso)
-        targetBP_Torso = Instance.new("BodyPosition")
-        targetBP_Torso.Name = "KickBP_Torso"
-        targetBP_Torso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        targetBP_Torso.P = 1000000
-        targetBP_Torso.D = 10000
-        targetBP_Torso.Parent = tTorso
-
-        targetBG_Torso = Instance.new("BodyGyro")
-        targetBG_Torso.Name = "KickBG_Torso"
-        targetBG_Torso.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        targetBG_Torso.P = 1000000
-        targetBG_Torso.D = 10000
-        targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
-        targetBG_Torso.Parent = tTorso
-    else
-        targetBP_Torso = nil
-        targetBG_Torso = nil
-    end
-end
-
 local function startKickLoop()
     if remoteTask then remoteTask:Disconnect() end
     if steppedConn then steppedConn:Disconnect() end
@@ -316,16 +232,6 @@ local function startKickLoop()
             if hrp and hum then
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
-                setupBodiesForTarget()
-                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
-                    pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                    end)
-                end
             end
         end)
     end
@@ -337,38 +243,13 @@ local function startKickLoop()
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tTorso = tChar and (tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso"))
         
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
-        
-        if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
-            setupBodiesForTarget()
-        end
-        
-        if targetBP_HRP then
-            targetBP_HRP.Position = targetPos
-        end
-        if targetBG_HRP then
-            targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
-        end
-        
-        if tTorso and targetBP_Torso and targetBP_Torso.Parent == tTorso then
-            targetBP_Torso.Position = targetPos
-            if targetBG_Torso then
-                targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
-            end
-        end
-        
+        -- 물리 제어 제거: BodyPosition/BodyGyro 사용 안 함
         tHRP.AssemblyLinearVelocity = Vector3.zero
         tHRP.AssemblyAngularVelocity = Vector3.zero
-        if tTorso then
-            tTorso.AssemblyLinearVelocity = Vector3.zero
-            tTorso.AssemblyAngularVelocity = Vector3.zero
-        end
-        
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
@@ -376,7 +257,6 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 매 프레임마다 패턴에 따라 호출 (시간 조건 제거, 누락 방지)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -385,7 +265,7 @@ local function startKickLoop()
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         
         if tHRP and myHRP then
-            -- 원거리 텔레포트
+            -- 원거리 텔레포트 (기존 유지)
             local dist = (tHRP.Position - myHRP.Position).Magnitude
             if dist > 30 then
                 pcall(function()
@@ -395,21 +275,21 @@ local function startKickLoop()
 
             local patternIndex = (kickCounter - 1) % #pattern + 1
             if pattern[patternIndex] == 1 then
-                -- ✅ 수정: Torso/UpperTorso에 SetNetworkOwner 호출 (안티그랩 감지 회피)
-                local tTorso = tChar and (tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso"))
-                if tTorso then
+                -- ✅ 감지 우회: 팔다리(무작위)에 SetNetworkOwner 호출
+                local targetPart = getLimbPart(tChar)
+                if targetPart then
                     pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tTorso, CFrame.lookAt(myHRP.Position, tHRP.Position))
-                    end)
-                else
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                        rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, tHRP.Position))
                     end)
                 end
             else
-                pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
-                end)
+                -- ✅ 감지 우회: 같은 팔다리에 DestroyGrabLine 호출
+                local targetPart = getLimbPart(tChar)
+                if targetPart then
+                    pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                    end)
+                end
             end
             
             kickCounter = kickCounter + 1
@@ -431,21 +311,6 @@ local function stopKickLoop()
         respawnConn:Disconnect()
         respawnConn = nil
     end
-    if selectedKickPlayer and selectedKickPlayer.Character then
-        local tChar = selectedKickPlayer.Character
-        local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-        local tTorso = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
-        if tHRP then
-            removeOldBodies(tHRP)
-        end
-        if tTorso then
-            removeOldBodies(tTorso)
-        end
-    end
-    targetBP_HRP = nil
-    targetBG_HRP = nil
-    targetBP_Torso = nil
-    targetBG_Torso = nil
 end
 
 KickTab:CreateToggle({
@@ -626,4 +491,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (안티그랩 감지 회피: Torso 기반 SetOwner)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (팔다리 기반 우회, 물리 제어 제거)", Duration = 3})
