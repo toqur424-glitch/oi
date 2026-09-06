@@ -44,9 +44,9 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - 5:3 (셋오너 5회, 디트로이트 3회)]
+-- [공통 패턴 - 5:2 (셋오너 5회, 디트로이트 2회)]
 --=============================================
-local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
+local pattern = {1,1,1,1,1,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -198,7 +198,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (1경Hz/9700만조Hz, 5:3 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (5:2 패턴, 매 프레임 호출)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -212,31 +212,6 @@ local targetBP_HRP = nil
 local targetBG_HRP = nil
 local targetBP_Torso = nil
 local targetBG_Torso = nil
-
--- ✅ 정밀하게 개선된 cleanupSignals 함수 (타입 검사, pcall, 상태 초기화)
-local function cleanupSignals()
-    -- 1. 루프 실행 플래그 및 카운터 완전 초기화
-    kickLoopRunning = false
-    kickCounter = 0
-
-    -- 2. Stepped 연결 해제 (타입 검사 + pcall로 안전하게)
-    if steppedConn and typeof(steppedConn) == "RBXScriptConnection" then
-        pcall(function() steppedConn:Disconnect() end)
-        steppedConn = nil
-    end
-
-    -- 3. Heartbeat 연결 해제 (타입 검사 + pcall로 안전하게)
-    if remoteTask and typeof(remoteTask) == "RBXScriptConnection" then
-        pcall(function() remoteTask:Disconnect() end)
-        remoteTask = nil
-    end
-
-    -- 4. CharacterAdded 연결 해제 (타입 검사 + pcall로 안전하게)
-    if respawnConn and typeof(respawnConn) == "RBXScriptConnection" then
-        pcall(function() respawnConn:Disconnect() end)
-        respawnConn = nil
-    end
-end
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -319,8 +294,9 @@ local function setupBodiesForTarget()
 end
 
 local function startKickLoop()
-    -- ✅ cleanupSignals로 이전 모든 연결 및 루프 상태 완전 제거
-    cleanupSignals()
+    if remoteTask then remoteTask:Disconnect() end
+    if steppedConn then steppedConn:Disconnect() end
+    if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
     kickCounter = 0
@@ -392,7 +368,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 매 프레임마다 패턴에 따라 호출 (시간 조건 제거, 누락 방지)
+    -- ✅ 매 프레임마다 패턴에 따라 호출 (5:2 패턴)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -416,7 +392,7 @@ local function startKickLoop()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
             else
-                -- 디트로이트 (DestroyGrabLine) - 상대 HRP에 호출
+                -- 디트로이트 (DestroyGrabLine)
                 pcall(function()
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                 end)
@@ -429,9 +405,18 @@ end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    -- ✅ cleanupSignals로 모든 연결 완전 해제 및 상태 초기화
-    cleanupSignals()
-    
+    if steppedConn then
+        steppedConn:Disconnect()
+        steppedConn = nil
+    end
+    if remoteTask then
+        remoteTask:Disconnect()
+        remoteTask = nil
+    end
+    if respawnConn then
+        respawnConn:Disconnect()
+        respawnConn = nil
+    end
     if selectedKickPlayer and selectedKickPlayer.Character then
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar:FindFirstChild("HumanoidRootPart")
@@ -450,7 +435,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴)",
+    Name = "블롭맨 오너 킥 실행 (매 프레임 5:2 패턴)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -627,4 +612,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (매 프레임 호출, 안티그랩 제거됨)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 5회 / Destroy 2회 패턴, 매 프레임 호출 적용", Duration = 3})
