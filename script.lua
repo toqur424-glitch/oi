@@ -111,8 +111,8 @@ local function startFKeyAttack(targetPlayer)
         
         if not myRoot or not tgtRoot then return end
         
-        -- 🔹 상대의 pcld 파트를 우선 사용, 없으면 tgtRoot
-        local targetPart = tgtChar:FindFirstChild("pcld") or tgtRoot
+        -- 🔹 상대 몸통(Torso) 또는 UpperTorso 우선, 없으면 HRP
+        local targetPart = tgtChar:FindFirstChild("Torso") or tgtChar:FindFirstChild("UpperTorso") or tgtRoot
         
         targetPart.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
@@ -388,8 +388,8 @@ local function startKickLoop()
                 end)
             end
 
-            -- 🔹 상대의 pcld 파트를 우선 사용, 없으면 tHRP
-            local targetPart = tChar:FindFirstChild("pcld") or tHRP
+            -- 🔹 상대 몸통(Torso) 또는 UpperTorso 우선, 없으면 HRP
+            local targetPart = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso") or tHRP
 
             local patternIndex = (kickCounter - 1) % #pattern + 1
             if pattern[patternIndex] == 1 then
@@ -441,7 +441,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너 2회 / 디트로이트 1회, pcld 타겟)",
+    Name = "블롭맨 오너 킥 실행 (셋오너 2회 / 디트로이트 1회, 몸통 타겟)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -618,4 +618,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 2회 / 디트로이트 1회 패턴, pcld 타겟 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 2회 / 디트로이트 1회 패턴, 몸통(Torso) 타겟 적용", Duration = 3})
