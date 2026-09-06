@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단] (BeingHeld 로직 제거됨)
+-- [안티그랩: 탈출 리모트 차단]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -44,7 +44,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - 셋오너 2회, 디트로이트 1회 (매 프레임 반복)]
+-- [공통 패턴 - 셋오너 2회, 디트로이트 1회]
 --=============================================
 local pattern = {1,1,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
@@ -111,7 +111,10 @@ local function startFKeyAttack(targetPlayer)
         
         if not myRoot or not tgtRoot then return end
         
-        tgtRoot.AssemblyLinearVelocity = Vector3.zero
+        -- 🔹 상대의 pcld 파트를 우선 사용, 없으면 tgtRoot
+        local targetPart = tgtChar:FindFirstChild("pcld") or tgtRoot
+        
+        targetPart.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
         
         local camCF = camera.CFrame
@@ -129,11 +132,11 @@ local function startFKeyAttack(targetPlayer)
         fCounter = fCounter + 1
         if pattern[(fCounter - 1) % #pattern + 1] == 1 then
             pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
+                rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myRoot.Position, targetPart.Position))
             end)
         else
             pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
+                rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
             end)
         end
     end)
@@ -198,7 +201,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (셋오너 2회, 디트로이트 1회 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (셋오너 2회, 디트로이트 1회)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -385,16 +388,19 @@ local function startKickLoop()
                 end)
             end
 
+            -- 🔹 상대의 pcld 파트를 우선 사용, 없으면 tHRP
+            local targetPart = tChar:FindFirstChild("pcld") or tHRP
+
             local patternIndex = (kickCounter - 1) % #pattern + 1
             if pattern[patternIndex] == 1 then
                 -- 셋오너 (SetNetworkOwner)
                 pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
                 end)
             else
                 -- 디트로이트 (DestroyGrabLine)
                 pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
                 end)
             end
             
@@ -435,7 +441,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너 2회 / 디트로이트 1회 패턴)",
+    Name = "블롭맨 오너 킥 실행 (셋오너 2회 / 디트로이트 1회, pcld 타겟)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -532,7 +538,6 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 주파수 (기존 40 유지)
                                 local t = tick() * 40
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
@@ -613,4 +618,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 2회 / 디트로이트 1회 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 2회 / 디트로이트 1회 패턴, pcld 타겟 적용", Duration = 3})
