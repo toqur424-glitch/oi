@@ -44,9 +44,9 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - 5:3 (셋오너 5회, 디트로이트 3회)]
+-- [공통 패턴 - 셋오너 2회, 디트로이트 1회 (매 프레임 반복)]
 --=============================================
-local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
+local pattern = {1,1,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -198,7 +198,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (5:3 패턴, 매 프레임 호출)
+-- [KICK 탭] - 블롭맨 오너 킥 (셋오너 2회, 디트로이트 1회 패턴)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -368,7 +368,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 매 프레임마다 패턴에 따라 호출 (5:3 패턴)
+    -- ✅ 매 프레임마다 패턴에 따라 호출 (셋오너 2회, 디트로이트 1회)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -435,7 +435,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (매 프레임 5:3 패턴)",
+    Name = "블롭맨 오너 킥 실행 (셋오너 2회 / 디트로이트 1회 패턴)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -532,7 +532,7 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                -- 사인파 주파수 증가 (tick() * 40)
+                                -- 사인파 주파수 (기존 40 유지)
                                 local t = tick() * 40
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
@@ -613,4 +613,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 5회 / Destroy 3회 패턴, 매 프레임 호출 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 2회 / 디트로이트 1회 패턴 적용", Duration = 3})
