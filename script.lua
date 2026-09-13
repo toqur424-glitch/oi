@@ -374,19 +374,36 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ SNO 3 : DGL 1 · 프레임당 10콜 (Pre 5 + Post 5 → 씹힘 방지 + 무정지)
+    -- ✅ 스파이 로그 기반 수정: Look, CharacterAndBeamMove 리모트 추가
+    -- 프레임당 10콜 (Pre 5 + Post 5) · SNO, Look, SNO, BeamMove+DGL 패턴
     local cachedTargetChar = nil
     local cachedTargetTorso = nil
     local SetNetOwnerRemote = rs.GrabEvents.SetNetworkOwner
     local DestroyLineRemote = rs.GrabEvents.DestroyGrabLine
+    
+    -- 스파이 로그에 있던 리모트들 (없으면 nil로 안전하게 처리)
+    local LookRemote = rs:FindFirstChild("Look") or rs:WaitForChild("Look", 1)
+    local BeamMoveRemote = rs:FindFirstChild("CharacterAndBeamMove") or rs:WaitForChild("CharacterAndBeamMove", 1)
 
-    -- 패턴 순서 절대 안 건너뛰는 발사 함수 (SNO,SNO,SNO,DGL 반복 보장)
+    -- 패턴 순서: 1=SNO, 2=Look+SNO, 3=SNO, 4=BeamMove+DGL
     local function fireKickPattern(count, targetPart, lookCF)
         for _ = 1, count do
             local idx = (kickCounter - 1) % 4 + 1
-            if idx <= 3 then
+            if idx == 1 then
                 pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
-            else
+            elseif idx == 2 then
+                if LookRemote then
+                    -- 스파이 로그 인자: Player, CFrame(look), CFrame(rot), CFrame(offset)
+                    pcall(LookRemote.FireServer, LookRemote, plr, lookCF, CFrame.Angles(0,0,0), CFrame.new(1, 0.5, 0))
+                end
+                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
+            elseif idx == 3 then
+                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
+            elseif idx == 4 then
+                if BeamMoveRemote then
+                    -- 스파이 로그 인자: CFrame, CFrame, CFrame, String("high")
+                    pcall(BeamMoveRemote.FireServer, BeamMoveRemote, lookCF, CFrame.Angles(0,0,0), CFrame.new(1, 0.5, 0), "high")
+                end
                 pcall(DestroyLineRemote.FireServer, DestroyLineRemote, selectedKickPlayer, targetPart, lookCF)
             end
             kickCounter = kickCounter + 1
@@ -426,7 +443,6 @@ local function startKickLoop()
     end
 
     -- 🔥 PreSimulation 5콜 + PostSimulation 5콜 = 프레임당 10콜
-    --    몰아쏘지 않고 프레임 앞/뒤로 분할 → 씹힘 방지 · 몸통 파트에만 호출
     local preConn  = RunService.PreSimulation:Connect(function()  kickTick(5) end)
     local postConn = RunService.PostSimulation:Connect(function() kickTick(5) end)
 
@@ -648,4 +664,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "10콜/프레임 (Pre 5 + Post 5) · SNO 3 : DGL 1", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "스파이 로그 기반 리모트 추가 (Look + BeamMove)", Duration = 3})
