@@ -261,19 +261,18 @@ local function setupBodiesForTarget()
 
     removeOldBodies(tHRP)
 
-    -- 🔒 고정력 대폭 강화: P=1e9, D=1e7 (기존 대비 1000배)
     targetBP_HRP = Instance.new("BodyPosition")
     targetBP_HRP.Name = "KickBP_HRP"
     targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP_HRP.P = 1e9
-    targetBP_HRP.D = 1e7
+    targetBP_HRP.P = 1000000
+    targetBP_HRP.D = 10000
     targetBP_HRP.Parent = tHRP
 
     targetBG_HRP = Instance.new("BodyGyro")
     targetBG_HRP.Name = "KickBG_HRP"
     targetBG_HRP.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG_HRP.P = 1e9
-    targetBG_HRP.D = 1e7
+    targetBG_HRP.P = 1000000
+    targetBG_HRP.D = 10000
     targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
     targetBG_HRP.Parent = tHRP
 
@@ -282,15 +281,15 @@ local function setupBodiesForTarget()
         targetBP_Torso = Instance.new("BodyPosition")
         targetBP_Torso.Name = "KickBP_Torso"
         targetBP_Torso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        targetBP_Torso.P = 1e9
-        targetBP_Torso.D = 1e7
+        targetBP_Torso.P = 1000000
+        targetBP_Torso.D = 10000
         targetBP_Torso.Parent = tTorso
 
         targetBG_Torso = Instance.new("BodyGyro")
         targetBG_Torso.Name = "KickBG_Torso"
         targetBG_Torso.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        targetBG_Torso.P = 1e9
-        targetBG_Torso.D = 1e7
+        targetBG_Torso.P = 1000000
+        targetBG_Torso.D = 10000
         targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
         targetBG_Torso.Parent = tTorso
     else
@@ -328,7 +327,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand) — 매 틱 다중 제로화
+    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand) — 기존 방식 그대로
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -347,14 +346,11 @@ local function startKickLoop()
             setupBodiesForTarget()
         end
         
-        -- BodyPosition/BodyGyro에 목표 강제 주입
         if targetBP_HRP then
             targetBP_HRP.Position = targetPos
-            targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         end
         if targetBG_HRP then
             targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
-            targetBG_HRP.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         end
         
         if tTorso and targetBP_Torso and targetBP_Torso.Parent == tTorso then
@@ -364,30 +360,17 @@ local function startKickLoop()
             end
         end
         
-        -- 🔥 강화: 매 틱 CFrame 직접 고정 + 다중 속도 제로화
-        pcall(function()
-            tHRP.CFrame = CFrame.new(targetPos)
-            tHRP.AssemblyLinearVelocity = Vector3.zero
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-            tHRP.RotVelocity = Vector3.zero
-            tHRP.Velocity = Vector3.zero
-        end)
+        tHRP.AssemblyLinearVelocity = Vector3.zero
+        tHRP.AssemblyAngularVelocity = Vector3.zero
         if tTorso then
-            pcall(function()
-                tTorso.AssemblyLinearVelocity = Vector3.zero
-                tTorso.AssemblyAngularVelocity = Vector3.zero
-                tTorso.RotVelocity = Vector3.zero
-                tTorso.Velocity = Vector3.zero
-            end)
+            tTorso.AssemblyLinearVelocity = Vector3.zero
+            tTorso.AssemblyAngularVelocity = Vector3.zero
         end
         
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
-            tHum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
-            tHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-            tHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
         end
     end)
 
@@ -665,4 +648,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "10콜/프레임 (Pre 5 + Post 5) · SNO 3 : DGL 1 · 고정력 MAX", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "10콜/프레임 (Pre 5 + Post 5) · SNO 3 : DGL 1", Duration = 3})
