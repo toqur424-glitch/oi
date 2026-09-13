@@ -204,9 +204,11 @@ GrabTab:CreateToggle({
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 
--- ✅ 원본 고정 방식 유지 (BodyPosition + BodyGyro + PlatformStand)
+-- ✅ 원본 고정 방식: 패턴 카운터 순환 (셋오너 3회 → 디트로이트 1회)
+local kickPattern = {1,1,1,0}
 local selectedKickPlayer = nil
 local kickLoopRunning = false
+local kickCounter = 0
 
 local steppedConn = nil
 local remoteTask = nil
@@ -302,6 +304,7 @@ local function startKickLoop()
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
+    kickCounter = 0
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -324,7 +327,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand) — 기존 방식 그대로 유지
+    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand) — 기존 방식 그대로
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -371,31 +374,25 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 셋오너 + 디트로이트 동시 호출 (속도 최우선)
+    -- ✅ 패턴: SNO × 3 → (SNO + DGL) × 1 → 반복 (3:1 교대)
     local cachedTargetChar = nil
     local cachedTargetTorso = nil
     local SetNetOwnerRemote = rs.GrabEvents.SetNetworkOwner
     local DestroyLineRemote = rs.GrabEvents.DestroyGrabLine
-    
-    -- 스파이 로그 기반 도망 방지 리모트
-    local LookRemote = rs:FindFirstChild("Look") or rs:WaitForChild("Look", 1)
-    local BeamMoveRemote = rs:FindFirstChild("CharacterAndBeamMove") or rs:WaitForChild("CharacterAndBeamMove", 1)
 
-    -- 셋오너와 디트로이트를 동시에 연속 호출하는 함수
+    -- 4슬롯 주기: [SNO] [SNO] [SNO] [SNO+DGL]
     local function fireKickPattern(count, targetPart, lookCF)
         for _ = 1, count do
-            -- 1. 셋오너 (소유권 강탈)
-            pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
-            -- 2. 디트로이트 (그랩 라인 해제 - 덮어쓰기 방지)
-            pcall(DestroyLineRemote.FireServer, DestroyLineRemote, selectedKickPlayer, targetPart, lookCF)
-            
-            -- 3. 추가 방어 (상대 도망 차단)
-            if LookRemote then
-                pcall(LookRemote.FireServer, LookRemote, plr, lookCF, CFrame.Angles(0,0,0), CFrame.new(1, 0.5, 0))
+            local idx = (kickCounter - 1) % 4 + 1
+            if idx <= 3 then
+                -- 1·2·3번째: 셋오너 단독
+                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
+            else
+                -- 4번째: 셋오너 + 디트로이트 같이
+                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
+                pcall(DestroyLineRemote.FireServer, DestroyLineRemote, selectedKickPlayer, targetPart, lookCF)
             end
-            if BeamMoveRemote then
-                pcall(BeamMoveRemote.FireServer, BeamMoveRemote, lookCF, CFrame.Angles(0,0,0), CFrame.new(1, 0.5, 0), "high")
-            end
+            kickCounter = kickCounter + 1
         end
     end
 
@@ -417,7 +414,7 @@ local function startKickLoop()
             end)
         end
 
-        -- 🔒 몸통 파트 캐시 (R6: Torso / R15: UpperTorso) — 매번 FindFirstChild 안 함
+        -- 몸통 파트 캐시 (R6: Torso / R15: UpperTorso)
         if cachedTargetChar ~= tChar or not cachedTargetTorso or not cachedTargetTorso.Parent then
             cachedTargetChar = tChar
             cachedTargetTorso = tChar:FindFirstChild("Torso")
@@ -431,7 +428,7 @@ local function startKickLoop()
         fireKickPattern(count, targetPart, lookCF)
     end
 
-    -- 🔥 PreSimulation 5콜 + PostSimulation 5콜 = 프레임당 10콜 (SNO + DGL 동시 호출)
+    -- 🔥 PreSimulation 5콜 + PostSimulation 5콜 = 프레임당 10콜
     local preConn  = RunService.PreSimulation:Connect(function()  kickTick(5) end)
     local postConn = RunService.PostSimulation:Connect(function() kickTick(5) end)
 
@@ -476,7 +473,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너+디트로이트 동시 호출)",
+    Name = "블롭맨 오너 킥 실행 (셋오너 3 : 디트로이트 1 · DGL 인자 교정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -653,4 +650,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 + 디트로이트 동시 호출 (속도 최상)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 3 : 디트로이트 1 교대 패턴 적용", Duration = 3})
