@@ -261,18 +261,19 @@ local function setupBodiesForTarget()
 
     removeOldBodies(tHRP)
 
+    -- 🔒 고정력 대폭 강화: P=1e9, D=1e7 (기존 대비 1000배)
     targetBP_HRP = Instance.new("BodyPosition")
     targetBP_HRP.Name = "KickBP_HRP"
     targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP_HRP.P = 1000000
-    targetBP_HRP.D = 10000
+    targetBP_HRP.P = 1e9
+    targetBP_HRP.D = 1e7
     targetBP_HRP.Parent = tHRP
 
     targetBG_HRP = Instance.new("BodyGyro")
     targetBG_HRP.Name = "KickBG_HRP"
     targetBG_HRP.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG_HRP.P = 1000000
-    targetBG_HRP.D = 10000
+    targetBG_HRP.P = 1e9
+    targetBG_HRP.D = 1e7
     targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
     targetBG_HRP.Parent = tHRP
 
@@ -281,15 +282,15 @@ local function setupBodiesForTarget()
         targetBP_Torso = Instance.new("BodyPosition")
         targetBP_Torso.Name = "KickBP_Torso"
         targetBP_Torso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        targetBP_Torso.P = 1000000
-        targetBP_Torso.D = 10000
+        targetBP_Torso.P = 1e9
+        targetBP_Torso.D = 1e7
         targetBP_Torso.Parent = tTorso
 
         targetBG_Torso = Instance.new("BodyGyro")
         targetBG_Torso.Name = "KickBG_Torso"
         targetBG_Torso.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        targetBG_Torso.P = 1000000
-        targetBG_Torso.D = 10000
+        targetBG_Torso.P = 1e9
+        targetBG_Torso.D = 1e7
         targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
         targetBG_Torso.Parent = tTorso
     else
@@ -327,7 +328,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand)
+    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand) — 매 틱 다중 제로화
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -346,11 +347,14 @@ local function startKickLoop()
             setupBodiesForTarget()
         end
         
+        -- BodyPosition/BodyGyro에 목표 강제 주입
         if targetBP_HRP then
             targetBP_HRP.Position = targetPos
+            targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         end
         if targetBG_HRP then
             targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
+            targetBG_HRP.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         end
         
         if tTorso and targetBP_Torso and targetBP_Torso.Parent == tTorso then
@@ -360,27 +364,40 @@ local function startKickLoop()
             end
         end
         
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
+        -- 🔥 강화: 매 틱 CFrame 직접 고정 + 다중 속도 제로화
+        pcall(function()
+            tHRP.CFrame = CFrame.new(targetPos)
+            tHRP.AssemblyLinearVelocity = Vector3.zero
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+            tHRP.RotVelocity = Vector3.zero
+            tHRP.Velocity = Vector3.zero
+        end)
         if tTorso then
-            tTorso.AssemblyLinearVelocity = Vector3.zero
-            tTorso.AssemblyAngularVelocity = Vector3.zero
+            pcall(function()
+                tTorso.AssemblyLinearVelocity = Vector3.zero
+                tTorso.AssemblyAngularVelocity = Vector3.zero
+                tTorso.RotVelocity = Vector3.zero
+                tTorso.Velocity = Vector3.zero
+            end)
         end
         
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
             tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            tHum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+            tHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            tHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
         end
     end)
 
-    -- ✅ SNO 3 : DGL 1 · 프레임당 16콜 (Pre 8 + Post 8로 분할 → 씹힘 방지 + 무정지)
+    -- ✅ SNO 3 : DGL 1 · 프레임당 10콜 (Pre 5 + Post 5 → 씹힘 방지 + 무정지)
     local cachedTargetChar = nil
     local cachedTargetTorso = nil
     local SetNetOwnerRemote = rs.GrabEvents.SetNetworkOwner
     local DestroyLineRemote = rs.GrabEvents.DestroyGrabLine
 
-    -- 패턴 순서를 절대 건너뛰지 않는 발사 함수 (SNO,SNO,SNO,DGL 반복 보장)
+    -- 패턴 순서 절대 안 건너뛰는 발사 함수 (SNO,SNO,SNO,DGL 반복 보장)
     local function fireKickPattern(count, targetPart, lookCF)
         for _ = 1, count do
             local idx = (kickCounter - 1) % 4 + 1
@@ -425,11 +442,10 @@ local function startKickLoop()
         fireKickPattern(count, targetPart, lookCF)
     end
 
-    -- 🔥 PreSimulation 8콜 + PostSimulation 8콜 = 프레임당 16콜
-    --    한 번에 몰아쏘지 않고 프레임 앞/뒤로 분할 → 서버 rate-limit/씹힘 방지
-    --    두 틱 모두 몸통 파트에만 정확히 호출됨
-    local preConn  = RunService.PreSimulation:Connect(function()  kickTick(8) end)
-    local postConn = RunService.PostSimulation:Connect(function() kickTick(8) end)
+    -- 🔥 PreSimulation 5콜 + PostSimulation 5콜 = 프레임당 10콜
+    --    몰아쏘지 않고 프레임 앞/뒤로 분할 → 씹힘 방지 · 몸통 파트에만 호출
+    local preConn  = RunService.PreSimulation:Connect(function()  kickTick(5) end)
+    local postConn = RunService.PostSimulation:Connect(function() kickTick(5) end)
 
     -- stopKickLoop의 remoteTask:Disconnect() 호환용 래퍼
     remoteTask = {
@@ -649,4 +665,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "16콜/프레임 (Pre 8 + Post 8) · SNO 3 : DGL 1", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "10콜/프레임 (Pre 5 + Post 5) · SNO 3 : DGL 1 · 고정력 MAX", Duration = 3})
