@@ -374,25 +374,29 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 패턴: SNO × 3 → (SNO + DGL) × 1 → 반복 (3:1 교대)
+    -- ✅ 무끊김 패턴: 매 콜마다 SNO 무조건 발사 (연속 잡기)
+    --    3콜 주기의 마지막 슬롯에서 DGL도 SNO와 같은 콜에 함께 발사 후
+    --    같은 프레임에 SNO 재발사 → 순간적으로 풀리는 갭 제거
+    --    결과: SNO:DGL = 3:1 비율 유지 + SNO 스트림 끊김 없음
     local cachedTargetChar = nil
     local cachedTargetTorso = nil
     local SetNetOwnerRemote = rs.GrabEvents.SetNetworkOwner
     local DestroyLineRemote = rs.GrabEvents.DestroyGrabLine
 
-    -- 4슬롯 주기: [SNO] [SNO] [SNO] [SNO+DGL]
     local function fireKickPattern(count, targetPart, lookCF)
         for _ = 1, count do
-            local idx = (kickCounter - 1) % 4 + 1
-            if idx <= 3 then
-                -- 1·2·3번째: 셋오너 단독
-                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
-            else
-                -- 4번째: 셋오너 + 디트로이트 같이
-                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
-                pcall(DestroyLineRemote.FireServer, DestroyLineRemote, selectedKickPlayer, targetPart, lookCF)
-            end
             kickCounter = kickCounter + 1
+            local slot = (kickCounter - 1) % 3 + 1   -- 1, 2, 3 순환
+
+            -- 1) 매 콜마다 SNO 먼저 발사 (끊김 없는 연속 그랩)
+            pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
+
+            -- 2) 3번째 슬롯에서만 DGL도 발사 → SNO:DGL = 3:1
+            if slot == 3 then
+                pcall(DestroyLineRemote.FireServer, DestroyLineRemote, selectedKickPlayer, targetPart, lookCF)
+                -- 3) DGL이 순간적으로 라인을 풀어버리는 것을 같은 콜에서 SNO 재발사로 즉시 재획득
+                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
+            end
         end
     end
 
@@ -473,7 +477,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너 3 : 디트로이트 1 · DGL 인자 교정)",
+    Name = "블롭맨 오너 킥 실행 (무끊김 · 셋오너 3 : 디트로이트 1)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -650,4 +654,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 3 : 디트로이트 1 교대 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "무끊김 셋오너 스트림 적용 (SNO 3 : DGL 1)", Duration = 3})
