@@ -200,14 +200,18 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (무정지 연사 · Torso 전용)
+-- [KICK 탭] - 블롭맨 오너 킥 (DGL 인자 교정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
+
+-- ✅ 원본 고정 방식: 패턴 카운터 순환 (셋오너 3회 → 디트로이트 1회)
+local kickPattern = {1,1,1,0}
 local selectedKickPlayer = nil
 local kickLoopRunning = false
+local kickCounter = 0
 
 local steppedConn = nil
-local remoteThread = nil
+local remoteTask = nil
 local respawnConn = nil
 local targetBP_HRP = nil
 local targetBG_HRP = nil
@@ -295,10 +299,12 @@ local function setupBodiesForTarget()
 end
 
 local function startKickLoop()
+    if remoteTask then remoteTask:Disconnect() end
     if steppedConn then steppedConn:Disconnect() end
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
+    kickCounter = 0
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -340,12 +346,18 @@ local function startKickLoop()
             setupBodiesForTarget()
         end
         
-        if targetBP_HRP then targetBP_HRP.Position = targetPos end
-        if targetBG_HRP then targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0) end
+        if targetBP_HRP then
+            targetBP_HRP.Position = targetPos
+        end
+        if targetBG_HRP then
+            targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
+        end
         
         if tTorso and targetBP_Torso and targetBP_Torso.Parent == tTorso then
             targetBP_Torso.Position = targetPos
-            if targetBG_Torso then targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0) end
+            if targetBG_Torso then
+                targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
+            end
         end
         
         tHRP.AssemblyLinearVelocity = Vector3.zero
@@ -362,39 +374,52 @@ local function startKickLoop()
         end
     end)
 
-    -- 🔥 무정지 연사: 셋오너 3번 → 디트로이트 1번 → 무한 반복
-    --    (Torso 또는 UpperTorso 에만 호출 / HRP 폴백 없음)
-    remoteThread = task.spawn(function()
-        while kickLoopRunning do
-            local tChar = selectedKickPlayer and selectedKickPlayer.Character
-            local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-            
-            if tChar and myHRP then
-                -- ✅ 몸통만 타겟 (HRP 폴백 없음)
-                local targetPart = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
-                
-                if targetPart then
-                    -- 원거리 텔레포트
-                    local dist = (targetPart.Position - myHRP.Position).Magnitude
-                    if dist > 30 then
-                        pcall(function()
-                            plr.Character:PivotTo(targetPart.CFrame * CFrame.new(0, 2, 4))
-                        end)
-                    end
+    -- ✅ 빠른 패턴 순환 (SNO 3 → DGL 1) · 몸통 파트 고정 타겟 · 무정지 연사
+    local cachedTargetChar = nil
+    local cachedTargetTorso = nil
+    local SetNetOwnerRemote = rs.GrabEvents.SetNetworkOwner
+    local DestroyLineRemote = rs.GrabEvents.DestroyGrabLine
 
-                    local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
+    remoteTask = RunService.PreSimulation:Connect(function()
+        if not kickLoopRunning or not selectedKickPlayer then return end
 
-                    -- ✅ 셋오너 3회
-                    pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-                    pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-                    pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-                    -- ✅ 디트로이트 1회
-                    pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(selectedKickPlayer, targetPart, lookCF) end)
-                end
+        local myChar = plr.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local tChar = selectedKickPlayer.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+
+        if not (myHRP and tHRP and tChar) then return end
+
+        -- 원거리 텔레포트 (기존 로직 유지)
+        if (tHRP.Position - myHRP.Position).Magnitude > 30 then
+            pcall(function()
+                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+            end)
+        end
+
+        -- 🔒 몸통 파트 캐시 (R6: Torso / R15: UpperTorso) — 매 프레임 FindFirstChild 제거로 속도 향상
+        if cachedTargetChar ~= tChar or not cachedTargetTorso or not cachedTargetTorso.Parent then
+            cachedTargetChar = tChar
+            cachedTargetTorso = tChar:FindFirstChild("Torso")
+                or tChar:FindFirstChild("UpperTorso")
+                or tHRP
+        end
+        local targetPart = cachedTargetTorso
+        if not targetPart then return end
+
+        -- CFrame.lookAt 1회만 계산 (연사 중 재계산 X)
+        local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
+
+        -- ⚡ 1프레임에 패턴 3바퀴 = SNO 9회 + DGL 3회 (총 12콜) → 쉬는 타이밍 없음
+        --    pcall에 함수/인자를 직접 넘겨 클로저 생성 비용 제거
+        for _ = 1, 12 do
+            local idx = (kickCounter - 1) % 4 + 1
+            if idx <= 3 then
+                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
+            else
+                pcall(DestroyLineRemote.FireServer, DestroyLineRemote, selectedKickPlayer, targetPart, lookCF)
             end
-            
-            -- 프레임 양보 (한 프레임에 한 사이클, 쉬는 타이밍 없음)
-            RunService.Heartbeat:Wait()
+            kickCounter = kickCounter + 1
         end
     end)
 end
@@ -405,9 +430,9 @@ local function stopKickLoop()
         steppedConn:Disconnect()
         steppedConn = nil
     end
-    if remoteThread then
-        pcall(function() task.cancel(remoteThread) end)
-        remoteThread = nil
+    if remoteTask then
+        remoteTask:Disconnect()
+        remoteTask = nil
     end
     if respawnConn then
         respawnConn:Disconnect()
@@ -417,8 +442,12 @@ local function stopKickLoop()
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar:FindFirstChild("HumanoidRootPart")
         local tTorso = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
-        if tHRP then removeOldBodies(tHRP) end
-        if tTorso then removeOldBodies(tTorso) end
+        if tHRP then
+            removeOldBodies(tHRP)
+        end
+        if tTorso then
+            removeOldBodies(tTorso)
+        end
     end
     targetBP_HRP = nil
     targetBG_HRP = nil
@@ -427,7 +456,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너 3 : 디트로이트 1 · 몸통 전용)",
+    Name = "블롭맨 오너 킥 실행 (셋오너 3 : 디트로이트 1 · DGL 인자 교정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -604,4 +633,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "무정지 연사 · 셋오너 3 : 디트로이트 1 · 몸통(Torso) 전용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "DGL 인자 교정 (Player + Part + CFrame) · 연사 12콜/프레임", Duration = 3})
