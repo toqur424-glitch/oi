@@ -201,11 +201,12 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (초고속 연사)
+-- [KICK 탭] - 블롭맨 오너 킥 (핑 방지 최적화)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
+local lastKickTime = 0
 
 local steppedConn = nil
 local remoteTask = nil
@@ -301,6 +302,7 @@ local function startKickLoop()
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
+    lastKickTime = 0
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -369,9 +371,14 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 매 프레임마다 셋오너 3회 + 디트로이트 1회를 묶어서 초고속 연사
+    -- ✅ 핑 방지 최적화: 일정 시간(0.03초)마다 셋오너 3회 + 디트로이트 1회 연사
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
+        
+        -- 🔥 핑 방지 속도 제한 (0.03초 = 초당 약 33회 실행)
+        -- 이 숫자를 줄이면 더 빨라지고(0.02 추천), 늘리면 더 안정적입니다(0.05 추천).
+        if tick() - lastKickTime < 0.03 then return end
+        lastKickTime = tick()
         
         local tChar = selectedKickPlayer and selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
@@ -390,16 +397,11 @@ local function startKickLoop()
             local targetPart = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso") or tHRP
             local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
 
-            -- 🔥 초고속 연사 루프 (한 프레임에 10번 반복 -> 총 셋오너 30회, 디트로이트 10회 호출)
-            -- 속도를 더 높이고 싶으면 for i = 1, 10 의 숫자를 늘리세요 (너무 높이면 게임에서 튕길 수 있음)
-            for i = 1, 10 do
-                -- 셋오너 3회 연속 호출
-                pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-                pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-                pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-                -- 디트로이트 1회 호출
-                pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(targetPart) end)
-            end
+            -- 🔥 셋오너 3회 + 디트로이트 1회 (1세트)
+            pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
+            pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
+            pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
+            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(targetPart) end)
         end
     end)
 end
@@ -436,7 +438,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너 3회 / 디트로이트 1회 초고속 연사)",
+    Name = "블롭맨 오너 킥 실행 (셋오너 3회 / 디트로이트 1회 최적화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -613,4 +615,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 3회 / 디트로이트 1회 초고속 연사 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 3회 / 디트로이트 1회 핑 방지 패턴 적용", Duration = 3})
