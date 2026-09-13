@@ -44,7 +44,7 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - 셋오너 2회, 디트로이트 1회]
+-- [공통 패턴 - 셋오너 2회, 디트로이트 1회] (Grab 전용)
 --=============================================
 local pattern = {1,1,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
@@ -201,9 +201,10 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (셋오너 2회, 디트로이트 1회)
+-- [KICK 탭] - 블롭맨 오너 킥 (셋오너 3회, 디트로이트 1회)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
+local kickPattern = {1,1,1,0}  -- 1 = SetNetworkOwner(3회), 0 = DestroyGrabLine(1회)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
@@ -371,7 +372,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 매 프레임마다 패턴에 따라 호출 (셋오너 2회, 디트로이트 1회)
+    -- ✅ 매 프레임마다 패턴에 따라 호출 (셋오너 3회, 디트로이트 1회)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -391,14 +392,14 @@ local function startKickLoop()
             -- 🔹 상대 몸통(Torso) 또는 UpperTorso 우선, 없으면 HRP
             local targetPart = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso") or tHRP
 
-            local patternIndex = (kickCounter - 1) % #pattern + 1
-            if pattern[patternIndex] == 1 then
-                -- 셋오너 (SetNetworkOwner)
+            local patternIndex = (kickCounter - 1) % #kickPattern + 1
+            if kickPattern[patternIndex] == 1 then
+                -- 셋오너 (SetNetworkOwner) - 3회
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myHRP.Position, targetPart.Position))
                 end)
             else
-                -- 디트로이트 (DestroyGrabLine)
+                -- 디트로이트 (DestroyGrabLine) - 1회
                 pcall(function()
                     rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
                 end)
@@ -441,7 +442,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너 2회 / 디트로이트 1회, 몸통 타겟)",
+    Name = "블롭맨 오너 킥 실행 (셋오너 3회 / 디트로이트 1회, 몸통 타겟)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -618,4 +619,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 2회 / 디트로이트 1회 패턴, 몸통(Torso) 타겟 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 3회 / 디트로이트 1회 패턴, 몸통(Torso) 타겟 적용", Duration = 3})
