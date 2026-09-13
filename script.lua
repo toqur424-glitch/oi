@@ -374,13 +374,27 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 빠른 패턴 순환 (SNO 3 → DGL 1) · 몸통 파트 고정 타겟 · 무정지 연사
+    -- ✅ SNO 3 : DGL 1 · 프레임당 16콜 (Pre 8 + Post 8로 분할 → 씹힘 방지 + 무정지)
     local cachedTargetChar = nil
     local cachedTargetTorso = nil
     local SetNetOwnerRemote = rs.GrabEvents.SetNetworkOwner
     local DestroyLineRemote = rs.GrabEvents.DestroyGrabLine
 
-    remoteTask = RunService.PreSimulation:Connect(function()
+    -- 패턴 순서를 절대 건너뛰지 않는 발사 함수 (SNO,SNO,SNO,DGL 반복 보장)
+    local function fireKickPattern(count, targetPart, lookCF)
+        for _ = 1, count do
+            local idx = (kickCounter - 1) % 4 + 1
+            if idx <= 3 then
+                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
+            else
+                pcall(DestroyLineRemote.FireServer, DestroyLineRemote, selectedKickPlayer, targetPart, lookCF)
+            end
+            kickCounter = kickCounter + 1
+        end
+    end
+
+    -- 매 틱 공통 처리: 텔레포트 → 파트 캐시 → 연사
+    local function kickTick(count)
         if not kickLoopRunning or not selectedKickPlayer then return end
 
         local myChar = plr.Character
@@ -397,7 +411,7 @@ local function startKickLoop()
             end)
         end
 
-        -- 🔒 몸통 파트 캐시 (R6: Torso / R15: UpperTorso) — 매 프레임 FindFirstChild 제거로 속도 향상
+        -- 🔒 몸통 파트 캐시 (R6: Torso / R15: UpperTorso) — 매번 FindFirstChild 안 함
         if cachedTargetChar ~= tChar or not cachedTargetTorso or not cachedTargetTorso.Parent then
             cachedTargetChar = tChar
             cachedTargetTorso = tChar:FindFirstChild("Torso")
@@ -407,21 +421,23 @@ local function startKickLoop()
         local targetPart = cachedTargetTorso
         if not targetPart then return end
 
-        -- CFrame.lookAt 1회만 계산 (연사 중 재계산 X)
         local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
+        fireKickPattern(count, targetPart, lookCF)
+    end
 
-        -- ⚡ 1프레임에 패턴 3바퀴 = SNO 9회 + DGL 3회 (총 12콜) → 쉬는 타이밍 없음
-        --    pcall에 함수/인자를 직접 넘겨 클로저 생성 비용 제거
-        for _ = 1, 12 do
-            local idx = (kickCounter - 1) % 4 + 1
-            if idx <= 3 then
-                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
-            else
-                pcall(DestroyLineRemote.FireServer, DestroyLineRemote, selectedKickPlayer, targetPart, lookCF)
-            end
-            kickCounter = kickCounter + 1
+    -- 🔥 PreSimulation 8콜 + PostSimulation 8콜 = 프레임당 16콜
+    --    한 번에 몰아쏘지 않고 프레임 앞/뒤로 분할 → 서버 rate-limit/씹힘 방지
+    --    두 틱 모두 몸통 파트에만 정확히 호출됨
+    local preConn  = RunService.PreSimulation:Connect(function()  kickTick(8) end)
+    local postConn = RunService.PostSimulation:Connect(function() kickTick(8) end)
+
+    -- stopKickLoop의 remoteTask:Disconnect() 호환용 래퍼
+    remoteTask = {
+        Disconnect = function()
+            if preConn  then preConn:Disconnect()  end
+            if postConn then postConn:Disconnect() end
         end
-    end)
+    }
 end
 
 local function stopKickLoop()
@@ -633,4 +649,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "DGL 인자 교정 (Player + Part + CFrame) · 연사 12콜/프레임", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "16콜/프레임 (Pre 8 + Post 8) · SNO 3 : DGL 1", Duration = 3})
