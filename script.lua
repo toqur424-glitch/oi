@@ -111,7 +111,6 @@ local function startFKeyAttack(targetPlayer)
         
         if not myRoot or not tgtRoot then return end
         
-        -- 🔹 상대 몸통(Torso) 또는 UpperTorso 우선, 없으면 HRP
         local targetPart = tgtChar:FindFirstChild("Torso") or tgtChar:FindFirstChild("UpperTorso") or tgtRoot
         
         targetPart.AssemblyLinearVelocity = Vector3.zero
@@ -201,12 +200,15 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (핑 방지 최적화)
+-- [KICK 탭] - 블롭맨 오너 킥 (원본 고정 방식 복원)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
+
+-- ✅ 원본 고정 방식 그대로: 패턴 카운터 순환 (셋오너 3회 → 디트로이트 1회)
+local kickPattern = {1,1,1,0}
 local selectedKickPlayer = nil
 local kickLoopRunning = false
-local lastKickTime = 0
+local kickCounter = 0
 
 local steppedConn = nil
 local remoteTask = nil
@@ -302,7 +304,7 @@ local function startKickLoop()
     if respawnConn then respawnConn:Disconnect() end
     
     kickLoopRunning = true
-    lastKickTime = 0
+    kickCounter = 0
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -325,6 +327,7 @@ local function startKickLoop()
         end)
     end
 
+    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand) - 원본 그대로
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -371,14 +374,9 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 핑 방지 최적화: 일정 시간(0.03초)마다 셋오너 3회 + 디트로이트 1회 연사
+    -- ✅ 원본 고정 방식 복원: 패턴 카운터 순환 (SNO 3회 → DGL 1회 교차 호출)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
-        
-        -- 🔥 핑 방지 속도 제한 (0.03초 = 초당 약 33회 실행)
-        -- 이 숫자를 줄이면 더 빨라지고(0.02 추천), 늘리면 더 안정적입니다(0.05 추천).
-        if tick() - lastKickTime < 0.03 then return end
-        lastKickTime = tick()
         
         local tChar = selectedKickPlayer and selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
@@ -397,11 +395,20 @@ local function startKickLoop()
             local targetPart = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso") or tHRP
             local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
 
-            -- 🔥 셋오너 3회 + 디트로이트 1회 (1세트)
-            pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-            pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-            pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-            pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(targetPart) end)
+            -- ✅ 원본 패턴 순환 방식 (2사이클/프레임 = 6 SNO + 2 DGL per Heartbeat)
+            for _ = 1, 2 do
+                local patternIndex = (kickCounter - 1) % #kickPattern + 1
+                if kickPattern[patternIndex] == 1 then
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
+                    end)
+                else
+                    pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                    end)
+                end
+                kickCounter = kickCounter + 1
+            end
         end
     end)
 end
@@ -438,7 +445,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (셋오너 3회 / 디트로이트 1회 최적화)",
+    Name = "블롭맨 오너 킥 실행 (원본 고정 방식 · 셋오너 3 : 디트로이트 1)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -615,4 +622,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 3회 / 디트로이트 1회 핑 방지 패턴 적용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "원본 고정 방식 복원 (셋오너 3 : 디트로이트 1 교차 호출)", Duration = 3})
