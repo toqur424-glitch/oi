@@ -135,7 +135,7 @@ local function startFKeyAttack(targetPlayer)
             end)
         else
             pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(fAttackTarget, targetPart, CFrame.lookAt(myRoot.Position, targetPart.Position))
+                rs.GrabEvents.DestroyGrabLine:FireServer(plr, targetPart, CFrame.lookAt(myRoot.Position, targetPart.Position))
             end)
         end
     end)
@@ -200,7 +200,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (무정지 연사 · Torso 전용)
+-- [KICK 탭] - 블롭맨 오너 킥 (무정지 연사 · Torso 전용 · DGL 첫 인자 = plr)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -363,7 +363,7 @@ local function startKickLoop()
     end)
 
     -- 🔥 무정지 연사: 셋오너 3번 → 디트로이트 1번 → 무한 반복
-    --    (Torso 또는 UpperTorso 에만 호출 / HRP 폴백 없음)
+    --    Torso/UpperTorso 전용 · DGL 첫 인자 = plr(발신자)
     remoteThread = task.spawn(function()
         while kickLoopRunning do
             local tChar = selectedKickPlayer and selectedKickPlayer.Character
@@ -374,7 +374,7 @@ local function startKickLoop()
                 local targetPart = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
                 
                 if targetPart then
-                    -- 원거리 텔레포트
+                    -- 원거리 텔레포트 (몸통 기준)
                     local dist = (targetPart.Position - myHRP.Position).Magnitude
                     if dist > 30 then
                         pcall(function()
@@ -388,12 +388,12 @@ local function startKickLoop()
                     pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
                     pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
                     pcall(function() rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF) end)
-                    -- ✅ 디트로이트 1회
-                    pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(selectedKickPlayer, targetPart, lookCF) end)
+                    -- ✅ 디트로이트 1회 (첫 인자 = plr)
+                    pcall(function() rs.GrabEvents.DestroyGrabLine:FireServer(plr, targetPart, lookCF) end)
                 end
             end
             
-            -- 프레임 양보 (한 프레임에 한 사이클, 쉬는 타이밍 없음)
+            -- 프레임 양보 (쉬는 타이밍 없음 · 매 프레임 1세트)
             RunService.Heartbeat:Wait()
         end
     end)
@@ -604,4 +604,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "무정지 연사 · 셋오너 3 : 디트로이트 1 · 몸통(Torso) 전용", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "무정지 연사 · DGL 첫 인자 = plr (발신자)", Duration = 3})
