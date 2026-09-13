@@ -135,7 +135,7 @@ local function startFKeyAttack(targetPlayer)
             end)
         else
             pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                rs.GrabEvents.DestroyGrabLine:FireServer(fAttackTarget, targetPart, CFrame.lookAt(myRoot.Position, targetPart.Position))
             end)
         end
     end)
@@ -200,11 +200,11 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (원본 고정 방식 복원)
+-- [KICK 탭] - 블롭맨 오너 킥 (DGL 인자 교정)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 
--- ✅ 원본 고정 방식 그대로: 패턴 카운터 순환 (셋오너 3회 → 디트로이트 1회)
+-- ✅ 원본 고정 방식: 패턴 카운터 순환 (셋오너 3회 → 디트로이트 1회)
 local kickPattern = {1,1,1,0}
 local selectedKickPlayer = nil
 local kickLoopRunning = false
@@ -327,7 +327,7 @@ local function startKickLoop()
         end)
     end
 
-    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand) - 원본 그대로
+    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -374,7 +374,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 원본 고정 방식 복원: 패턴 카운터 순환 (SNO 3회 → DGL 1회 교차 호출)
+    -- ✅ 원본 고정 방식: 패턴 카운터 순환 (SNO 3회 → DGL 1회)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -395,16 +395,18 @@ local function startKickLoop()
             local targetPart = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso") or tHRP
             local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
 
-            -- ✅ 원본 패턴 순환 방식 (2사이클/프레임 = 6 SNO + 2 DGL per Heartbeat)
+            -- ✅ 패턴 순환 (2사이클/프레임)
             for _ = 1, 2 do
                 local patternIndex = (kickCounter - 1) % #kickPattern + 1
                 if kickPattern[patternIndex] == 1 then
+                    -- 셋오너 (SetNetworkOwner)
                     pcall(function()
                         rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
                     end)
                 else
+                    -- 🔧 디트로이트 (DestroyGrabLine) - Player, Part, CFrame 함께 전달 (서버 매칭용)
                     pcall(function()
-                        rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                        rs.GrabEvents.DestroyGrabLine:FireServer(selectedKickPlayer, targetPart, lookCF)
                     end)
                 end
                 kickCounter = kickCounter + 1
@@ -445,7 +447,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (원본 고정 방식 · 셋오너 3 : 디트로이트 1)",
+    Name = "블롭맨 오너 킥 실행 (셋오너 3 : 디트로이트 1 · DGL 인자 교정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -510,7 +512,7 @@ KickTab:CreateToggle({
 
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine:FireServer(soundPart)
+                    DestroyLine:FireServer(plr, soundPart, soundPart.CFrame)
                 end)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
@@ -622,4 +624,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "원본 고정 방식 복원 (셋오너 3 : 디트로이트 1 교차 호출)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "DGL 인자 교정 (Player + Part + CFrame)", Duration = 3})
