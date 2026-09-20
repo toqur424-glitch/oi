@@ -202,6 +202,7 @@ GrabTab:CreateToggle({
 --  패턴: D 1회 → S 3회 반복 (D=330Hz / S=500Hz 목표)
 --  Destroy/SetOwner 모두 Torso 로 정확히 호출
 --  상대 전신에 BodyPosition + BodyGyro (Massless, math.huge) 고정
+--  내 머리 좌표 +20 위치로 CFrame 직접 세팅하여 서버 복제
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -322,25 +323,17 @@ local function startKickLoop()
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
                 setupBodiesForTarget()
-                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP then
-                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
-                    pcall(function()
-                        hrp.CFrame = CFrame.new(targetPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                    end)
-                end
             end
         end)
     end
 
-    -- ✅ Stepped: 상대 전신을 BodyPosition 으로 강하게 고정
+    -- ✅ Stepped: 전신 BodyPosition 유지 + 매 스텝 CFrame 직접 세팅(서버 복제용)
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
         local myChar = plr.Character
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local myHead = myChar and myChar:FindFirstChild("Head")
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         local tTorso = tChar and (tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso"))
@@ -348,27 +341,35 @@ local function startKickLoop()
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP and tTorso) then return end
         
-        -- BodyPosition 이 하나라도 없어졌으면 재부착
         if #targetBodies == 0 or not targetBodies[1].bp.Parent then
             setupBodiesForTarget()
         end
         
-        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+        -- ✅ 내 머리 좌표 기준 +20
+        local basePos = (myHead and myHead.Position) or myHRP.Position
+        local targetPos = basePos + Vector3.new(0, 20, 0)
+        local targetCF = CFrame.new(targetPos)
         
-        -- ✅ 전신 모든 파트 고정
+        -- 1) BodyPosition/BodyGyro 로컬 보정 (부드러운 시각효과)
         for _, entry in ipairs(targetBodies) do
             if entry.part and entry.part.Parent then
-                if entry.bp and entry.bp.Parent then
-                    entry.bp.Position = targetPos
-                end
-                if entry.bg and entry.bg.Parent then
-                    entry.bg.CFrame = CFrame.Angles(0, 0, 0)
-                end
+                if entry.bp and entry.bp.Parent then entry.bp.Position = targetPos end
+                if entry.bg and entry.bg.Parent then entry.bg.CFrame = CFrame.Angles(0, 0, 0) end
                 entry.part.AssemblyLinearVelocity = Vector3.zero
                 entry.part.AssemblyAngularVelocity = Vector3.zero
                 pcall(function() entry.part.Massless = true end)
             end
         end
+        
+        -- 2) ✅ 오너십 있는 파트에 CFrame 직접 세팅 → 서버 복제
+        pcall(function() tHRP.CFrame = targetCF end)
+        pcall(function() tTorso.CFrame = targetCF end)
+        
+        -- 3) ✅ 매 스텝 오너십 유지 (Destroy 로 풀린 걸 다시 잡음)
+        local lookCF = CFrame.lookAt(myHRP.Position, tTorso.Position)
+        pcall(function()
+            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, lookCF)
+        end)
         
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
@@ -378,7 +379,6 @@ local function startKickLoop()
     end)
 
     -- ✅ Heartbeat: 패턴 (D → S → S → S) 매 프레임 누적 실행
-    --    Destroy/SetOwner 모두 Torso 로 정확히 호출
     remoteTask = RunService.Heartbeat:Connect(function(dt)
         if not kickLoopRunning then return end
         
@@ -389,15 +389,6 @@ local function startKickLoop()
         
         if not (tHRP and tTorso and myHRP) then return end
         
-        -- 원거리 텔레포트
-        local dist = (tHRP.Position - myHRP.Position).Magnitude
-        if dist > 30 then
-            pcall(function()
-                plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-            end)
-        end
-
-        -- ✅ 시간 누적 (초당 액션 수 × dt)
         kickDAccum = math.min(kickDAccum + D_RATE * dt, 40)
         kickSAccum = math.min(kickSAccum + S_RATE * dt, 120)
 
@@ -416,7 +407,7 @@ local function startKickLoop()
                 else
                     break
                 end
-            else -- "S"
+            else
                 if kickSAccum >= 1 then
                     kickSAccum = kickSAccum - 1
                     pcall(function()
@@ -633,4 +624,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "Kick: D(330Hz) → S(500Hz)×3 패턴 / 전신 BodyPosition 고정 / Torso 호출 / 팔레트 360도 회전", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Kick: D(330Hz) → S(500Hz)×3 / 머리+20 CFrame 복제 / 전신 BodyPosition 고정", Duration = 3})
