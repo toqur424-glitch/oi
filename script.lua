@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩]
+-- [안티그랩: 탈출 리모트 차단]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -44,12 +44,12 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - Grab 탭용 5:3]
+-- [공통 패턴 - 그랩탭용]
 --=============================================
 local pattern = {1,1,1,1,1,0,0,0}
 
 --=============================================
--- [GRAB 탭]
+-- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
 GrabTab:CreateSection("=== 킥 그랩 (속도/고정력 최상) ===")
@@ -171,10 +171,12 @@ GrabTab:CreateInput({
                 break
             end
         end
+        
         if not found then 
             Rayfield:Notify({Title = "오류", Content = "해당 유저를 찾을 수 없습니다.", Duration = 2})
             return 
         end
+        
         selectedGrabPlayer = found
         Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
@@ -196,26 +198,17 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 패턴: S S S D / 속도기반 머리+20 끌기
+-- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 / 330·550Hz / 몸 전체 고정 / Torso에만 리모트)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 
--- ✅ 패턴: S → S → S → D 무한 반복
-local kickPattern = {"S", "S", "S", "D"}
-local kickPatternIndex = 1
-
-local kickDAccum = 0
-local kickSAccum = 0
-local D_RATE = 330
-local S_RATE = 500
-
 local steppedConn = nil
-local remoteTask = nil
+local kickThread = nil
 local respawnConn = nil
-
-local targetBodies = {}
+local targetBodies = {}   -- [part] = BodyPosition
+local targetGyros = {}    -- [part] = BodyGyro
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -230,10 +223,12 @@ KickTab:CreateInput({
                 break
             end
         end
+        
         if not found then 
             Rayfield:Notify({Title = "오류", Content = "해당 유저를 찾을 수 없습니다.", Duration = 2})
             return 
         end
+        
         selectedKickPlayer = found
         Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
@@ -248,37 +243,29 @@ local function removeOldBodies(part)
     end
 end
 
-local function cleanTargetBodies()
-    for _, entry in ipairs(targetBodies) do
-        if entry.bp and entry.bp.Parent then entry.bp:Destroy() end
-        if entry.bg and entry.bg.Parent then entry.bg:Destroy() end
-        if entry.part and entry.part.Parent then
-            pcall(function() entry.part.Massless = false end)
-        end
-    end
-    targetBodies = {}
-end
-
+-- ✅ 상대 몸 전체 BasePart에 BodyPosition + BodyGyro (math.huge)
 local function setupBodiesForTarget()
     if not selectedKickPlayer then return end
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
-    local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-    if not tHRP then return end
 
-    cleanTargetBodies()
+    for _, part in ipairs(tChar:GetDescendants()) do
+        if part:IsA("BasePart") then
+            removeOldBodies(part)
+        end
+    end
 
-    for _, v in pairs(tChar:GetChildren()) do
-        if v:IsA("BasePart") then
-            pcall(function() v.Massless = true end)
-            removeOldBodies(v)
+    targetBodies = {}
+    targetGyros = {}
 
+    for _, part in ipairs(tChar:GetDescendants()) do
+        if part:IsA("BasePart") then
             local bp = Instance.new("BodyPosition")
             bp.Name = "KickBP"
             bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
             bp.P = 1000000
             bp.D = 10000
-            bp.Parent = v
+            bp.Parent = part
 
             local bg = Instance.new("BodyGyro")
             bg.Name = "KickBG"
@@ -286,22 +273,31 @@ local function setupBodiesForTarget()
             bg.P = 1000000
             bg.D = 10000
             bg.CFrame = CFrame.Angles(0, 0, 0)
-            bg.Parent = v
+            bg.Parent = part
 
-            table.insert(targetBodies, {part = v, bp = bp, bg = bg})
+            targetBodies[part] = bp
+            targetGyros[part] = bg
         end
     end
 end
 
+local function bodiesAreValid(tChar)
+    local any = false
+    for part in pairs(targetBodies) do
+        any = true
+        if part.Parent ~= tChar then return false end
+    end
+    return any
+end
+
 local function startKickLoop()
-    if remoteTask then remoteTask:Disconnect() end
-    if steppedConn then steppedConn:Disconnect() end
-    if respawnConn then respawnConn:Disconnect() end
-    
+    if steppedConn then steppedConn:Disconnect(); steppedConn = nil end
+    if kickThread then pcall(task.cancel, kickThread); kickThread = nil end
+    if respawnConn then respawnConn:Disconnect(); respawnConn = nil end
+
     kickLoopRunning = true
-    kickPatternIndex = 1
-    kickDAccum = 0
-    kickSAccum = 0
+    targetBodies = {}
+    targetGyros = {}
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -311,61 +307,55 @@ local function startKickLoop()
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
                 setupBodiesForTarget()
+                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+                    pcall(function()
+                        hrp.CFrame = CFrame.new(targetPos)
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    end)
+                end
             end
         end)
     end
 
-    -- ✅ Stepped: SetOwner 매 스텝 유지 + 속도기반 내 머리+20 끌기
+    -- 매 프레임: 상대 몸 전체 BodyPosition/BodyGyro 갱신 + 속도/플랫폼스탠드
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
-        
+
         local myChar = plr.Character
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        local myHead = myChar and myChar:FindFirstChild("Head")
         local tChar = selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tTorso = tChar and (tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso"))
-        
-        if not (myChar and myHRP) then return end
-        if not (tChar and tHRP and tTorso) then return end
-        
-        if #targetBodies == 0 or not targetBodies[1].bp.Parent then
+        if not (myChar and myHRP and tChar) then return end
+
+        local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+        if not tHRP then return end
+
+        if not bodiesAreValid(tChar) then
             setupBodiesForTarget()
         end
-        
-        local basePos = (myHead and myHead.Position) or myHRP.Position
-        local targetPos = basePos + Vector3.new(0, 20, 0)
-        local lookCF = CFrame.lookAt(myHRP.Position, tTorso.Position)
-        
-        -- 1) 오너십 유지 (매 스텝)
-        pcall(function()
-            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, lookCF)
-        end)
-        
-        -- 2) BodyPosition 로컬 보정
-        for _, entry in ipairs(targetBodies) do
-            if entry.part and entry.part.Parent then
-                if entry.bp and entry.bp.Parent then entry.bp.Position = targetPos end
-                if entry.bg and entry.bg.Parent then entry.bg.CFrame = CFrame.Angles(0, 0, 0) end
-                pcall(function() entry.part.Massless = true end)
+
+        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+
+        for part, bp in pairs(targetBodies) do
+            if bp.Parent == part then
+                bp.Position = targetPos
             end
         end
-        
-        -- 3) 속도 기반 강한 끌기 (서버 복제 핵심)
-        local dir = targetPos - tHRP.Position
-        local pullVel = dir * 50
-        if pullVel.Magnitude > 5000 then
-            pullVel = pullVel.Unit * 5000
+        for part, bg in pairs(targetGyros) do
+            if bg.Parent == part then
+                bg.CFrame = CFrame.Angles(0, 0, 0)
+            end
         end
-        pcall(function()
-            tHRP.AssemblyLinearVelocity = pullVel
-            tHRP.AssemblyAngularVelocity = Vector3.zero
-        end)
-        pcall(function()
-            tTorso.AssemblyLinearVelocity = pullVel
-            tTorso.AssemblyAngularVelocity = Vector3.zero
-        end)
-        
+
+        for part in pairs(targetBodies) do
+            if part.Parent then
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
@@ -373,71 +363,70 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ Heartbeat: S S S D 패턴 누적 실행
-    remoteTask = RunService.Heartbeat:Connect(function(dt)
-        if not kickLoopRunning then return end
-        
-        local tChar = selectedKickPlayer and selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tTorso = tChar and (tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso"))
-        local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        
-        if not (tHRP and tTorso and myHRP) then return end
-        
-        kickDAccum = math.min(kickDAccum + D_RATE * dt, 40)
-        kickSAccum = math.min(kickSAccum + S_RATE * dt, 120)
+    -- ✅ 리모트: 3번 SetNetworkOwner → 1번 DestroyGrabLine 반복
+    --    셋오너 간격 1/330, 디스트로이트 간격 1/550
+    --    호출 대상: Torso (또는 UpperTorso) 만
+    kickThread = task.spawn(function()
+        while kickLoopRunning do
+            local tChar = selectedKickPlayer and selectedKickPlayer.Character
+            local tTorso = tChar and (tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso"))
+            local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
 
-        local lookCF = CFrame.lookAt(myHRP.Position, tTorso.Position)
-        local safety = 0
-        while safety < 500 do
-            local action = kickPattern[kickPatternIndex]
-            if action == "D" then
-                if kickDAccum >= 1 then
-                    kickDAccum = kickDAccum - 1
-                    pcall(function()
-                        rs.GrabEvents.DestroyGrabLine:FireServer(tTorso)
-                    end)
-                    kickPatternIndex = kickPatternIndex + 1
-                    if kickPatternIndex > #kickPattern then kickPatternIndex = 1 end
-                else
-                    break
+            if tTorso and myHRP then
+                -- 원거리 텔레포트
+                local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+                if tHRP then
+                    local dist = (tHRP.Position - myHRP.Position).Magnitude
+                    if dist > 30 then
+                        pcall(function()
+                            plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                        end)
+                    end
                 end
-            else -- "S"
-                if kickSAccum >= 1 then
-                    kickSAccum = kickSAccum - 1
+
+                -- 3회 SetNetworkOwner (330Hz)
+                for i = 1, 3 do
+                    if not kickLoopRunning then break end
                     pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(tTorso, lookCF)
+                        rs.GrabEvents.SetNetworkOwner:FireServer(tTorso, CFrame.lookAt(myHRP.Position, tTorso.Position))
                     end)
-                    kickPatternIndex = kickPatternIndex + 1
-                    if kickPatternIndex > #kickPattern then kickPatternIndex = 1 end
-                else
-                    break
+                    task.wait(1/330)
                 end
+
+                if not kickLoopRunning then break end
+
+                -- 1회 DestroyGrabLine (550Hz)
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tTorso)
+                end)
+                task.wait(1/550)
+            else
+                task.wait()
             end
-            safety = safety + 1
         end
     end)
 end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    if steppedConn then
-        steppedConn:Disconnect()
-        steppedConn = nil
+    if steppedConn then steppedConn:Disconnect(); steppedConn = nil end
+    if kickThread then pcall(task.cancel, kickThread); kickThread = nil end
+    if respawnConn then respawnConn:Disconnect(); respawnConn = nil end
+
+    if selectedKickPlayer and selectedKickPlayer.Character then
+        local tChar = selectedKickPlayer.Character
+        for _, part in ipairs(tChar:GetDescendants()) do
+            if part:IsA("BasePart") then
+                removeOldBodies(part)
+            end
+        end
     end
-    if remoteTask then
-        remoteTask:Disconnect()
-        remoteTask = nil
-    end
-    if respawnConn then
-        respawnConn:Disconnect()
-        respawnConn = nil
-    end
-    cleanTargetBodies()
+    targetBodies = {}
+    targetGyros = {}
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (S 3회 → D 1회 반복, 머리+20 속도 끌기)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 3회:Destroy 1회, 330/550Hz, 몸 전체 고정)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -452,10 +441,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis)] - 사인파 출입 + 360도 고속 회전
+-- [팔레트 레그돌 (Invis) - 사인파 + Z축 45° 관통]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 사인파 출입 + 360도 회전",
+    Name = "Pallet Ragdoll (Invis) - 사인파 출입 (Z 45° 몸통 관통)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -536,11 +525,10 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
-                                local spinAngle = tick() * 15
+                                -- ✅ Z축 45° 기울여 몸 관통
                                 soundPart.CFrame = tRoot.CFrame
-                                    * CFrame.Angles(math.rad(90), 0, 0)
+                                    * CFrame.Angles(math.rad(90), 0, math.rad(45))
                                     * CFrame.new(0, offsetY, 0)
-                                    * CFrame.Angles(0, 0, spinAngle)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
                                 soundPart.CanCollide = false
                                 soundPart.Massless = true
@@ -613,9 +601,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭]
+-- [Settings 탭]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "Kick: S×3 → D×1 패턴 / 머리+20 속도기반 끌기 / 매 스텝 오너십 유지", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "셋오너 3회:디스트로이트 1회 (330/550), 상대 몸 전체 math.huge 고정, Torso 리모트, 팔레트 Z 45° 관통", Duration = 3})
