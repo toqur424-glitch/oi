@@ -199,7 +199,7 @@ GrabTab:CreateToggle({
 
 --=============================================
 -- [KICK 탭] - 블롭맨 오너 킥
---  패턴: D 1회 → S 3회 반복 (D=600Hz / S=1000Hz 목표)
+--  패턴: D 1회 → S 3회 반복 (D=330Hz / S=500Hz 목표)
 --  Destroy/SetOwner 모두 Torso 로 정확히 호출
 --  상대 전신에 BodyPosition + BodyGyro (Massless, math.huge) 고정
 --=============================================
@@ -214,8 +214,8 @@ local kickPatternIndex = 1
 -- ✅ 듀얼 accumulator (매 프레임 누적, 시간 기반 정밀 제어)
 local kickDAccum = 0
 local kickSAccum = 0
-local D_RATE = 600    -- Destroy 600Hz
-local S_RATE = 1000   -- SetOwner 1000Hz (패턴 제약으로 실제로는 1800Hz 근처까지 나옴)
+local D_RATE = 330    -- Destroy 330Hz
+local S_RATE = 500    -- SetOwner 500Hz
 
 local steppedConn = nil
 local remoteTask = nil
@@ -257,7 +257,7 @@ local function removeOldBodies(part)
     end
 end
 
--- ✅ 상대 전신에 BodyPosition/BodyGyro 강하게 부착
+-- ✅ 상대 전신 BodyPosition/BodyGyro 정리
 local function cleanTargetBodies()
     for _, entry in ipairs(targetBodies) do
         if entry.bp and entry.bp.Parent then entry.bp:Destroy() end
@@ -633,4 +633,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "Kick: D→S S S 패턴 / 전신 BodyPosition 고정 / Torso 호출 / 팔레트 360도 회전", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Kick: D(330Hz) → S(500Hz)×3 패턴 / 전신 BodyPosition 고정 / Torso 호출 / 팔레트 360도 회전", Duration = 3})
