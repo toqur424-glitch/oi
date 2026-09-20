@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단]
+-- [안티그랩: 탈출 리모트 차단] (BeingHeld 로직 제거됨)
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -44,9 +44,9 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통 패턴 - 셋오너 2회, 디트로이트 1회] (Grab 전용)
+-- [공통 패턴 - 5:3 (셋오너 5회, 디트로이트 3회)]
 --=============================================
-local pattern = {1,1,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
+local pattern = {1,1,1,1,1,0,0,0}  -- 1 = SetNetworkOwner, 0 = DestroyGrabLine
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
@@ -111,9 +111,7 @@ local function startFKeyAttack(targetPlayer)
         
         if not myRoot or not tgtRoot then return end
         
-        local targetPart = tgtChar:FindFirstChild("Torso") or tgtChar:FindFirstChild("UpperTorso") or tgtRoot
-        
-        targetPart.AssemblyLinearVelocity = Vector3.zero
+        tgtRoot.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
         
         local camCF = camera.CFrame
@@ -131,11 +129,11 @@ local function startFKeyAttack(targetPlayer)
         fCounter = fCounter + 1
         if pattern[(fCounter - 1) % #pattern + 1] == 1 then
             pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, CFrame.lookAt(myRoot.Position, targetPart.Position))
+                rs.GrabEvents.SetNetworkOwner:FireServer(tgtRoot, CFrame.lookAt(myRoot.Position, tgtRoot.Position))
             end)
         else
             pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(fAttackTarget, targetPart, CFrame.lookAt(myRoot.Position, targetPart.Position))
+                rs.GrabEvents.DestroyGrabLine:FireServer(tgtRoot)
             end)
         end
     end)
@@ -200,12 +198,9 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (DGL 인자 교정)
+-- [KICK 탭] - 블롭맨 오너 킥 (1경Hz/9700만조Hz, 5:3 패턴)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
-
--- ✅ 원본 고정 방식: 패턴 카운터 순환 (셋오너 3회 → 디트로이트 1회)
-local kickPattern = {1,1,1,0}
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
@@ -327,7 +322,6 @@ local function startKickLoop()
         end)
     end
 
-    -- 🔒 물리 기반 고정 (BodyPosition + BodyGyro + PlatformStand) — 기존 방식 그대로
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -374,75 +368,39 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 무끊김 패턴: 매 콜마다 SNO 무조건 발사 (연속 잡기)
-    --    3콜 주기의 마지막 슬롯에서 DGL도 SNO와 같은 콜에 함께 발사 후
-    --    같은 프레임에 SNO 재발사 → 순간적으로 풀리는 갭 제거
-    --    결과: SNO:DGL = 3:1 비율 유지 + SNO 스트림 끊김 없음
-    local cachedTargetChar = nil
-    local cachedTargetTorso = nil
-    local SetNetOwnerRemote = rs.GrabEvents.SetNetworkOwner
-    local DestroyLineRemote = rs.GrabEvents.DestroyGrabLine
-
-    local function fireKickPattern(count, targetPart, lookCF)
-        for _ = 1, count do
-            kickCounter = kickCounter + 1
-            local slot = (kickCounter - 1) % 3 + 1   -- 1, 2, 3 순환
-
-            -- 1) 매 콜마다 SNO 먼저 발사 (끊김 없는 연속 그랩)
-            pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
-
-            -- 2) 3번째 슬롯에서만 DGL도 발사 → SNO:DGL = 3:1
-            if slot == 3 then
-                pcall(DestroyLineRemote.FireServer, DestroyLineRemote, selectedKickPlayer, targetPart, lookCF)
-                -- 3) DGL이 순간적으로 라인을 풀어버리는 것을 같은 콜에서 SNO 재발사로 즉시 재획득
-                pcall(SetNetOwnerRemote.FireServer, SetNetOwnerRemote, targetPart, lookCF)
-            end
-        end
-    end
-
-    -- 매 틱 공통 처리: 텔레포트 → 파트 캐시 → 연사
-    local function kickTick(count)
-        if not kickLoopRunning or not selectedKickPlayer then return end
-
-        local myChar = plr.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        local tChar = selectedKickPlayer.Character
+    -- ✅ 매 프레임마다 패턴에 따라 호출 (시간 조건 제거, 누락 방지)
+    remoteTask = RunService.Heartbeat:Connect(function()
+        if not kickLoopRunning then return end
+        
+        local tChar = selectedKickPlayer and selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        
+        if tHRP and myHRP then
+            -- 원거리 텔레포트
+            local dist = (tHRP.Position - myHRP.Position).Magnitude
+            if dist > 30 then
+                pcall(function()
+                    plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
+                end)
+            end
 
-        if not (myHRP and tHRP and tChar) then return end
-
-        -- 원거리 텔레포트 (기존 로직 유지)
-        if (tHRP.Position - myHRP.Position).Magnitude > 30 then
-            pcall(function()
-                myChar:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-            end)
+            local patternIndex = (kickCounter - 1) % #pattern + 1
+            if pattern[patternIndex] == 1 then
+                -- 셋오너 (SetNetworkOwner)
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
+                end)
+            else
+                -- 디트로이트 (DestroyGrabLine) - 상대 HRP에 호출
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
+                end)
+            end
+            
+            kickCounter = kickCounter + 1
         end
-
-        -- 몸통 파트 캐시 (R6: Torso / R15: UpperTorso)
-        if cachedTargetChar ~= tChar or not cachedTargetTorso or not cachedTargetTorso.Parent then
-            cachedTargetChar = tChar
-            cachedTargetTorso = tChar:FindFirstChild("Torso")
-                or tChar:FindFirstChild("UpperTorso")
-                or tHRP
-        end
-        local targetPart = cachedTargetTorso
-        if not targetPart then return end
-
-        local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
-        fireKickPattern(count, targetPart, lookCF)
-    end
-
-    -- 🔥 PreSimulation 5콜 + PostSimulation 5콜 = 프레임당 10콜
-    local preConn  = RunService.PreSimulation:Connect(function()  kickTick(5) end)
-    local postConn = RunService.PostSimulation:Connect(function() kickTick(5) end)
-
-    -- stopKickLoop의 remoteTask:Disconnect() 호환용 래퍼
-    remoteTask = {
-        Disconnect = function()
-            if preConn  then preConn:Disconnect()  end
-            if postConn then postConn:Disconnect() end
-        end
-    }
+    end)
 end
 
 local function stopKickLoop()
@@ -477,7 +435,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (무끊김 · 셋오너 3 : 디트로이트 1)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -542,7 +500,7 @@ KickTab:CreateToggle({
 
                 pcall(function()
                     SetNetOwner:FireServer(soundPart, soundPart.CFrame)
-                    DestroyLine:FireServer(plr, soundPart, soundPart.CFrame)
+                    DestroyLine:FireServer(soundPart)
                 end)
 
                 local partOwner = soundPart:WaitForChild("PartOwner", 1)
@@ -574,7 +532,7 @@ KickTab:CreateToggle({
                             local isRagdolled = ragdolledVal and ragdolledVal.Value or false
 
                             if not isRagdolled then
-                                local t = tick() * 40
+                                local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
@@ -654,4 +612,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "무끊김 셋오너 스트림 적용 (SNO 3 : DGL 1)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (매 프레임 호출, 안티그랩 제거됨)", Duration = 3})
