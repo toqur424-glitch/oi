@@ -198,12 +198,16 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (1경Hz/9700만조Hz, 5:3 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 (매 프레임 패턴 호출)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 local kickCounter = 0
+
+-- ✅ 킥 전용 패턴: D → S S S → D D → S S 반복
+-- "S" = SetNetworkOwner, "D" = DestroyGrabLine
+local kickPattern = {"D", "S", "S", "S", "D", "D", "S", "S"}
 
 local steppedConn = nil
 local remoteTask = nil
@@ -368,7 +372,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 매 프레임마다 패턴에 따라 호출 (시간 조건 제거, 누락 방지)
+    -- ✅ 매 프레임마다 패턴(D → S S S → D D → S S) 순서대로 호출
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -385,14 +389,14 @@ local function startKickLoop()
                 end)
             end
 
-            local patternIndex = (kickCounter - 1) % #pattern + 1
-            if pattern[patternIndex] == 1 then
+            local action = kickPattern[((kickCounter - 1) % #kickPattern) + 1]
+            if action == "S" then
                 -- 셋오너 (SetNetworkOwner)
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, CFrame.lookAt(myHRP.Position, tHRP.Position))
                 end)
             else
-                -- 디트로이트 (DestroyGrabLine) - 상대 HRP에 호출
+                -- 디트로이트 (DestroyGrabLine)
                 pcall(function()
                     rs.GrabEvents.DestroyGrabLine:FireServer(tHRP)
                 end)
@@ -435,7 +439,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner / Destroy 5:3 패턴)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -612,4 +616,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 1경Hz / Destroy 9700만조Hz, 5:3 패턴 적용 (매 프레임 호출, 안티그랩 제거됨)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Kick 탭: D → S S S → D D → S S 패턴 적용 (매 프레임 호출)", Duration = 3})
