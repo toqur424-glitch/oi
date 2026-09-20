@@ -29,7 +29,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단]
+-- [안티그랩]
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
@@ -171,12 +171,10 @@ GrabTab:CreateInput({
                 break
             end
         end
-        
         if not found then 
             Rayfield:Notify({Title = "오류", Content = "해당 유저를 찾을 수 없습니다.", Duration = 2})
             return 
         end
-        
         selectedGrabPlayer = found
         Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
@@ -198,32 +196,26 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥
---  패턴: D 1회 → S 3회 반복 (D=330Hz / S=500Hz 목표)
---  Destroy/SetOwner 모두 Torso 로 정확히 호출
---  상대 전신에 BodyPosition + BodyGyro (Massless, math.huge) 고정
---  내 머리 좌표 +20 위치로 CFrame 직접 세팅하여 서버 복제
+-- [KICK 탭] - 패턴: S S S D / 속도기반 머리+20 끌기
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 
--- ✅ 패턴: D → S → S → S 무한 반복
-local kickPattern = {"D", "S", "S", "S"}
+-- ✅ 패턴: S → S → S → D 무한 반복
+local kickPattern = {"S", "S", "S", "D"}
 local kickPatternIndex = 1
 
--- ✅ 듀얼 accumulator (매 프레임 누적, 시간 기반 정밀 제어)
 local kickDAccum = 0
 local kickSAccum = 0
-local D_RATE = 330    -- Destroy 330Hz
-local S_RATE = 500    -- SetOwner 500Hz
+local D_RATE = 330
+local S_RATE = 500
 
 local steppedConn = nil
 local remoteTask = nil
 local respawnConn = nil
 
--- ✅ 상대 전신 BodyPosition/BodyGyro 저장 테이블
-local targetBodies = {}  -- { {part=, bp=, bg=}, ... }
+local targetBodies = {}
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -238,12 +230,10 @@ KickTab:CreateInput({
                 break
             end
         end
-        
         if not found then 
             Rayfield:Notify({Title = "오류", Content = "해당 유저를 찾을 수 없습니다.", Duration = 2})
             return 
         end
-        
         selectedKickPlayer = found
         Rayfield:Notify({Title = "타겟 설정됨", Content = found.Name .. "님이 타겟으로 설정되었습니다.", Duration = 2})
     end
@@ -258,7 +248,6 @@ local function removeOldBodies(part)
     end
 end
 
--- ✅ 상대 전신 BodyPosition/BodyGyro 정리
 local function cleanTargetBodies()
     for _, entry in ipairs(targetBodies) do
         if entry.bp and entry.bp.Parent then entry.bp:Destroy() end
@@ -279,7 +268,6 @@ local function setupBodiesForTarget()
 
     cleanTargetBodies()
 
-    -- 전신의 모든 BasePart 에 BodyPosition + BodyGyro 부착
     for _, v in pairs(tChar:GetChildren()) do
         if v:IsA("BasePart") then
             pcall(function() v.Massless = true end)
@@ -327,7 +315,7 @@ local function startKickLoop()
         end)
     end
 
-    -- ✅ Stepped: 전신 BodyPosition 유지 + 매 스텝 CFrame 직접 세팅(서버 복제용)
+    -- ✅ Stepped: SetOwner 매 스텝 유지 + 속도기반 내 머리+20 끌기
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -345,30 +333,37 @@ local function startKickLoop()
             setupBodiesForTarget()
         end
         
-        -- ✅ 내 머리 좌표 기준 +20
         local basePos = (myHead and myHead.Position) or myHRP.Position
         local targetPos = basePos + Vector3.new(0, 20, 0)
-        local targetCF = CFrame.new(targetPos)
+        local lookCF = CFrame.lookAt(myHRP.Position, tTorso.Position)
         
-        -- 1) BodyPosition/BodyGyro 로컬 보정 (부드러운 시각효과)
+        -- 1) 오너십 유지 (매 스텝)
+        pcall(function()
+            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, lookCF)
+        end)
+        
+        -- 2) BodyPosition 로컬 보정
         for _, entry in ipairs(targetBodies) do
             if entry.part and entry.part.Parent then
                 if entry.bp and entry.bp.Parent then entry.bp.Position = targetPos end
                 if entry.bg and entry.bg.Parent then entry.bg.CFrame = CFrame.Angles(0, 0, 0) end
-                entry.part.AssemblyLinearVelocity = Vector3.zero
-                entry.part.AssemblyAngularVelocity = Vector3.zero
                 pcall(function() entry.part.Massless = true end)
             end
         end
         
-        -- 2) ✅ 오너십 있는 파트에 CFrame 직접 세팅 → 서버 복제
-        pcall(function() tHRP.CFrame = targetCF end)
-        pcall(function() tTorso.CFrame = targetCF end)
-        
-        -- 3) ✅ 매 스텝 오너십 유지 (Destroy 로 풀린 걸 다시 잡음)
-        local lookCF = CFrame.lookAt(myHRP.Position, tTorso.Position)
+        -- 3) 속도 기반 강한 끌기 (서버 복제 핵심)
+        local dir = targetPos - tHRP.Position
+        local pullVel = dir * 50
+        if pullVel.Magnitude > 5000 then
+            pullVel = pullVel.Unit * 5000
+        end
         pcall(function()
-            rs.GrabEvents.SetNetworkOwner:FireServer(tHRP, lookCF)
+            tHRP.AssemblyLinearVelocity = pullVel
+            tHRP.AssemblyAngularVelocity = Vector3.zero
+        end)
+        pcall(function()
+            tTorso.AssemblyLinearVelocity = pullVel
+            tTorso.AssemblyAngularVelocity = Vector3.zero
         end)
         
         local tHum = tChar:FindFirstChild("Humanoid")
@@ -378,7 +373,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ Heartbeat: 패턴 (D → S → S → S) 매 프레임 누적 실행
+    -- ✅ Heartbeat: S S S D 패턴 누적 실행
     remoteTask = RunService.Heartbeat:Connect(function(dt)
         if not kickLoopRunning then return end
         
@@ -407,7 +402,7 @@ local function startKickLoop()
                 else
                     break
                 end
-            else
+            else -- "S"
                 if kickSAccum >= 1 then
                     kickSAccum = kickSAccum - 1
                     pcall(function()
@@ -442,7 +437,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (D 1회 → S 3회 반복, 전신 BodyPosition 고정)",
+    Name = "블롭맨 오너 킥 실행 (S 3회 → D 1회 반복, 머리+20 속도 끌기)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -541,7 +536,6 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
-                                -- ✅ 360도 고속 회전 (spin 속도 = 15 rad/s ≈ 2.4바퀴/초)
                                 local spinAngle = tick() * 15
                                 soundPart.CFrame = tRoot.CFrame
                                     * CFrame.Angles(math.rad(90), 0, 0)
@@ -624,4 +618,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "Kick: D(330Hz) → S(500Hz)×3 / 머리+20 CFrame 복제 / 전신 BodyPosition 고정", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "Kick: S×3 → D×1 패턴 / 머리+20 속도기반 끌기 / 매 스텝 오너십 유지", Duration = 3})
