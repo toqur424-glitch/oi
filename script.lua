@@ -44,10 +44,11 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통: Torso 정밀 취득 (매 발사 재조회)]
+-- [공통: Torso 정밀 취득 (매 프레임 재조회)]
 --=============================================
 local function getTorsoPart(char)
     if not char then return nil end
+    -- ✅ Torso 최우선 정밀 취득 (캐시 사용 X)
     local torso = char:FindFirstChild("Torso")
     if torso and torso:IsA("BasePart") then return torso end
     local upper = char:FindFirstChild("UpperTorso")
@@ -58,92 +59,10 @@ local function getTorsoPart(char)
 end
 
 --=============================================
--- [공통: 분산 발사 유틸 (Stepped + Heartbeat)]
---=============================================
--- state 공유를 위해 테이블로 관리
-local function createDistributedFirer(state)
-    -- state = {
-    --   isActive = function() return bool end,
-    --   getTarget = function() return targetPlayer end,
-    --   getMyPos  = function() return Vector3 end,
-    --   pattern = {1,1,1,0},
-    --   hz = 750
-    -- }
-    local accum = 0
-    local lastT = os.clock()
-    local patternIdx = 1
-    local MAX_PER_CALL = 7   -- ✅ 한 이벤트당 최대 발사량 (버스트 방지)
-    local PATTERN = state.pattern or {1, 1, 1, 0}
-
-    local function fire()
-        if not state.isActive() then return end
-        local targetPlayer = state.getTarget()
-        if not targetPlayer then return end
-
-        local tChar = targetPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        if not (tHRP and myHRP) then return end
-
-        -- ✅ Torso 정밀 취득
-        local targetPart = getTorsoPart(tChar)
-        if not targetPart then return end
-
-        local now = os.clock()
-        local dt = now - lastT
-        lastT = now
-        if dt <= 0 then return end
-
-        accum = accum + state.hz * dt
-        local fireCount = math.floor(accum)
-        if fireCount <= 0 then return end
-        if fireCount > MAX_PER_CALL then
-            fireCount = MAX_PER_CALL  -- ✅ 초과분은 다음 이벤트로 이월
-        end
-        accum = accum - fireCount
-
-        local myPos = myHRP.Position
-
-        for i = 1, fireCount do
-            -- ✅ 발사 직전 Torso 재검증
-            if not targetPart.Parent or targetPart.Parent ~= tChar then
-                targetPart = getTorsoPart(tChar)
-                if not targetPart then break end
-            end
-
-            -- ✅ 매 발사마다 lookCF 재계산 (몸통 정확 조준)
-            local lookCF = CFrame.lookAt(myPos, targetPart.Position)
-
-            local mode = PATTERN[patternIdx]
-            if mode == 1 then
-                pcall(function()
-                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
-                end)
-            else
-                pcall(function()
-                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
-                end)
-            end
-            patternIdx = patternIdx + 1
-            if patternIdx > #PATTERN then patternIdx = 1 end
-        end
-    end
-
-    -- ✅ 두 지점에서 분산 발사 → 쉼 없이 연속 발사
-    local conn1 = RunService.Stepped:Connect(fire)
-    local conn2 = RunService.Heartbeat:Connect(fire)
-
-    return function()
-        if conn1 then conn1:Disconnect() end
-        if conn2 then conn2:Disconnect() end
-    end
-end
-
---=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (TICK 750Hz / Stepped+Heartbeat 분산 / 몸통 정밀) ===")
+GrabTab:CreateSection("=== 킥 그랩 (2:1 패턴 750틱 / 몸통 정밀) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -190,27 +109,26 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    local cleanupFirer = createDistributedFirer({
-        isActive = function() return getgenv().FKeyAttackActive end,
-        getTarget = function() return fAttackTarget end,
-        hz = 750,
-        pattern = {1, 1, 1, 0},
-    })
-    fAttackConnection = cleanupFirer
+    -- ✅ 2:1 패턴, TICK_HZ 750 (SetOwner 500/s + Destroy 250/s)
+    local PATTERN = {1, 1, 0}
+    local patternIdx = 1
+    local TICK_HZ = 750
+    local tickAccum = 0
+    local lastT = os.clock()
 
-    -- ✅ 위치/회전 유지용 별도 루프 (Heartbeat)
-    local alignConn = RunService.Heartbeat:Connect(function()
+    fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
-
+        
         local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
         local tgtChar = fAttackTarget.Character
         local tgtRoot = tgtChar and tgtChar:FindFirstChild("HumanoidRootPart")
         local tgtHum = tgtChar and tgtChar:FindFirstChild("Humanoid")
+        
         if not myRoot or not tgtRoot then return end
-
+        
         tgtRoot.AssemblyLinearVelocity = Vector3.zero
         if tgtHum then tgtHum.PlatformStand = true end
-
+        
         local camCF = camera.CFrame
         local holdPos = camCF.Position + camCF.LookVector * 20
 
@@ -222,20 +140,48 @@ local function startFKeyAttack(targetPlayer)
         if rot then
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
-    end)
 
-    -- fAttackConnection 하나로 정리되도록 묶음
-    local distributedCleanup = fAttackConnection
-    fAttackConnection = function()
-        if distributedCleanup then distributedCleanup() end
-        if alignConn then alignConn:Disconnect() end
-    end
+        -- ✅ 매 프레임 Torso 정밀 재취득
+        local targetPart = getTorsoPart(tgtChar)
+        if not targetPart then return end
+
+        local now = os.clock()
+        local dt = now - lastT
+        lastT = now
+        if dt <= 0 then return end
+
+        tickAccum = tickAccum + TICK_HZ * dt
+        while tickAccum >= 1 do
+            -- ✅ 발사 직전 Torso 유효성 재검증
+            if not targetPart.Parent or targetPart.Parent ~= tgtChar then
+                targetPart = getTorsoPart(tgtChar)
+                if not targetPart then break end
+            end
+
+            -- ✅ 매 틱 최신 Torso 위치로 lookCF 재계산
+            local lookCF = CFrame.lookAt(myRoot.Position, targetPart.Position)
+
+            local mode = PATTERN[patternIdx]
+            if mode == 1 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
+                end)
+            else
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                end)
+            end
+            patternIdx = patternIdx + 1
+            if patternIdx > #PATTERN then patternIdx = 1 end
+            tickAccum = tickAccum - 1
+        end
+    end)
 end
 
 local function stopFKeyAttack()
     getgenv().FKeyAttackActive = false
     if fAttackConnection then
-        fAttackConnection()
+        fAttackConnection:Disconnect()
         fAttackConnection = nil
     end
 
@@ -276,7 +222,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (750Hz 분산 / 몸통 정밀)",
+    Name = "카메라 조준 킥 그랩 실행 (2:1 패턴 750틱 / 몸통 정밀)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -291,14 +237,14 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥
+-- [KICK 탭] - 블롭맨 오너 킥 (2:1 패턴 750틱 + 몸통 정밀 + 전신 박제)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
 local kickLoopRunning = false
 
 local steppedConn = nil
-local remoteCleanup = nil
+local remoteTask = nil
 local respawnConn = nil
 local targetBP_HRP = nil
 local targetBG_HRP = nil
@@ -393,11 +339,18 @@ local function setupBodiesForTarget()
 end
 
 local function startKickLoop()
-    if remoteCleanup then remoteCleanup() remoteCleanup = nil end
-    if steppedConn then steppedConn:Disconnect() steppedConn = nil end
-    if respawnConn then respawnConn:Disconnect() respawnConn = nil end
-
+    if remoteTask then remoteTask:Disconnect() end
+    if steppedConn then steppedConn:Disconnect() end
+    if respawnConn then respawnConn:Disconnect() end
+    
     kickLoopRunning = true
+
+    -- ✅ 2:1 패턴, TICK_HZ 750 (SetOwner 500/s + Destroy 250/s)
+    local PATTERN = {1, 1, 0}
+    local patternIdx = 1
+    local TICK_HZ = 750
+    local tickAccum = 0
+    local lastT = os.clock()
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -420,18 +373,18 @@ local function startKickLoop()
         end)
     end
 
-    -- ✅ 전신 박제 (Stepped)
+    -- ✅ Stepped: 전신 바디 위치 갱신
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
-
+        
         local myChar = plr.Character
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-
+        
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
-
+        
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
@@ -442,13 +395,17 @@ local function startKickLoop()
         for part, bodies in pairs(targetBodies) do
             if part and part.Parent then
                 local bp, bg = bodies[1], bodies[2]
-                if bp and bp.Parent then bp.Position = targetPos end
-                if bg and bg.Parent then bg.CFrame = zeroCF end
+                if bp and bp.Parent then
+                    bp.Position = targetPos
+                end
+                if bg and bg.Parent then
+                    bg.CFrame = zeroCF
+                end
                 part.AssemblyLinearVelocity = Vector3.zero
                 part.AssemblyAngularVelocity = Vector3.zero
             end
         end
-
+        
         local tHum = tChar:FindFirstChild("Humanoid")
         if tHum then
             tHum.PlatformStand = true
@@ -456,42 +413,75 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 750Hz 분산 발사 (Stepped + Heartbeat, Torso 정밀)
-    remoteCleanup = createDistributedFirer({
-        isActive = function() return kickLoopRunning end,
-        getTarget = function() return selectedKickPlayer end,
-        hz = 750,
-        pattern = {1, 1, 1, 0},
-    })
-
-    -- ✅ 원거리 텔레포트 (Heartbeat)
-    local tpConn = RunService.Heartbeat:Connect(function()
+    -- ✅ 2:1 패턴 750틱 (Torso 정밀 조준)
+    remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
+        
         local tChar = selectedKickPlayer and selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        
         if not (tHRP and myHRP) then return end
+
+        -- ✅ 매 프레임 Torso 정밀 재취득
+        local targetPart = getTorsoPart(tChar)
+        if not targetPart then return end
+
+        local now = os.clock()
+        local dt = now - lastT
+        lastT = now
+        if dt <= 0 then return end
+
+        -- 원거리 텔레포트
         local dist = (tHRP.Position - myHRP.Position).Magnitude
         if dist > 30 then
             pcall(function()
                 plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
             end)
         end
-    end)
 
-    -- cleanup 결합
-    local distCleanup = remoteCleanup
-    remoteCleanup = function()
-        if distCleanup then distCleanup() end
-        if tpConn then tpConn:Disconnect() end
-    end
+        tickAccum = tickAccum + TICK_HZ * dt
+        while tickAccum >= 1 do
+            -- ✅ 발사 직전 Torso 유효성 재검증
+            if not targetPart.Parent or targetPart.Parent ~= tChar then
+                targetPart = getTorsoPart(tChar)
+                if not targetPart then break end
+            end
+
+            -- ✅ 매 틱 최신 Torso 위치로 lookCF 재계산
+            local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
+
+            local mode = PATTERN[patternIdx]
+            if mode == 1 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
+                end)
+            else
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                end)
+            end
+            patternIdx = patternIdx + 1
+            if patternIdx > #PATTERN then patternIdx = 1 end
+            tickAccum = tickAccum - 1
+        end
+    end)
 end
 
 local function stopKickLoop()
     kickLoopRunning = false
-    if steppedConn then steppedConn:Disconnect() steppedConn = nil end
-    if remoteCleanup then remoteCleanup() remoteCleanup = nil end
-    if respawnConn then respawnConn:Disconnect() respawnConn = nil end
+    if steppedConn then
+        steppedConn:Disconnect()
+        steppedConn = nil
+    end
+    if remoteTask then
+        remoteTask:Disconnect()
+        remoteTask = nil
+    end
+    if respawnConn then
+        respawnConn:Disconnect()
+        respawnConn = nil
+    end
 
     clearAllBodies()
     if selectedKickPlayer and selectedKickPlayer.Character then
@@ -505,7 +495,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (750Hz 분산 / 몸통 정밀 / 전신 박제)",
+    Name = "블롭맨 오너 킥 실행 (2:1 패턴 750틱 / 몸통 정밀 / 전신 박제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -520,7 +510,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis)]
+-- [팔레트 레그돌 (Invis) - 사인파로 부드럽게 출입]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 사인파 출입 (옆으로 95도 꺾임)",
@@ -550,7 +540,7 @@ KickTab:CreateToggle({
 
             getgenv().palletRagdollActive = true
             getgenv().PalletForRagdoll = nil
-
+            
             if getgenv().palletCacheConn then
                 getgenv().palletCacheConn:Disconnect()
             end
@@ -604,6 +594,7 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
+                                -- ✅ 옆으로 95도 꺾임
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, 0, math.rad(95)) * CFrame.new(0, offsetY, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
                                 soundPart.CanCollide = false
@@ -636,7 +627,7 @@ KickTab:CreateToggle({
             getgenv().spawnNewPallet = function()
                 if not getgenv().palletRagdollActive then return end
                 if getgenv().PalletForRagdoll and getgenv().PalletForRagdoll.Parent then return end
-
+                
                 local c = plr.Character
                 local h = c and c:FindFirstChild("HumanoidRootPart")
                 if not h then return end
@@ -682,4 +673,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "750Hz 분산 발사 (Stepped+Heartbeat) / 몸통 정밀 / 전신 박제", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "2:1 패턴 750틱 (SetOwner 500/s → Destroy 250/s) / 몸통 정밀 조준", Duration = 3})
