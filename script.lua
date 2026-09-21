@@ -44,20 +44,23 @@ if ReleaseGrab then
 end
 
 --=============================================
--- [공통: Torso 우선 타겟 반환]
+-- [공통: Torso 최우선 타겟 반환 + 캐시 검증]
 --=============================================
 local function getTorsoPart(char)
     if not char then return nil end
-    return char:FindFirstChild("Torso")
-        or char:FindFirstChild("UpperTorso")
-        or char:FindFirstChild("HumanoidRootPart")
+    -- ✅ Torso 최우선 (R6), 그 다음 UpperTorso (R15), 최후 HRP
+    local torso = char:FindFirstChild("Torso")
+    if torso then return torso end
+    local upper = char:FindFirstChild("UpperTorso")
+    if upper then return upper end
+    return char:FindFirstChild("HumanoidRootPart")
 end
 
 --=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (3:1 패턴 800틱 / 몸통 개집중) ===")
+GrabTab:CreateSection("=== 킥 그랩 (3:1 패턴 700틱 / 몸통 정밀) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -104,12 +107,15 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    -- ✅ 3:1 패턴, TICK_HZ 800 (SetOwner 600/s + Destroy 200/s)
+    -- ✅ 3:1 패턴, TICK_HZ 700 (SetOwner 525/s + Destroy 175/s)
     local PATTERN = {1, 1, 1, 0}
     local patternIdx = 1
-    local TICK_HZ = 800
+    local TICK_HZ = 700
     local tickAccum = 0
     local lastT = os.clock()
+
+    -- ✅ 몸통 캐시 (매 프레임 유효성 검증)
+    local cachedTorso = nil
 
     fAttackConnection = RunService.Heartbeat:Connect(function()
         if not getgenv().FKeyAttackActive or not fAttackTarget then return end
@@ -136,8 +142,11 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- ✅ 몸통(Torso) 개집중
-        local targetPart = getTorsoPart(tgtChar)
+        -- ✅ 캐시 무효화 검증 후 몸통 재취득
+        if not cachedTorso or not cachedTorso.Parent or cachedTorso.Parent ~= tgtChar then
+            cachedTorso = getTorsoPart(tgtChar)
+        end
+        local targetPart = cachedTorso
         if not targetPart then return end
 
         local now = os.clock()
@@ -145,6 +154,7 @@ local function startFKeyAttack(targetPlayer)
         lastT = now
         if dt <= 0 then return end
 
+        -- ✅ 몸통 정확 조준
         local lookCF = CFrame.lookAt(myRoot.Position, targetPart.Position)
 
         tickAccum = tickAccum + TICK_HZ * dt
@@ -210,7 +220,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (3:1 패턴 800틱 / 몸통 개집중)",
+    Name = "카메라 조준 킥 그랩 실행 (3:1 패턴 700틱 / 몸통 정밀)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -225,7 +235,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 800틱 + 몸통 개집중 + 전신 박제)
+-- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 700틱 + 몸통 정밀 + 전신 박제)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -333,12 +343,15 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- ✅ 3:1 패턴, TICK_HZ 800 (SetOwner 600/s + Destroy 200/s)
+    -- ✅ 3:1 패턴, TICK_HZ 700 (SetOwner 525/s + Destroy 175/s)
     local PATTERN = {1, 1, 1, 0}
     local patternIdx = 1
-    local TICK_HZ = 800
+    local TICK_HZ = 700
     local tickAccum = 0
     local lastT = os.clock()
+
+    -- ✅ 몸통 캐시
+    local cachedTorso = nil
 
     if selectedKickPlayer then
         respawnConn = selectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -348,6 +361,7 @@ local function startKickLoop()
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
                 setupBodiesForTarget()
+                cachedTorso = nil
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
@@ -401,7 +415,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 3:1 패턴 800틱 (Torso 개집중)
+    -- ✅ 3:1 패턴 700틱 (Torso 정밀 조준)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -411,8 +425,11 @@ local function startKickLoop()
         
         if not (tHRP and myHRP) then return end
 
-        -- ✅ 몸통(Torso) 개집중
-        local targetPart = getTorsoPart(tChar)
+        -- ✅ 캐시 무효화 검증 후 몸통 재취득
+        if not cachedTorso or not cachedTorso.Parent or cachedTorso.Parent ~= tChar then
+            cachedTorso = getTorsoPart(tChar)
+        end
+        local targetPart = cachedTorso
         if not targetPart then return end
 
         local now = os.clock()
@@ -428,6 +445,7 @@ local function startKickLoop()
             end)
         end
 
+        -- ✅ 몸통 정확 조준
         local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
 
         tickAccum = tickAccum + TICK_HZ * dt
@@ -476,7 +494,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (3:1 패턴 800틱 / 몸통 개집중 / 전신 박제)",
+    Name = "블롭맨 오너 킥 실행 (3:1 패턴 700틱 / 몸통 정밀 / 전신 박제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -575,7 +593,7 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
-                                -- ✅ 옆으로 95도 꺾임 (Z축 95도)
+                                -- ✅ 옆으로 95도 꺾임
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, 0, math.rad(95)) * CFrame.new(0, offsetY, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
                                 soundPart.CanCollide = false
@@ -654,4 +672,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 800틱 (SetOwner 600/s → Destroy 200/s) / 팔레트 옆으로 95도", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 700틱 (SetOwner 525/s → Destroy 175/s) / 몸통 정밀 조준", Duration = 3})
