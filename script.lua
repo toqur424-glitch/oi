@@ -48,7 +48,6 @@ end
 --=============================================
 local function getTorsoPart(char)
     if not char then return nil end
-    -- ✅ Torso 개집중 (R6 우선, R15는 UpperTorso)
     return char:FindFirstChild("Torso")
         or char:FindFirstChild("UpperTorso")
         or char:FindFirstChild("HumanoidRootPart")
@@ -58,7 +57,7 @@ end
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (400Hz / 200Hz / 몸통 개집중) ===")
+GrabTab:CreateSection("=== 킥 그랩 (3:1 패턴 600틱 / 몸통 개집중) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -105,11 +104,11 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    -- ✅ SetOwner 400Hz / Destroy 200Hz (Torso 개집중)
-    local SET_HZ = 400
-    local DESTROY_HZ = 200
-    local setAccum = 0
-    local destroyAccum = 0
+    -- ✅ 3:1 패턴, TICK_HZ 600 (SetOwner 450/s + Destroy 150/s)
+    local PATTERN = {1, 1, 1, 0}
+    local patternIdx = 1
+    local TICK_HZ = 600
+    local tickAccum = 0
     local lastT = os.clock()
 
     fAttackConnection = RunService.Heartbeat:Connect(function()
@@ -148,22 +147,21 @@ local function startFKeyAttack(targetPlayer)
 
         local lookCF = CFrame.lookAt(myRoot.Position, targetPart.Position)
 
-        -- ✅ SetNetworkOwner : 400Hz (Torso)
-        setAccum = setAccum + SET_HZ * dt
-        while setAccum >= 1 do
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
-            end)
-            setAccum = setAccum - 1
-        end
-
-        -- ✅ DestroyGrabLine : 200Hz (Torso)
-        destroyAccum = destroyAccum + DESTROY_HZ * dt
-        while destroyAccum >= 1 do
-            pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
-            end)
-            destroyAccum = destroyAccum - 1
+        tickAccum = tickAccum + TICK_HZ * dt
+        while tickAccum >= 1 do
+            local mode = PATTERN[patternIdx]
+            if mode == 1 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
+                end)
+            else
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                end)
+            end
+            patternIdx = patternIdx + 1
+            if patternIdx > #PATTERN then patternIdx = 1 end
+            tickAccum = tickAccum - 1
         end
     end)
 end
@@ -212,7 +210,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (400Hz / 200Hz / 몸통 개집중)",
+    Name = "카메라 조준 킥 그랩 실행 (3:1 패턴 600틱 / 몸통 개집중)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -227,7 +225,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (400Hz / 200Hz + 몸통 개집중 + 전신 박제)
+-- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 600틱 + 몸통 개집중 + 전신 박제)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -335,11 +333,11 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- ✅ SetOwner 400Hz / Destroy 200Hz (Torso 개집중)
-    local SET_HZ = 400
-    local DESTROY_HZ = 200
-    local setAccum = 0
-    local destroyAccum = 0
+    -- ✅ 3:1 패턴, TICK_HZ 600 (SetOwner 450/s + Destroy 150/s)
+    local PATTERN = {1, 1, 1, 0}
+    local patternIdx = 1
+    local TICK_HZ = 600
+    local tickAccum = 0
     local lastT = os.clock()
 
     if selectedKickPlayer then
@@ -403,7 +401,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ SetOwner 400Hz / Destroy 200Hz (Torso 개집중)
+    -- ✅ 3:1 패턴 600틱 (Torso 개집중)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -432,22 +430,21 @@ local function startKickLoop()
 
         local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
 
-        -- ✅ SetNetworkOwner : 400Hz (Torso)
-        setAccum = setAccum + SET_HZ * dt
-        while setAccum >= 1 do
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
-            end)
-            setAccum = setAccum - 1
-        end
-
-        -- ✅ DestroyGrabLine : 200Hz (Torso)
-        destroyAccum = destroyAccum + DESTROY_HZ * dt
-        while destroyAccum >= 1 do
-            pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
-            end)
-            destroyAccum = destroyAccum - 1
+        tickAccum = tickAccum + TICK_HZ * dt
+        while tickAccum >= 1 do
+            local mode = PATTERN[patternIdx]
+            if mode == 1 then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
+                end)
+            else
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                end)
+            end
+            patternIdx = patternIdx + 1
+            if patternIdx > #PATTERN then patternIdx = 1 end
+            tickAccum = tickAccum - 1
         end
     end)
 end
@@ -479,7 +476,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (400Hz / 200Hz / 몸통 개집중 / 전신 박제)",
+    Name = "블롭맨 오너 킥 실행 (3:1 패턴 600틱 / 몸통 개집중 / 전신 박제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -656,4 +653,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 400Hz / Destroy 200Hz (몸통 개집중 / 전신 박제)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 600틱 (SetOwner 450/s → Destroy 150/s) / 몸통 개집중 / 전신 박제", Duration = 3})
