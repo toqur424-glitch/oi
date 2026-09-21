@@ -46,7 +46,6 @@ end
 --=============================================
 -- [공통: 몸통 정밀 타겟 반환 + 캐시 검증]
 --=============================================
--- ✅ 우선순위: Torso(R6) > UpperTorso(R15) > LowerTorso(R15) > HRP(폴백)
 local function getTorsoPart(char)
     if not char then return nil end
     local torso = char:FindFirstChild("Torso")
@@ -64,7 +63,7 @@ end
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (3:2 패턴 800틱 / 몸통 정밀) ===")
+GrabTab:CreateSection("=== 킥 그랩 (SO×3 → D×1 → SO+D 동시 / 800틱) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -111,15 +110,16 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    -- ✅ SetOwner 3번 → Destroy 2번 (5틱 주기), TICK_HZ 800
-    -- 초당: SetOwner 480/s + Destroy 320/s
-    local PATTERN = {1, 1, 1, 0, 0}
+    -- ✅ 패턴: SetOwner ×3 → Destroy ×1 → (SetOwner + Destroy 동시) ×1
+    --  1 = SetOwner only
+    --  2 = Destroy only
+    --  3 = SetOwner + Destroy 동시
+    local PATTERN = {1, 1, 1, 2, 3}
     local patternIdx = 1
     local TICK_HZ = 800
     local tickAccum = 0
     local lastT = os.clock()
 
-    -- ✅ 몸통 캐시 (매 프레임 유효성 검증)
     local cachedTorso = nil
 
     fAttackConnection = RunService.Heartbeat:Connect(function()
@@ -147,7 +147,6 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- ✅ 캐시 무효화 검증 후 몸통 재취득 (리스폰/파괴 감지)
         if not cachedTorso or not cachedTorso.Parent or cachedTorso.Parent ~= tgtChar then
             cachedTorso = getTorsoPart(tgtChar)
         end
@@ -159,7 +158,6 @@ local function startFKeyAttack(targetPlayer)
         lastT = now
         if dt <= 0 then return end
 
-        -- ✅ 몸통 정확 조준
         local lookCF = CFrame.lookAt(myRoot.Position, targetPart.Position)
 
         tickAccum = tickAccum + TICK_HZ * dt
@@ -169,8 +167,14 @@ local function startFKeyAttack(targetPlayer)
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
                 end)
-            else
+            elseif mode == 2 then
                 pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                end)
+            elseif mode == 3 then
+                -- ✅ 동시 호출
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
                     rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
                 end)
             end
@@ -225,7 +229,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (3:2 패턴 800틱 / 몸통 정밀)",
+    Name = "카메라 조준 킥 그랩 실행 (SO×3 → D×1 → SO+D / 800틱)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -240,7 +244,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (3:2 패턴 800틱 + 몸통 정밀 + 전신 박제)
+-- [KICK 탭] - 블롭맨 오너 킥
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -348,15 +352,13 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- ✅ SetOwner 3번 → Destroy 2번 (5틱 주기), TICK_HZ 800
-    -- 초당: SetOwner 480/s + Destroy 320/s
-    local PATTERN = {1, 1, 1, 0, 0}
+    -- ✅ 패턴: SetOwner ×3 → Destroy ×1 → (SetOwner + Destroy 동시) ×1
+    local PATTERN = {1, 1, 1, 2, 3}
     local patternIdx = 1
     local TICK_HZ = 800
     local tickAccum = 0
     local lastT = os.clock()
 
-    -- ✅ 몸통 캐시
     local cachedTorso = nil
 
     if selectedKickPlayer then
@@ -381,7 +383,6 @@ local function startKickLoop()
         end)
     end
 
-    -- ✅ Stepped: 전신 바디 위치 갱신
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -421,7 +422,6 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 3:2 패턴 800틱 (몸통 정밀 조준)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -431,7 +431,6 @@ local function startKickLoop()
         
         if not (tHRP and myHRP) then return end
 
-        -- ✅ 캐시 무효화 검증 후 몸통 재취득 (리스폰/파괴 감지)
         if not cachedTorso or not cachedTorso.Parent or cachedTorso.Parent ~= tChar then
             cachedTorso = getTorsoPart(tChar)
         end
@@ -443,7 +442,6 @@ local function startKickLoop()
         lastT = now
         if dt <= 0 then return end
 
-        -- 원거리 텔레포트
         local dist = (tHRP.Position - myHRP.Position).Magnitude
         if dist > 30 then
             pcall(function()
@@ -451,7 +449,6 @@ local function startKickLoop()
             end)
         end
 
-        -- ✅ 몸통 정확 조준
         local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
 
         tickAccum = tickAccum + TICK_HZ * dt
@@ -461,8 +458,14 @@ local function startKickLoop()
                 pcall(function()
                     rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
                 end)
-            else
+            elseif mode == 2 then
                 pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
+                end)
+            elseif mode == 3 then
+                -- ✅ 동시 호출
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
                     rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
                 end)
             end
@@ -500,7 +503,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (3:2 패턴 800틱 / 몸통 정밀 / 전신 박제)",
+    Name = "블롭맨 오너 킥 실행 (SO×3 → D×1 → SO+D / 800틱 / 전신 박제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -599,7 +602,6 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
-                                -- ✅ 옆으로 95도 꺾임
                                 soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, 0, math.rad(95)) * CFrame.new(0, offsetY, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
                                 soundPart.CanCollide = false
@@ -678,4 +680,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "3:2 패턴 800틱 (SetOwner x3 → Destroy x2 / 480:320 per sec) / 몸통 정밀 조준", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "패턴 SO×3 → D×1 → (SO+D 동시) ×1 / 800틱 / 몸통 정밀", Duration = 3})
