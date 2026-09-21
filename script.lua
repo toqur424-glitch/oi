@@ -44,10 +44,21 @@ if ReleaseGrab then
 end
 
 --=============================================
+-- [공통: Torso 우선 타겟 반환]
+--=============================================
+local function getTorsoPart(char)
+    if not char then return nil end
+    -- ✅ Torso 개집중 (R6 우선, R15는 UpperTorso)
+    return char:FindFirstChild("Torso")
+        or char:FindFirstChild("UpperTorso")
+        or char:FindFirstChild("HumanoidRootPart")
+end
+
+--=============================================
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (650Hz / 350Hz / 몸통 집중) ===")
+GrabTab:CreateSection("=== 킥 그랩 (400Hz / 200Hz / 몸통 개집중) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -94,9 +105,9 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    -- ✅ SetOwner 650Hz / Destroy 350Hz (Torso 집중)
-    local SET_HZ = 650
-    local DESTROY_HZ = 350
+    -- ✅ SetOwner 400Hz / Destroy 200Hz (Torso 개집중)
+    local SET_HZ = 400
+    local DESTROY_HZ = 200
     local setAccum = 0
     local destroyAccum = 0
     local lastT = os.clock()
@@ -126,10 +137,9 @@ local function startFKeyAttack(targetPlayer)
             rot.CFrame = CFrame.Angles(0, 0, 0)
         end
 
-        -- ✅ Torso 우선 대상
-        local targetPart = tgtChar:FindFirstChild("Torso")
-            or tgtChar:FindFirstChild("UpperTorso")
-            or tgtRoot
+        -- ✅ 몸통(Torso) 개집중
+        local targetPart = getTorsoPart(tgtChar)
+        if not targetPart then return end
 
         local now = os.clock()
         local dt = now - lastT
@@ -138,7 +148,7 @@ local function startFKeyAttack(targetPlayer)
 
         local lookCF = CFrame.lookAt(myRoot.Position, targetPart.Position)
 
-        -- ✅ SetNetworkOwner : 650Hz
+        -- ✅ SetNetworkOwner : 400Hz (Torso)
         setAccum = setAccum + SET_HZ * dt
         while setAccum >= 1 do
             pcall(function()
@@ -147,7 +157,7 @@ local function startFKeyAttack(targetPlayer)
             setAccum = setAccum - 1
         end
 
-        -- ✅ DestroyGrabLine : 350Hz
+        -- ✅ DestroyGrabLine : 200Hz (Torso)
         destroyAccum = destroyAccum + DESTROY_HZ * dt
         while destroyAccum >= 1 do
             pcall(function()
@@ -202,7 +212,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (650Hz / 350Hz / 몸통 집중)",
+    Name = "카메라 조준 킥 그랩 실행 (400Hz / 200Hz / 몸통 개집중)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -217,7 +227,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (650Hz / 350Hz + 몸통 집중 + 전신 박제)
+-- [KICK 탭] - 블롭맨 오너 킥 (400Hz / 200Hz + 몸통 개집중 + 전신 박제)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -325,9 +335,9 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- ✅ SetOwner 650Hz / Destroy 350Hz (Torso 집중)
-    local SET_HZ = 650
-    local DESTROY_HZ = 350
+    -- ✅ SetOwner 400Hz / Destroy 200Hz (Torso 개집중)
+    local SET_HZ = 400
+    local DESTROY_HZ = 200
     local setAccum = 0
     local destroyAccum = 0
     local lastT = os.clock()
@@ -393,7 +403,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ SetOwner 650Hz / Destroy 350Hz (Torso 집중)
+    -- ✅ SetOwner 400Hz / Destroy 200Hz (Torso 개집중)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -403,10 +413,9 @@ local function startKickLoop()
         
         if not (tHRP and myHRP) then return end
 
-        -- ✅ Torso 우선 (없으면 UpperTorso, 그것도 없으면 HRP)
-        local targetPart = tChar:FindFirstChild("Torso")
-            or tChar:FindFirstChild("UpperTorso")
-            or tHRP
+        -- ✅ 몸통(Torso) 개집중
+        local targetPart = getTorsoPart(tChar)
+        if not targetPart then return end
 
         local now = os.clock()
         local dt = now - lastT
@@ -423,7 +432,7 @@ local function startKickLoop()
 
         local lookCF = CFrame.lookAt(myHRP.Position, targetPart.Position)
 
-        -- ✅ SetNetworkOwner : 650Hz
+        -- ✅ SetNetworkOwner : 400Hz (Torso)
         setAccum = setAccum + SET_HZ * dt
         while setAccum >= 1 do
             pcall(function()
@@ -432,7 +441,7 @@ local function startKickLoop()
             setAccum = setAccum - 1
         end
 
-        -- ✅ DestroyGrabLine : 350Hz
+        -- ✅ DestroyGrabLine : 200Hz (Torso)
         destroyAccum = destroyAccum + DESTROY_HZ * dt
         while destroyAccum >= 1 do
             pcall(function()
@@ -470,7 +479,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (650Hz / 350Hz / 몸통 집중 / 전신 박제)",
+    Name = "블롭맨 오너 킥 실행 (400Hz / 200Hz / 몸통 개집중 / 전신 박제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -647,4 +656,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 650Hz / Destroy 350Hz (몸통 집중 / 전신 박제)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 400Hz / Destroy 200Hz (몸통 개집중 / 전신 박제)", Duration = 3})
