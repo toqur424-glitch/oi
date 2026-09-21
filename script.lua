@@ -57,7 +57,7 @@ end
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (3:1 패턴 600틱 / 몸통 개집중) ===")
+GrabTab:CreateSection("=== 킥 그랩 (3:1 패턴 800틱 / 몸통 개집중) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -104,10 +104,10 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    -- ✅ 3:1 패턴, TICK_HZ 600 (SetOwner 450/s + Destroy 150/s)
+    -- ✅ 3:1 패턴, TICK_HZ 800 (SetOwner 600/s + Destroy 200/s)
     local PATTERN = {1, 1, 1, 0}
     local patternIdx = 1
-    local TICK_HZ = 600
+    local TICK_HZ = 800
     local tickAccum = 0
     local lastT = os.clock()
 
@@ -210,7 +210,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (3:1 패턴 600틱 / 몸통 개집중)",
+    Name = "카메라 조준 킥 그랩 실행 (3:1 패턴 800틱 / 몸통 개집중)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -225,7 +225,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 600틱 + 몸통 개집중 + 전신 박제)
+-- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 800틱 + 몸통 개집중 + 전신 박제)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -333,10 +333,10 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- ✅ 3:1 패턴, TICK_HZ 600 (SetOwner 450/s + Destroy 150/s)
+    -- ✅ 3:1 패턴, TICK_HZ 800 (SetOwner 600/s + Destroy 200/s)
     local PATTERN = {1, 1, 1, 0}
     local patternIdx = 1
-    local TICK_HZ = 600
+    local TICK_HZ = 800
     local tickAccum = 0
     local lastT = os.clock()
 
@@ -401,7 +401,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 3:1 패턴 600틱 (Torso 개집중)
+    -- ✅ 3:1 패턴 800틱 (Torso 개집중)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -476,7 +476,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (3:1 패턴 600틱 / 몸통 개집중 / 전신 박제)",
+    Name = "블롭맨 오너 킥 실행 (3:1 패턴 800틱 / 몸통 개집중 / 전신 박제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -494,7 +494,7 @@ KickTab:CreateToggle({
 -- [팔레트 레그돌 (Invis) - 사인파로 부드럽게 출입]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 사인파 출입 (몸통 관통)",
+    Name = "Pallet Ragdoll (Invis) - 사인파 출입 (옆으로 95도 꺾임)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -575,7 +575,8 @@ KickTab:CreateToggle({
                             if not isRagdolled then
                                 local t = tick() * 20
                                 local offsetY = 15 * math.sin(t)
-                                soundPart.CFrame = tRoot.CFrame * CFrame.Angles(math.rad(90), 0, 0) * CFrame.new(0, offsetY, 0)
+                                -- ✅ 옆으로 95도 꺾임 (Z축 95도)
+                                soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, 0, math.rad(95)) * CFrame.new(0, offsetY, 0)
                                 soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
                                 soundPart.CanCollide = false
                                 soundPart.Massless = true
@@ -653,4 +654,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 600틱 (SetOwner 450/s → Destroy 150/s) / 몸통 개집중 / 전신 박제", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 800틱 (SetOwner 600/s → Destroy 200/s) / 팔레트 옆으로 95도", Duration = 3})
