@@ -16,9 +16,6 @@ local plr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
--- ✅ Destroy 배수 (0 = 기존, 2 = Destroy 3배 발사)
-local EXTRA_DESTROY_PER_TICK = 2
-
 --=============================================
 -- [UI 생성]
 --=============================================
@@ -64,7 +61,7 @@ end
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (3:1 패턴 750틱 / Destroy 강화) ===")
+GrabTab:CreateSection("=== 킥 그랩 (3:1 패턴 800틱 / 몸통 정밀) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -111,10 +108,10 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    -- ✅ 3:1 패턴 유지, TICK_HZ 750 유지, Destroy만 추가 발사
+    -- ✅ 3:1 패턴, TICK_HZ 800 (SetOwner 600/s + Destroy 200/s)
     local PATTERN = {1, 1, 1, 0}
     local patternIdx = 1
-    local TICK_HZ = 750
+    local TICK_HZ = 800
     local tickAccum = 0
     local lastT = os.clock()
 
@@ -166,15 +163,9 @@ local function startFKeyAttack(targetPlayer)
                     rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
                 end)
             else
-                -- ✅ Destroy 틱: 기본 1회 + 추가 EXTRA_DESTROY_PER_TICK회
                 pcall(function()
                     rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
                 end)
-                for _ = 1, EXTRA_DESTROY_PER_TICK do
-                    pcall(function()
-                        rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
-                    end)
-                end
             end
             patternIdx = patternIdx + 1
             if patternIdx > #PATTERN then patternIdx = 1 end
@@ -227,7 +218,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (3:1 패턴 750틱 / Destroy 강화)",
+    Name = "카메라 조준 킥 그랩 실행 (3:1 패턴 800틱 / 몸통 정밀)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -242,7 +233,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 750틱 + Destroy 강화)
+-- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 800틱 + 몸통 정밀 + 전신 완전 박제)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -303,8 +294,9 @@ local function setupBodiesForTarget()
 
     clearAllBodies()
     for _, v in pairs(tChar:GetDescendants()) do
-        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
-            if v.Name:sub(1, 7) == "KickBP_" or v.Name:sub(1, 7) == "KickBG_" then
+        if v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") then
+            local n = v.Name
+            if n:sub(1, 7) == "KickBP_" or n:sub(1, 7) == "KickBG_" or n:sub(1, 7) == "KickBV_" or n:sub(1, 7) == "KickBA_" then
                 v:Destroy()
             end
         end
@@ -312,24 +304,39 @@ local function setupBodiesForTarget()
 
     local tTorso = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
 
+    -- ✅ 전신 BasePart 완전 박제 (Position + Orientation + Velocity + AngularVelocity)
     for _, part in ipairs(tChar:GetDescendants()) do
         if part:IsA("BasePart") then
             local bp = Instance.new("BodyPosition")
             bp.Name = "KickBP_" .. part.Name
             bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            bp.P = 1000000
-            bp.D = 10000
+            bp.P = 10000000
+            bp.D = 100000
             bp.Parent = part
 
             local bg = Instance.new("BodyGyro")
             bg.Name = "KickBG_" .. part.Name
             bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bg.P = 1000000
-            bg.D = 10000
+            bg.P = 10000000
+            bg.D = 100000
             bg.CFrame = CFrame.Angles(0, 0, 0)
             bg.Parent = part
 
-            targetBodies[part] = {bp, bg}
+            local bv = Instance.new("BodyVelocity")
+            bv.Name = "KickBV_" .. part.Name
+            bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bv.Velocity = Vector3.zero
+            bv.P = 10000000
+            bv.Parent = part
+
+            local bav = Instance.new("BodyAngularVelocity")
+            bav.Name = "KickBA_" .. part.Name
+            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bav.AngularVelocity = Vector3.zero
+            bav.P = 10000000
+            bav.Parent = part
+
+            targetBodies[part] = {bp, bg, bv, bav}
 
             if part == tHRP then
                 targetBP_HRP = bp
@@ -350,10 +357,10 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- ✅ 3:1 패턴 유지, TICK_HZ 750 유지, Destroy만 추가 발사
+    -- ✅ 3:1 패턴, TICK_HZ 800 (SetOwner 600/s + Destroy 200/s)
     local PATTERN = {1, 1, 1, 0}
     local patternIdx = 1
-    local TICK_HZ = 750
+    local TICK_HZ = 800
     local tickAccum = 0
     local lastT = os.clock()
 
@@ -378,7 +385,7 @@ local function startKickLoop()
         end)
     end
 
-    -- ✅ Stepped: 전신 바디 위치 갱신
+    -- ✅ Stepped: 전신 완전 박제 갱신
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -400,12 +407,11 @@ local function startKickLoop()
         for part, bodies in pairs(targetBodies) do
             if part and part.Parent then
                 local bp, bg = bodies[1], bodies[2]
-                if bp and bp.Parent then
-                    bp.Position = targetPos
-                end
-                if bg and bg.Parent then
-                    bg.CFrame = zeroCF
-                end
+                local bv, bav = bodies[3], bodies[4]
+                if bp and bp.Parent then bp.Position = targetPos end
+                if bg and bg.Parent then bg.CFrame = zeroCF end
+                if bv and bv.Parent then bv.Velocity = Vector3.zero end
+                if bav and bav.Parent then bav.AngularVelocity = Vector3.zero end
                 part.AssemblyLinearVelocity = Vector3.zero
                 part.AssemblyAngularVelocity = Vector3.zero
             end
@@ -418,7 +424,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 3:1 패턴 750틱 (Torso 정밀 조준)
+    -- ✅ 3:1 패턴 800틱 (Torso 정밀 조준)
     remoteTask = RunService.Heartbeat:Connect(function()
         if not kickLoopRunning then return end
         
@@ -459,15 +465,9 @@ local function startKickLoop()
                     rs.GrabEvents.SetNetworkOwner:FireServer(targetPart, lookCF)
                 end)
             else
-                -- ✅ Destroy 틱: 기본 1회 + 추가 EXTRA_DESTROY_PER_TICK회
                 pcall(function()
                     rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
                 end)
-                for _ = 1, EXTRA_DESTROY_PER_TICK do
-                    pcall(function()
-                        rs.GrabEvents.DestroyGrabLine:FireServer(targetPart)
-                    end)
-                end
             end
             patternIdx = patternIdx + 1
             if patternIdx > #PATTERN then patternIdx = 1 end
@@ -494,8 +494,9 @@ local function stopKickLoop()
     clearAllBodies()
     if selectedKickPlayer and selectedKickPlayer.Character then
         for _, v in pairs(selectedKickPlayer.Character:GetDescendants()) do
-            if (v:IsA("BodyPosition") or v:IsA("BodyGyro")) and
-               (v.Name:sub(1, 7) == "KickBP_" or v.Name:sub(1, 7) == "KickBG_") then
+            local n = v.Name
+            if (v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity")) and
+               (n:sub(1, 7) == "KickBP_" or n:sub(1, 7) == "KickBG_" or n:sub(1, 7) == "KickBV_" or n:sub(1, 7) == "KickBA_") then
                 v:Destroy()
             end
         end
@@ -503,7 +504,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (3:1 패턴 750틱 / Destroy 강화 / 전신 박제)",
+    Name = "블롭맨 오너 킥 실행 (3:1 패턴 800틱 / 몸통 정밀 / 전신 완전 박제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -680,4 +681,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 750틱 / Destroy ×" .. (EXTRA_DESTROY_PER_TICK + 1) .. " 강화 / 몸통 정밀 조준", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 800틱 (SetOwner 600/s → Destroy 200/s) / 몸통 정밀 조준 / 전신 완전 박제", Duration = 3})
