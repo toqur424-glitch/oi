@@ -418,13 +418,14 @@ local function startKickLoop()
     end
 
     -- ✅ Stepped: 전신 바디 위치/회전 강제 고정 + 신규 파츠 자동 부착
+    --    ▶ 첫 소스 원본 복원: 상대를 "내 HRP + Y 20" 위치로 강제로 끌어옴
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
         local myChar = plr.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        local tChar = selectedKickPlayer.Character
-        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local tChar  = selectedKickPlayer.Character
+        local tHRP   = tChar and tChar:FindFirstChild("HumanoidRootPart")
         
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
@@ -436,6 +437,7 @@ local function startKickLoop()
         -- ✅ 매 프레임 신규 파츠(액세서리 등) 자동 부착
         ensureAllPartsHaveBody()
 
+        -- ✅✅ [핵심 복원] 상대를 내 위치 + Y 20 으로 끌고 오는 로직 (첫 소스와 동일)
         local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
         local zeroCF = CFrame.Angles(0, 0, 0)
 
@@ -443,13 +445,13 @@ local function startKickLoop()
             if part and part.Parent then
                 local bp, bg = bodies[1], bodies[2]
                 if bp and bp.Parent then
-                    bp.Position = targetPos
+                    bp.Position = targetPos          -- ✅ 내 머리 위 Y+20 위치로 강제 이동
                 end
                 if bg and bg.Parent then
-                    bg.CFrame = zeroCF
+                    bg.CFrame = zeroCF               -- ✅ 회전 완전 봉인
                 end
                 -- ✅ 물리 속도 완전 봉인
-                part.AssemblyLinearVelocity = Vector3.zero
+                part.AssemblyLinearVelocity  = Vector3.zero
                 part.AssemblyAngularVelocity = Vector3.zero
             end
         end
@@ -717,4 +719,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 800틱 (SetOwner 600/s → Destroy 200/s) / 몸통 정밀 / 전신 math.huge 박제", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 800틱 (SetOwner 600/s → Destroy 200/s) / 몸통 정밀 / 전신 math.huge 박제 / HRP+Y20 고정", Duration = 3})
