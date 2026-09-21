@@ -59,7 +59,7 @@ end
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (3:1 패턴 900틱 / 몸통 정밀) ===")
+GrabTab:CreateSection("=== 킥 그랩 (3:1 패턴 750틱 / 몸통 정밀) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -106,10 +106,10 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    -- ✅ 3:1 패턴, TICK_HZ 900 (SetOwner 675/s + Destroy 225/s)
+    -- ✅ 3:1 패턴, TICK_HZ 750 (SetOwner 562/s + Destroy 188/s)
     local PATTERN = {1, 1, 1, 0}
     local patternIdx = 1
-    local TICK_HZ = 900
+    local TICK_HZ = 750
     local tickAccum = 0
     local lastT = os.clock()
 
@@ -216,7 +216,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (3:1 패턴 900틱 / 몸통 정밀)",
+    Name = "카메라 조준 킥 그랩 실행 (3:1 패턴 750틱 / 몸통 정밀 / BP강화)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -231,7 +231,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 900틱 + 몸통 정밀 + 전신 박제)
+-- [KICK 탭] - 블롭맨 오너 킥 (3:1 패턴 750틱 + 몸통 정밀 + 전신 박제)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -303,18 +303,22 @@ local function setupBodiesForTarget()
 
     for _, part in ipairs(tChar:GetDescendants()) do
         if part:IsA("BasePart") then
+            -- ✅ BodyPosition 매쓰 강화 (P 1000배, D 100배, MaxVelocity 무한)
             local bp = Instance.new("BodyPosition")
             bp.Name = "KickBP_" .. part.Name
             bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            bp.P = 1000000
-            bp.D = 10000
+            bp.P = 1e9
+            bp.D = 1e6
+            bp.MaxVelocity = math.huge
+            bp.Position = part.Position
             bp.Parent = part
 
+            -- ✅ BodyGyro 매쓰 강화 (P 1000배, D 100배)
             local bg = Instance.new("BodyGyro")
             bg.Name = "KickBG_" .. part.Name
             bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bg.P = 1000000
-            bg.D = 10000
+            bg.P = 1e9
+            bg.D = 1e6
             bg.CFrame = CFrame.Angles(0, 0, 0)
             bg.Parent = part
 
@@ -339,10 +343,10 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- ✅ 3:1 패턴, TICK_HZ 900 (SetOwner 675/s + Destroy 225/s)
+    -- ✅ 3:1 패턴, TICK_HZ 750 (SetOwner 562/s + Destroy 188/s)
     local PATTERN = {1, 1, 1, 0}
     local patternIdx = 1
-    local TICK_HZ = 900
+    local TICK_HZ = 750
     local tickAccum = 0
     local lastT = os.clock()
 
@@ -370,6 +374,7 @@ local function startKickLoop()
         end)
     end
 
+    -- ✅ Stepped: 전신 바디 위치 갱신 + 속도/각속도 완전 락
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -393,12 +398,18 @@ local function startKickLoop()
                 local bp, bg = bodies[1], bodies[2]
                 if bp and bp.Parent then
                     bp.Position = targetPos
+                    bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    bp.MaxVelocity = math.huge
                 end
                 if bg and bg.Parent then
                     bg.CFrame = zeroCF
+                    bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
                 end
+                -- ✅ 속도/각속도 매 프레임 완전 락
                 part.AssemblyLinearVelocity = Vector3.zero
                 part.AssemblyAngularVelocity = Vector3.zero
+                part.Velocity = Vector3.zero
+                part.RotVelocity = Vector3.zero
             end
         end
         
@@ -484,7 +495,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (3:1 패턴 900틱 / 몸통 정밀 / 전신 박제)",
+    Name = "블롭맨 오너 킥 실행 (3:1 패턴 750틱 / 몸통 정밀 / 전신 박제 / BP강화)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -661,4 +672,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 900틱 (SetOwner 675/s → Destroy 225/s) / 몸통 정밀 조준", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "3:1 패턴 750틱 (SetOwner 562/s → Destroy 188/s) / BP·BG 매쓰 강화", Duration = 3})
