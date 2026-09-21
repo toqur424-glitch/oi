@@ -96,7 +96,7 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    -- ✅ GRAB 탭도 Hz 기반으로 통일 (SetOwner 550Hz / Destroy 330Hz)
+    -- ✅ GRAB 탭도 Hz 기반 (SetOwner 550Hz / Destroy 330Hz)
     local SET_HZ = 550
     local DESTROY_HZ = 330
     local setAccum = 0
@@ -214,7 +214,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (SetOwner 550Hz / Destroy 330Hz)
+-- [KICK 탭] - 블롭맨 오너 킥 (SetOwner 550Hz / Destroy 330Hz + 전신 박제)
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -227,6 +227,7 @@ local targetBP_HRP = nil
 local targetBG_HRP = nil
 local targetBP_Torso = nil
 local targetBG_Torso = nil
+local targetBodies = {} -- ✅ 모든 파트의 바디 저장
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -252,13 +253,17 @@ KickTab:CreateInput({
     end
 })
 
-local function removeOldBodies(part)
-    if not part then return end
-    for _, v in pairs(part:GetChildren()) do
-        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
-            v:Destroy()
+local function clearAllBodies()
+    for part, bodies in pairs(targetBodies) do
+        for _, b in ipairs(bodies) do
+            if b and b.Parent then b:Destroy() end
         end
     end
+    targetBodies = {}
+    targetBP_HRP = nil
+    targetBG_HRP = nil
+    targetBP_Torso = nil
+    targetBG_Torso = nil
 end
 
 local function setupBodiesForTarget()
@@ -266,45 +271,49 @@ local function setupBodiesForTarget()
     local tChar = selectedKickPlayer.Character
     if not tChar then return end
     local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-    local tTorso = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
     if not tHRP then return end
 
-    removeOldBodies(tHRP)
+    -- ✅ 기존 바디 전부 청소
+    clearAllBodies()
+    for _, v in pairs(tChar:GetDescendants()) do
+        if v:IsA("BodyPosition") or v:IsA("BodyGyro") then
+            if v.Name:sub(1, 7) == "KickBP_" or v.Name:sub(1, 7) == "KickBG_" then
+                v:Destroy()
+            end
+        end
+    end
 
-    targetBP_HRP = Instance.new("BodyPosition")
-    targetBP_HRP.Name = "KickBP_HRP"
-    targetBP_HRP.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    targetBP_HRP.P = 1000000
-    targetBP_HRP.D = 10000
-    targetBP_HRP.Parent = tHRP
+    local tTorso = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
 
-    targetBG_HRP = Instance.new("BodyGyro")
-    targetBG_HRP.Name = "KickBG_HRP"
-    targetBG_HRP.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    targetBG_HRP.P = 1000000
-    targetBG_HRP.D = 10000
-    targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
-    targetBG_HRP.Parent = tHRP
+    -- ✅ 모든 BasePart에 BodyPosition + BodyGyro 부착 (전신 박제)
+    for _, part in ipairs(tChar:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local bp = Instance.new("BodyPosition")
+            bp.Name = "KickBP_" .. part.Name
+            bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bp.P = 1000000
+            bp.D = 10000
+            bp.Parent = part
 
-    if tTorso then
-        removeOldBodies(tTorso)
-        targetBP_Torso = Instance.new("BodyPosition")
-        targetBP_Torso.Name = "KickBP_Torso"
-        targetBP_Torso.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        targetBP_Torso.P = 1000000
-        targetBP_Torso.D = 10000
-        targetBP_Torso.Parent = tTorso
+            local bg = Instance.new("BodyGyro")
+            bg.Name = "KickBG_" .. part.Name
+            bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bg.P = 1000000
+            bg.D = 10000
+            bg.CFrame = CFrame.Angles(0, 0, 0)
+            bg.Parent = part
 
-        targetBG_Torso = Instance.new("BodyGyro")
-        targetBG_Torso.Name = "KickBG_Torso"
-        targetBG_Torso.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        targetBG_Torso.P = 1000000
-        targetBG_Torso.D = 10000
-        targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
-        targetBG_Torso.Parent = tTorso
-    else
-        targetBP_Torso = nil
-        targetBG_Torso = nil
+            targetBodies[part] = {bp, bg}
+
+            if part == tHRP then
+                targetBP_HRP = bp
+                targetBG_HRP = bg
+            end
+            if part == tTorso then
+                targetBP_Torso = bp
+                targetBG_Torso = bg
+            end
+        end
     end
 end
 
@@ -315,7 +324,7 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- ✅ Hz 제어 상태 (accumulator 삭제, dt 기반 누적)
+    -- ✅ Hz 제어 상태 (dt 기반)
     local SET_HZ = 550
     local DESTROY_HZ = 330
     local setAccum = 0
@@ -343,6 +352,7 @@ local function startKickLoop()
         end)
     end
 
+    -- ✅ Stepped: 전신 바디 위치 갱신
     steppedConn = RunService.Stepped:Connect(function()
         if not kickLoopRunning or not selectedKickPlayer then return end
         
@@ -350,36 +360,31 @@ local function startKickLoop()
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
         local tChar = selectedKickPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tTorso = tChar and (tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso"))
         
         if not (myChar and myHRP) then return end
         if not (tChar and tHRP) then return end
         
-        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
-        
+        -- ✅ 바디가 없거나 HRP 바디가 사라졌으면 재설치
         if not targetBP_HRP or targetBP_HRP.Parent ~= tHRP then
             setupBodiesForTarget()
         end
-        
-        if targetBP_HRP then
-            targetBP_HRP.Position = targetPos
-        end
-        if targetBG_HRP then
-            targetBG_HRP.CFrame = CFrame.Angles(0, 0, 0)
-        end
-        
-        if tTorso and targetBP_Torso and targetBP_Torso.Parent == tTorso then
-            targetBP_Torso.Position = targetPos
-            if targetBG_Torso then
-                targetBG_Torso.CFrame = CFrame.Angles(0, 0, 0)
+
+        local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+        local zeroCF = CFrame.Angles(0, 0, 0)
+
+        -- ✅ 모든 파트 고정
+        for part, bodies in pairs(targetBodies) do
+            if part and part.Parent then
+                local bp, bg = bodies[1], bodies[2]
+                if bp and bp.Parent then
+                    bp.Position = targetPos
+                end
+                if bg and bg.Parent then
+                    bg.CFrame = zeroCF
+                end
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.AssemblyAngularVelocity = Vector3.zero
             end
-        end
-        
-        tHRP.AssemblyLinearVelocity = Vector3.zero
-        tHRP.AssemblyAngularVelocity = Vector3.zero
-        if tTorso then
-            tTorso.AssemblyLinearVelocity = Vector3.zero
-            tTorso.AssemblyAngularVelocity = Vector3.zero
         end
         
         local tHum = tChar:FindFirstChild("Humanoid")
@@ -399,7 +404,6 @@ local function startKickLoop()
         
         if not (tHRP and myHRP) then return end
 
-        -- dt 계산
         local now = os.clock()
         local dt = now - lastT
         lastT = now
@@ -449,25 +453,21 @@ local function stopKickLoop()
         respawnConn:Disconnect()
         respawnConn = nil
     end
+
+    -- ✅ 모든 파트 바디 제거
+    clearAllBodies()
     if selectedKickPlayer and selectedKickPlayer.Character then
-        local tChar = selectedKickPlayer.Character
-        local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-        local tTorso = tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
-        if tHRP then
-            removeOldBodies(tHRP)
-        end
-        if tTorso then
-            removeOldBodies(tTorso)
+        for _, v in pairs(selectedKickPlayer.Character:GetDescendants()) do
+            if (v:IsA("BodyPosition") or v:IsA("BodyGyro")) and
+               (v.Name:sub(1, 7) == "KickBP_" or v.Name:sub(1, 7) == "KickBG_") then
+                v:Destroy()
+            end
         end
     end
-    targetBP_HRP = nil
-    targetBG_HRP = nil
-    targetBP_Torso = nil
-    targetBG_Torso = nil
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetOwner 550Hz / Destroy 330Hz)",
+    Name = "블롭맨 오너 킥 실행 (SetOwner 550Hz / Destroy 330Hz + 전신 박제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -644,4 +644,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 550Hz / Destroy 330Hz (dt 기반, 패턴 제거됨)", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "SetOwner 550Hz / Destroy 330Hz (dt 기반) + 전신 박제 적용", Duration = 3})
