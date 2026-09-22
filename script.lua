@@ -63,7 +63,7 @@ end
 -- [GRAB 탭] - 카메라 조준 킥 그랩
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (SetNetworkOwner×3 → SetNetworkOwner+DestroyGrabLine 동시×2 / 600틱) ===")
+GrabTab:CreateSection("=== 킥 그랩 (SO SO SO SO+D SO SO+D SO SO+D / 600틱) ===")
 
 getgenv().KickGrabActive = false
 getgenv().FKeyAttackActive = false
@@ -110,10 +110,10 @@ local function startFKeyAttack(targetPlayer)
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
-    -- ✅ 패턴: SetNetworkOwner ×3 → (SetNetworkOwner + DestroyGrabLine 동시) ×2
+    -- ✅ 패턴: SO SO SO SO+D SO SO+D SO SO+D
     --  1 = SetNetworkOwner only
     --  3 = SetNetworkOwner + DestroyGrabLine 동시
-    local PATTERN = {1, 1, 1, 3, 3}
+    local PATTERN = {1, 1, 1, 3, 1, 3, 1, 3}
     local patternIdx = 1
     local TICK_HZ = 600
     local tickAccum = 0
@@ -224,7 +224,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 실행 (SetNetworkOwner×3 → SetNetworkOwner+DestroyGrabLine 동시×2 / 600틱)",
+    Name = "카메라 조준 킥 그랩 실행 (SO SO SO SO+D SO SO+D SO SO+D / 600틱)",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -347,8 +347,8 @@ local function startKickLoop()
     
     kickLoopRunning = true
 
-    -- ✅ 패턴: SetNetworkOwner ×3 → (SetNetworkOwner + DestroyGrabLine 동시) ×2
-    local PATTERN = {1, 1, 1, 3, 3}
+    -- ✅ 패턴: SO SO SO SO+D SO SO+D SO SO+D
+    local PATTERN = {1, 1, 1, 3, 1, 3, 1, 3}
     local patternIdx = 1
     local TICK_HZ = 600
     local tickAccum = 0
@@ -494,7 +494,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (SetNetworkOwner×3 → SetNetworkOwner+DestroyGrabLine 동시×2 / 600틱 / 전신 박제)",
+    Name = "블롭맨 오너 킥 실행 (SO SO SO SO+D SO SO+D SO SO+D / 600틱 / 전신 박제)",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title = "알림", Content = "먼저 타겟 닉네임을 입력해주세요!", Duration = 3})
@@ -671,4 +671,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "패턴 SetNetworkOwner×3 → (SetNetworkOwner+DestroyGrabLine 동시)×2 / 600틱 / 몸통 정밀", Duration = 3})
+Rayfield:Notify({Title = "로딩 완료", Content = "패턴 SO SO SO SO+D SO SO+D SO SO+D / 600틱 / 몸통 정밀", Duration = 3})
