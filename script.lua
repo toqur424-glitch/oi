@@ -1,13 +1,20 @@
 --=============================================
--- [FSOF EXTREME Kick Hub - Server Fling (45° Up)]
--- - 소유권 강탈 → AssemblyLinearVelocity 로 진짜 서버 플링
--- - AlignPosition / CreateLine 완전 제거
--- - 다른 스크립트와 병행 / 소유권 경쟁에서 승리
+-- [FSOF EXTREME Kick Hub - No Align / 45° Up Fling]
+-- - AlignPosition 완전 제거
+-- - CreateLine 로직 완전 제거
+-- - 다른 스크립트와 병행 사용 가능
+-- - 스마트 소유권
+-- - 기본 위치: Y=-8, 앞 3스터드
+-- - 셋오너 킥 ON 시: 그 위치에서 9,999,999스터드, 45도 위로 순간이동
 --=============================================
 
+--=============================================
+-- [초기 로드 및 게임 체크]
+--=============================================
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
 if game.PlaceId ~= 6961824067 then 
-    Rayfield:Notify({Title="Error", Content="이 게임을 지원하지 않습니다.", Duration=3})
+    Rayfield:Notify({Title = "Error", Content = "이 게임을 지원하지 않습니다.", Duration = 3})
     return 
 end
 
@@ -37,16 +44,15 @@ STATE.RagdollSteppedConn = nil
 STATE.PalletCacheConn = nil
 STATE.SpawnNewPallet = nil
 
--- ✅ 서버 플링 설정
-STATE.FlingVelocity = 9999999      -- AssemblyLinearVelocity 크기 (studs/s)
-STATE.FlingElevationDeg = 45       -- 위로 45도
-STATE.StealPerFrame = 12           -- 매 프레임 소유권 강탈 리모트 발사 횟수
+STATE.FlingDistance = 9999999
+-- ✅ 45도 위로 고정
+STATE.FlingElevationDeg = 45
 
 --=============================================
--- [UI]
+-- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF EXTREME Kick Hub (Server Fling)",
+    Name = "🔥 FSOF EXTREME Kick Hub (45° Up Fling)",
     LoadingTitle = "최적화 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -62,12 +68,13 @@ do
     local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
     local GrabEventsRS = ReplicatedStorage:WaitForChild("GrabEvents", 5)
     local ReleaseGrab = GrabEventsRS and GrabEventsRS:FindFirstChild("ReleaseGrab")
+
     if StruggleEvent then StruggleEvent.OnClientEvent:Connect(function(...) return end) end
     if ReleaseGrab then ReleaseGrab.OnClientEvent:Connect(function(...) return end) end
 end
 
 --=============================================
--- [핵심: 소유권 강탈 + 서버 전파 플링]
+-- [공통 함수]
 --=============================================
 local function getCoreParts(char)
     if not char then return {} end
@@ -78,11 +85,6 @@ local function getCoreParts(char)
     if hrp and hrp:IsA("BasePart") then table.insert(parts, hrp) end
     local head = char:FindFirstChild("Head")
     if head and head:IsA("BasePart") then table.insert(parts, head) end
-    -- ✅ 팔다리도 포함 → 서버가 "전신이 날아간다" 로 인식
-    for _, name in ipairs({"Left Arm","Right Arm","Left Leg","Right Leg"}) do
-        local p = char:FindFirstChild(name)
-        if p and p:IsA("BasePart") then table.insert(parts, p) end
-    end
     return parts
 end
 
@@ -94,90 +96,24 @@ local function isOwnedByMe(part)
     return ok2 and val == plr.Name
 end
 
--- ✅ 강력한 소유권 강탈 (매 프레임 여러 번)
--- DestroyGrabLine → SetNetworkOwner 콤보를 연속 발사
-local function stealOwnership(part, times)
+local function claimPart(part)
     if not part or not part.Parent then return end
-    times = times or STATE.StealPerFrame
-    for i = 1, times do
-        pcall(function()
-            rs.GrabEvents.DestroyGrabLine:FireServer(part)
-        end)
-        pcall(function()
-            rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
-        end)
-    end
+    if isOwnedByMe(part) then return end
+
+    pcall(function()
+        rs.GrabEvents.DestroyGrabLine:FireServer(part)
+    end)
+    pcall(function()
+        rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
+    end)
 end
 
--- ✅ 서버 플링용 velocity 벡터 (45도 위, forward 기준)
-local function getFlingVelocity()
-    local camCF = camera.CFrame
-    local fwd = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
-    if fwd.Magnitude > 0 then fwd = fwd.Unit else fwd = Vector3.new(0,0,-1) end
-
-    local rad = math.rad(STATE.FlingElevationDeg)
-    local h = math.cos(rad)
-    local v = math.sin(rad)
-
-    return Vector3.new(
-        fwd.X * h,
-        v,
-        fwd.Z * h
-    ) * STATE.FlingVelocity
-end
-
--- ✅ 메인 플링 함수: 소유권 뺏고, velocity 설정
-local function flingTarget(targetChar)
-    if not targetChar then return end
-    local parts = getCoreParts(targetChar)
-    if #parts == 0 then return end
-
-    local vel = getFlingVelocity()
-    local spinVel = Vector3.new(9e9, 9e9, 9e9)
-
-    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-
-    for _, part in ipairs(parts) do
-        if not part.Parent then continue end
-
-        -- 거리 체크 (SetOwner 서버 검증 30 스터드)
-        if myHRP then
-            local dist = (part.Position - myHRP.Position).Magnitude
-            -- 가까우면 소유권 강탈 시도
-            if dist <= 30 then
-                stealOwnership(part, STATE.StealPerFrame)
-            end
-        end
-
-        -- ✅ 소유권 확인 후에만 velocity 적용 (서버에 전파되는지 확인)
-        if isOwnedByMe(part) then
-            pcall(function()
-                part.Massless = false
-                part.AssemblyLinearVelocity = vel
-                part.AssemblyAngularVelocity = spinVel
-            end)
-        end
-    end
-
-    -- Humanoid 상태도 물리로
-    local hum = targetChar:FindFirstChild("Humanoid")
-    if hum then
-        pcall(function()
-            hum.PlatformStand = true
-            hum:ChangeState(Enum.HumanoidStateType.Physics)
-        end)
-    end
-end
-
---=============================================
--- [초기 버스트 - 강화판]
---=============================================
 local function initialBurst(char, shouldContinue)
     if not char then return end
     local parts = getCoreParts(char)
     if #parts == 0 then return end
 
-    for round = 1, 12 do
+    for round = 1, 8 do
         if shouldContinue and not shouldContinue() then break end
         for _, part in ipairs(parts) do
             if part.Parent then
@@ -198,17 +134,97 @@ local function initialBurst(char, shouldContinue)
 end
 
 --=============================================
--- [GRAB 탭]
+-- [위치 계산 - Y=-8, 앞 3스터드 / 셋오너 시 45도 위로 fling]
+--=============================================
+local function getHorizontalForward()
+    local camCF = camera.CFrame
+    local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+    if forward.Magnitude > 0 then
+        forward = forward.Unit
+    else
+        forward = Vector3.new(0, 0, -1)
+    end
+    return forward
+end
+
+-- ✅ 45도 위로 fling 방향 벡터 반환
+local function getFlingOffsetVector()
+    local forward = getHorizontalForward()
+    local rad = math.rad(STATE.FlingElevationDeg)
+    local h = math.cos(rad)
+    local v = math.sin(rad)
+
+    return Vector3.new(forward.X * h, v, forward.Z * h)
+end
+
+local function getHoldPosition(kickActive)
+    local myChar = plr.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+
+    local myPos = myHRP.Position
+    local forward = getHorizontalForward()
+
+    local base = Vector3.new(
+        myPos.X + forward.X * 3,
+        -8,
+        myPos.Z + forward.Z * 3
+    )
+
+    if kickActive then
+        local offVec = getFlingOffsetVector()
+        local d = STATE.FlingDistance
+        base = Vector3.new(
+            base.X + offVec.X * d,
+            base.Y + offVec.Y * d,
+            base.Z + offVec.Z * d
+        )
+    end
+
+    return base
+end
+
+--=============================================
+-- [GRAB 탭] - AlignPosition 없이 BodyPosition만 사용
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (서버 플링 / 45° 위 / 소유권 강탈) ===")
+GrabTab:CreateSection("=== 킥 그랩 (No Align / 45° Up Fling) ===")
+
+-- ✅ BodyPosition/BodyGyro를 타겟 HRP에 설치 (Align 대체)
+local function setupGrabBodies(targetPlayer)
+    pcall(function()
+        local tChar = targetPlayer and targetPlayer.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        if not tHRP then return end
+
+        for _, v in pairs(tHRP:GetChildren()) do
+            if v:IsA("BodyPosition") and v.Name == "FKeyBP" then v:Destroy() end
+            if v:IsA("BodyGyro") and v.Name == "FKeyBG" then v:Destroy() end
+        end
+
+        local bp = Instance.new("BodyPosition")
+        bp.Name = "FKeyBP"
+        bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bp.P = 1e18
+        bp.D = 0
+        bp.Parent = tHRP
+
+        local bg = Instance.new("BodyGyro")
+        bg.Name = "FKeyBG"
+        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bg.P = 1e18
+        bg.D = 0
+        bg.CFrame = CFrame.Angles(0, 0, 0)
+        bg.Parent = tHRP
+    end)
+end
 
 local function startFKeyAttack(targetPlayer)
     STATE.FKeyAttackActive = true
     STATE.FAttackTarget = targetPlayer
+    setupGrabBodies(targetPlayer)
 
     task.spawn(function()
-        -- 초기 버스트
         pcall(function()
             local tChar = targetPlayer and targetPlayer.Character
             if tChar then
@@ -216,13 +232,45 @@ local function startFKeyAttack(targetPlayer)
             end
         end)
 
-        -- 매 프레임: 소유권 강탈 + velocity 적용
         while STATE.FKeyAttackActive do
             task.wait()
             pcall(function()
+                local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 local tChar = STATE.FAttackTarget and STATE.FAttackTarget.Character
-                if tChar then
-                    flingTarget(tChar)
+                local tgtRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                local tgtHum = tChar and tChar:FindFirstChild("Humanoid")
+
+                if not myRoot or not tgtRoot then return end
+
+                tgtRoot.AssemblyLinearVelocity = Vector3.zero
+                tgtRoot.AssemblyAngularVelocity = Vector3.zero
+                if tgtHum then
+                    tgtHum.PlatformStand = true
+                    tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
+                end
+
+                -- ✅ 45도 위로 fling 위치
+                local holdPos = getHoldPosition(true)
+                if not holdPos then return end
+
+                local bp = tgtRoot:FindFirstChild("FKeyBP")
+                if not bp then
+                    setupGrabBodies(STATE.FAttackTarget)
+                else
+                    bp.Position = holdPos
+                end
+
+                local bg = tgtRoot:FindFirstChild("FKeyBG")
+                if bg then bg.CFrame = CFrame.Angles(0, 0, 0) end
+
+                -- ✅ 직접 CFrame 강제 → 즉시 순간이동
+                pcall(function()
+                    tgtRoot.CFrame = CFrame.new(holdPos)
+                end)
+
+                local parts = getCoreParts(tChar)
+                for _, part in ipairs(parts) do
+                    claimPart(part)
                 end
             end)
         end
@@ -231,6 +279,17 @@ end
 
 local function stopFKeyAttack()
     STATE.FKeyAttackActive = false
+    pcall(function()
+        if STATE.FAttackTarget and STATE.FAttackTarget.Character then
+            local tHRP = STATE.FAttackTarget.Character:FindFirstChild("HumanoidRootPart")
+            if tHRP then
+                for _, v in pairs(tHRP:GetChildren()) do
+                    if v:IsA("BodyPosition") and v.Name == "FKeyBP" then v:Destroy() end
+                    if v:IsA("BodyGyro") and v.Name == "FKeyBG" then v:Destroy() end
+                end
+            end
+        end
+    end)
     STATE.FAttackTarget = nil
 end
 
@@ -256,40 +315,8 @@ GrabTab:CreateInput({
     end
 })
 
-GrabTab:CreateSlider({
-    Name = "플링 속도 (studs/s)",
-    Range = { 1000, 99999999 },
-    Increment = 1,
-    Suffix = " studs/s",
-    Default = 9999999,
-    Callback = function(v)
-        STATE.FlingVelocity = v
-    end
-})
-
-GrabTab:CreateSlider({
-    Name = "각도 (도)",
-    Range = { 0, 90 },
-    Increment = 1,
-    Suffix = " °",
-    Default = 45,
-    Callback = function(v)
-        STATE.FlingElevationDeg = v
-    end
-})
-
-GrabTab:CreateSlider({
-    Name = "소유권 강탈 강도 (매 프레임)",
-    Range = { 1, 30 },
-    Increment = 1,
-    Default = 12,
-    Callback = function(v)
-        STATE.StealPerFrame = v
-    end
-})
-
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [서버 플링]",
+    Name = "카메라 조준 킥 그랩 [No Align / 45° Up]",
     Callback = function(v)
         if v and not STATE.SelectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -302,7 +329,11 @@ GrabTab:CreateToggle({
 -- [KICK 탭]
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
-local kickThread, respawnConn = nil, nil
+
+local steppedConn, kickThread = nil, nil
+local respawnConn = nil
+local targetBP_HRP, targetBG_HRP = nil, nil
+local targetBodies = {}
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -326,11 +357,91 @@ KickTab:CreateInput({
     end
 })
 
+KickTab:CreateSection("Fling 설정 (45도 위로 고정)")
+KickTab:CreateSlider({
+    Name = "Fling 거리 (studs)",
+    Range = { 10, 9999999 },
+    Increment = 1,
+    Suffix = " studs",
+    Default = 9999999,
+    Callback = function(v)
+        STATE.FlingDistance = v
+    end
+})
+
+KickTab:CreateSlider({
+    Name = "Fling 각도 (도)",
+    Range = { 0, 90 },
+    Increment = 1,
+    Suffix = " °",
+    Default = 45,
+    Callback = function(v)
+        STATE.FlingElevationDeg = v
+    end
+})
+
+local BP_PREFIX = "_FSOFKickBP_"
+local BG_PREFIX = "_FSOFKickBG_"
+
+local function clearAllBodies()
+    pcall(function()
+        for part, bodies in pairs(targetBodies) do
+            for _, b in ipairs(bodies) do
+                if b and b.Parent then b:Destroy() end
+            end
+        end
+    end)
+    targetBodies = {}
+    targetBP_HRP, targetBG_HRP = nil, nil
+end
+
+local function setupBodiesForTarget()
+    pcall(function()
+        local sp = STATE.SelectedKickPlayer
+        if not sp then return end
+        local tChar = sp.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        if not tHRP then return end
+
+        clearAllBodies()
+
+        for _, v in pairs(tChar:GetDescendants()) do
+            if (v:IsA("BodyPosition") or v:IsA("BodyGyro")) and
+               (v.Name:sub(1, #BP_PREFIX) == BP_PREFIX or v.Name:sub(1, #BG_PREFIX) == BG_PREFIX) then
+                v:Destroy()
+            end
+        end
+
+        for _, part in ipairs(tChar:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local bp = Instance.new("BodyPosition")
+                bp.Name = BP_PREFIX .. part.Name
+                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bp.P = 1e18
+                bp.D = 0
+                bp.Parent = part
+
+                local bg = Instance.new("BodyGyro")
+                bg.Name = BG_PREFIX .. part.Name
+                bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                bg.P = 1e18
+                bg.D = 0
+                bg.CFrame = CFrame.Angles(0, 0, 0)
+                bg.Parent = part
+
+                targetBodies[part] = {bp, bg}
+                if part == tHRP then targetBP_HRP, targetBG_HRP = bp, bg end
+            end
+        end
+    end)
+end
+
 local function startKickLoop()
+    if steppedConn then pcall(function() steppedConn:Disconnect() end); steppedConn = nil end
     if respawnConn then pcall(function() respawnConn:Disconnect() end); respawnConn = nil end
+
     STATE.KickLoopRunning = true
 
-    -- 리스폰 대응
     pcall(function()
         if STATE.SelectedKickPlayer then
             respawnConn = STATE.SelectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -341,15 +452,69 @@ local function startKickLoop()
                         local waitStart = tick()
                         while hum.Health <= 0 and tick() - waitStart < 10 do task.wait(0.1) end
                         task.wait(0.2)
+                        setupBodiesForTarget()
                         initialBurst(newChar, function() return STATE.KickLoopRunning end)
-                        flingTarget(newChar)
+
+                        local holdPos = getHoldPosition(true)
+                        if holdPos then
+                            for _, part in ipairs(newChar:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    pcall(function()
+                                        part.CFrame = CFrame.new(holdPos)
+                                        part.AssemblyLinearVelocity = Vector3.zero
+                                        part.AssemblyAngularVelocity = Vector3.zero
+                                    end)
+                                end
+                            end
+                        end
                     end
                 end)
             end)
         end
     end)
 
-    -- 매 프레임 강탈 + velocity
+    -- ✅ 전신 박제 + 즉시 순간이동 (45도 위)
+    steppedConn = RunService.Stepped:Connect(function()
+        pcall(function()
+            if not STATE.KickLoopRunning then return end
+            local sp = STATE.SelectedKickPlayer
+            if not sp then return end
+
+            local myChar = plr.Character
+            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            local tChar = sp.Character
+            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+            if not (myChar and myHRP) or not (tChar and tHRP) then return end
+
+            if not targetBP_HRP or not targetBP_HRP.Parent or targetBP_HRP.Parent ~= tHRP then
+                setupBodiesForTarget()
+            end
+
+            local holdPos = getHoldPosition(true)
+            if not holdPos then return end
+
+            local zeroCF = CFrame.Angles(0, 0, 0)
+            for part, bodies in pairs(targetBodies) do
+                if part and part.Parent then
+                    local bp, bg = bodies[1], bodies[2]
+                    if bp and bp.Parent then bp.Position = holdPos end
+                    if bg and bg.Parent then bg.CFrame = zeroCF end
+                    pcall(function()
+                        part.CFrame = CFrame.new(holdPos)
+                    end)
+                    part.AssemblyLinearVelocity = Vector3.zero
+                    part.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+
+            local tHum = tChar:FindFirstChild("Humanoid")
+            if tHum then
+                tHum.PlatformStand = true
+                tHum:ChangeState(Enum.HumanoidStateType.Physics)
+            end
+        end)
+    end)
+
     kickThread = task.spawn(function()
         pcall(function()
             local sp = STATE.SelectedKickPlayer
@@ -364,8 +529,13 @@ local function startKickLoop()
                 local sp = STATE.SelectedKickPlayer
                 if not sp then return end
                 local tChar = sp.Character
-                if tChar then
-                    flingTarget(tChar)
+                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                if not (tHRP and myHRP) then return end
+
+                local parts = getCoreParts(tChar)
+                for _, part in ipairs(parts) do
+                    claimPart(part)
                 end
             end)
         end
@@ -374,12 +544,26 @@ end
 
 local function stopKickLoop()
     STATE.KickLoopRunning = false
+    if steppedConn then pcall(function() steppedConn:Disconnect() end); steppedConn = nil end
     if respawnConn then pcall(function() respawnConn:Disconnect() end); respawnConn = nil end
-    if kickThread then pcall(function() task.cancel(kickThread) end); kickThread = nil end
+
+    clearAllBodies()
+
+    pcall(function()
+        local sp = STATE.SelectedKickPlayer
+        if sp and sp.Character then
+            for _, v in pairs(sp.Character:GetDescendants()) do
+                if (v:IsA("BodyPosition") or v:IsA("BodyGyro")) and
+                   (v.Name:sub(1, #BP_PREFIX) == BP_PREFIX or v.Name:sub(1, #BG_PREFIX) == BG_PREFIX) then
+                    v:Destroy()
+                end
+            end
+        end
+    end)
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [서버 플링]",
+    Name = "블롭맨 오너 킥 [No Align / 45° Up]",
     Callback = function(v)
         if v and not STATE.SelectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -393,6 +577,7 @@ KickTab:CreateToggle({
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
+    Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
         pcall(function()
@@ -411,15 +596,19 @@ KickTab:CreateToggle({
 
             if Value then
                 if not STATE.SelectedKickPlayer then
-                    Rayfield:Notify({Title="알림", Content="타겟을 먼저 입력해주세요!", Duration=3}); return
+                    Rayfield:Notify({Title = "알림", Content = "타겟을 먼저 입력해주세요!", Duration = 3})
+                    return
                 end
 
                 STATE.PalletRagdollActive = true
                 STATE.PalletForRagdoll = nil
+
                 if STATE.PalletCacheConn then pcall(function() STATE.PalletCacheConn:Disconnect() end) end
                 clearRagdollLoop()
 
-                if not toysFolder then return end
+                if not toysFolder then
+                    Rayfield:Notify({Title = "오류", Content = "토이 폴더 없음", Duration = 3}); return
+                end
 
                 STATE.PalletCacheConn = toysFolder.ChildAdded:Connect(function(child)
                     pcall(function()
@@ -442,23 +631,29 @@ KickTab:CreateToggle({
                                     v.Massless = true
                                 end
                             end
+
                             child.Name = "PalletForRagdoll"
                             STATE.PalletForRagdoll = child
 
                             STATE.RagdollSteppedConn = RunService.Stepped:Connect(function()
                                 pcall(function()
-                                    if not STATE.PalletRagdollActive or not child.Parent then clearRagdollLoop(); return end
+                                    if not STATE.PalletRagdollActive or not child.Parent then 
+                                        clearRagdollLoop(); return 
+                                    end
+
                                     local sp = STATE.SelectedKickPlayer
                                     local tChar = sp and sp.Character
                                     local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
                                     local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+
                                     if tRoot and tHum and soundPart.Parent and tHum.Health > 0 then
-                                        local rag = tHum:FindFirstChild("Ragdolled")
-                                        local isR = rag and rag.Value or false
-                                        if not isR then
+                                        local ragdolledVal = tHum:FindFirstChild("Ragdolled")
+                                        local isRagdolled = ragdolledVal and ragdolledVal.Value or false
+
+                                        if not isRagdolled then
                                             local t = tick() * 20
-                                            local offY = 15 * math.sin(t)
-                                            soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0,0,math.rad(95)) * CFrame.new(0, offY, 0)
+                                            local offsetY = 15 * math.sin(t)
+                                            soundPart.CFrame = tRoot.CFrame * CFrame.Angles(0, 0, math.rad(95)) * CFrame.new(0, offsetY, 0)
                                             soundPart.AssemblyLinearVelocity = Vector3.new(0, -9e5 * math.cos(t), 0)
                                             soundPart.CanCollide = false
                                             soundPart.Massless = true
@@ -495,25 +690,43 @@ KickTab:CreateToggle({
                     pcall(function()
                         if not STATE.PalletRagdollActive then return end
                         if STATE.PalletForRagdoll and STATE.PalletForRagdoll.Parent then return end
+                        
                         local c = plr.Character
                         local h = c and c:FindFirstChild("HumanoidRootPart")
                         if not h then return end
+
                         task.spawn(function()
                             pcall(function()
-                                rs.MenuToys.SpawnToyRemoteFunction:InvokeServer("PalletLightBrown", h.CFrame * CFrame.new(0,10,20), Vector3.zero)
+                                rs.MenuToys.SpawnToyRemoteFunction:InvokeServer(
+                                    "PalletLightBrown",
+                                    h.CFrame * CFrame.new(0, 10, 20),
+                                    Vector3.zero
+                                )
                             end)
                         end)
                     end)
                 end
+
                 STATE.SpawnNewPallet()
             else
                 STATE.PalletRagdollActive = false
                 clearRagdollLoop()
-                if STATE.PalletCacheConn then pcall(function() STATE.PalletCacheConn:Disconnect() end); STATE.PalletCacheConn = nil end
+
+                if STATE.PalletCacheConn then
+                    pcall(function() STATE.PalletCacheConn:Disconnect() end)
+                    STATE.PalletCacheConn = nil
+                end
+
                 local pallet = STATE.PalletForRagdoll
-                if pallet and pallet.Parent then DestroyToy:FireServer(pallet) end
+                if pallet and pallet.Parent then
+                    DestroyToy:FireServer(pallet)
+                end
+
                 STATE.PalletForRagdoll = nil
-                if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then DestroyToy:FireServer(toysFolder.PalletForRagdoll) end
+
+                if toysFolder and toysFolder:FindFirstChild("PalletForRagdoll") then
+                    DestroyToy:FireServer(toysFolder.PalletForRagdoll)
+                end
             end
         end)
     end,
@@ -523,24 +736,62 @@ KickTab:CreateToggle({
 -- [Settings]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
+
 SettingsTab:CreateButton({
-    Name = "완전 언로드",
+    Name = "재설정 (Reset)",
     Callback = function()
         pcall(function()
             STATE.FKeyAttackActive = false
             STATE.KickLoopRunning = false
             STATE.PalletRagdollActive = false
+            STATE.FAttackTarget = nil
+        end)
+        Rayfield:Notify({Title="알림", Content="초기화 완료"})
+    end
+})
+
+SettingsTab:CreateButton({
+    Name = "완전 언로드 (Full Unload)",
+    Callback = function()
+        pcall(function()
+            STATE.FKeyAttackActive = false
+            STATE.KickLoopRunning = false
+            STATE.PalletRagdollActive = false
+
+            if steppedConn then steppedConn:Disconnect() end
             if respawnConn then respawnConn:Disconnect() end
             if kickThread then pcall(function() task.cancel(kickThread) end) end
             if STATE.RagdollSteppedConn then STATE.RagdollSteppedConn:Disconnect() end
             if STATE.PalletCacheConn then STATE.PalletCacheConn:Disconnect() end
+
+            clearAllBodies()
+
+            local sp = STATE.SelectedKickPlayer
+            if sp and sp.Character then
+                for _, v in pairs(sp.Character:GetDescendants()) do
+                    if (v:IsA("BodyPosition") or v:IsA("BodyGyro")) and
+                       (v.Name:sub(1, #BP_PREFIX) == BP_PREFIX or v.Name:sub(1, #BG_PREFIX) == BG_PREFIX) then
+                        v:Destroy()
+                    end
+                end
+            end
         end)
         Rayfield:Notify({Title="언로드", Content="모든 루프 종료됨"})
     end
 })
 
+SettingsTab:CreateSection("정보")
+SettingsTab:CreateParagraph({
+    Title = "45° Up Fling 원리",
+    Content = "AlignPosition 완전 제거.\n" ..
+              "- BodyPosition P=1e18, D=0 (최대 가속)\n" ..
+              "- 매 프레임 part.CFrame 직접 지정 (즉시 순간이동)\n" ..
+              "- Fling 방향: 수평 앞 * cos(45°), 수직 위 * sin(45°)\n" ..
+              "- 45도 각도 슬라이더로 조정 가능 (0~90)"
+})
+
 Rayfield:Notify({
-    Title = "Server Fling 로드 완료",
-    Content = "소유권 강탈 → AssemblyLinearVelocity 45° 위 9,999,999 / 진짜 서버 플링",
+    Title = "45° Up Fling 로드 완료",
+    Content = "Align 제거 / 45도 위로 9,999,999스터드 순간이동",
     Duration = 4
 })
