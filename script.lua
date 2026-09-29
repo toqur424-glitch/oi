@@ -4,6 +4,7 @@
 -- - CreateLine 미사용 (핑 부담 최소)
 -- - 스마트 소유권 (이미 소유 중이면 스킵)
 -- - 전역 오염 최소화 (고유 네임스페이스)
+-- - Y좌표 0 고정 / 앞 3스터드 위치
 --=============================================
 
 --=============================================
@@ -68,7 +69,7 @@ do
 end
 
 --=============================================
--- [공통 함수 - 순수 로컬, 전역 오염 없음]
+-- [공통 함수]
 --=============================================
 local function getCoreParts(char)
     if not char then return {} end
@@ -106,7 +107,7 @@ local function claimPart(part)
     end)
 end
 
--- ✅ 초기 버스트 (Destroy → SetOwner × 8회)
+-- ✅ 초기 버스트
 local function initialBurst(char, shouldContinue)
     if not char then return end
     local parts = getCoreParts(char)
@@ -133,10 +134,37 @@ local function initialBurst(char, shouldContinue)
 end
 
 --=============================================
+-- [위치 계산 - Y좌표 0, 앞 3스터드]
+--=============================================
+-- ✅ Y좌표 0 고정 + 내 캐릭터 앞 3스터드
+local function getHoldPosition()
+    local myChar = plr.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+
+    local myPos = myHRP.Position
+    local camCF = camera.CFrame
+    -- 카메라 정면 방향으로 3스터드 앞
+    local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+    if forward.Magnitude > 0 then
+        forward = forward.Unit
+    else
+        forward = Vector3.new(0, 0, -1)
+    end
+
+    -- ✅ Y좌표 0 고정
+    return Vector3.new(
+        myPos.X + forward.X * 3,
+        0,
+        myPos.Z + forward.Z * 3
+    )
+end
+
+--=============================================
 -- [GRAB 탭]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (Coexist / 핑 방지 / 스마트 소유권) ===")
+GrabTab:CreateSection("=== 킥 그랩 (Y=0 / 앞 3스터드 / Coexist) ===")
 
 local function setupFKeyAlign(targetPlayer)
     pcall(function()
@@ -186,7 +214,7 @@ local function startFKeyAttack(targetPlayer)
             end
         end)
 
-        -- 매 프레임 스마트 소유권 (전체 pcall 감쌈)
+        -- 매 프레임 스마트 소유권
         while STATE.FKeyAttackActive do
             task.wait()
             pcall(function()
@@ -205,9 +233,9 @@ local function startFKeyAttack(targetPlayer)
                     tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
 
-                -- 카메라 앞 20스터드 고정
-                local camCF = camera.CFrame
-                local holdPos = camCF.Position + camCF.LookVector * 20
+                -- ✅ Y좌표 0 + 앞 3스터드 위치
+                local holdPos = getHoldPosition()
+                if not holdPos then return end
 
                 local align = tgtRoot:FindFirstChild("FKeyAlign")
                 if align and align.Attachment1 then
@@ -265,7 +293,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [Coexist]",
+    Name = "카메라 조준 킥 그랩 [Y=0 / 앞 3스터드]",
     Callback = function(v)
         if v and not STATE.SelectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -306,7 +334,7 @@ KickTab:CreateInput({
     end
 })
 
--- ✅ Body 이름에 고유 prefix (다른 스크립트와 충돌 방지)
+-- ✅ Body 이름에 고유 prefix
 local BP_PREFIX = "_FSOFKickBP_"
 local BG_PREFIX = "_FSOFKickBG_"
 
@@ -332,7 +360,6 @@ local function setupBodiesForTarget()
 
         clearAllBodies()
 
-        -- 내 prefix로만 정리 (다른 스크립트가 만든 Body는 건드리지 않음)
         for _, v in pairs(tChar:GetDescendants()) do
             if (v:IsA("BodyPosition") or v:IsA("BodyGyro")) and
                (v.Name:sub(1, #BP_PREFIX) == BP_PREFIX or v.Name:sub(1, #BG_PREFIX) == BG_PREFIX) then
@@ -382,9 +409,10 @@ local function startKickLoop()
                         setupBodiesForTarget()
                         initialBurst(newChar, function() return STATE.KickLoopRunning end)
 
-                        local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                        if myHRP then
-                            hrp.CFrame = CFrame.new(myHRP.Position + Vector3.new(0, 20, 0))
+                        -- ✅ 리스폰 시 Y=0 앞 3스터드 위치로
+                        local holdPos = getHoldPosition()
+                        if holdPos then
+                            hrp.CFrame = CFrame.new(holdPos)
                             hrp.AssemblyLinearVelocity = Vector3.zero
                             hrp.AssemblyAngularVelocity = Vector3.zero
                         end
@@ -407,17 +435,19 @@ local function startKickLoop()
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             if not (myChar and myHRP) or not (tChar and tHRP) then return end
 
-            -- Body 재설치 (다른 스크립트가 지운 경우 대응)
             if not targetBP_HRP or not targetBP_HRP.Parent or targetBP_HRP.Parent ~= tHRP then
                 setupBodiesForTarget()
             end
 
-            local targetPos = myHRP.Position + Vector3.new(0, 20, 0)
+            -- ✅ Y좌표 0 + 앞 3스터드
+            local holdPos = getHoldPosition()
+            if not holdPos then return end
+
             local zeroCF = CFrame.Angles(0, 0, 0)
             for part, bodies in pairs(targetBodies) do
                 if part and part.Parent then
                     local bp, bg = bodies[1], bodies[2]
-                    if bp and bp.Parent then bp.Position = targetPos end
+                    if bp and bp.Parent then bp.Position = holdPos end
                     if bg and bg.Parent then bg.CFrame = zeroCF end
                     part.AssemblyLinearVelocity = Vector3.zero
                     part.AssemblyAngularVelocity = Vector3.zero
@@ -432,7 +462,7 @@ local function startKickLoop()
         end)
     end)
 
-    -- 스마트 소유권 루프 (Heartbeat 대신 task.wait)
+    -- 스마트 소유권 루프
     kickThread = task.spawn(function()
         pcall(function()
             local sp = STATE.SelectedKickPlayer
@@ -451,8 +481,9 @@ local function startKickLoop()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if not (tHRP and myHRP) then return end
 
-                -- 원거리 텔레포트
-                if (tHRP.Position - myHRP.Position).Magnitude > 30 then
+                -- 원거리 텔레포트 (Y=0 앞 3스터드가 30스터드 이상이면 내가 이동)
+                local holdPos = getHoldPosition()
+                if holdPos and (tHRP.Position - myHRP.Position).Magnitude > 30 then
                     plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
                 end
 
@@ -486,7 +517,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [Coexist]",
+    Name = "블롭맨 오너 킥 [Y=0 / 앞 3스터드]",
     Callback = function(v)
         if v and not STATE.SelectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -705,13 +736,11 @@ SettingsTab:CreateButton({
 
 SettingsTab:CreateSection("정보")
 SettingsTab:CreateParagraph({
-    Title = "Coexist Mode",
-    Content = "이 스크립트는 다른 SetOwner 스크립트와 병행 사용 가능합니다.\n" ..
-              "- 고유 네임스페이스 사용\n" ..
-              "- Body 이름에 prefix 사용 (_FSOFKickBP_ / _FSOFKickBG_)\n" ..
-              "- 모든 리모트 발사 pcall로 감쌈\n" ..
-              "- CreateLine 미사용 (핑 최소화)\n" ..
-              "- 스마트 소유권 (이미 소유 중이면 스킵)"
+    Title = "위치 설정",
+    Content = "타겟을 잡는 위치:\n" ..
+              "- Y좌표 = 0 (땅바닥 고정)\n" ..
+              "- 내 캐릭터 정면 3스터드 앞\n" ..
+              "- 카메라 방향 기준 (Y축 무시)"
 })
 
 --=============================================
@@ -719,6 +748,6 @@ SettingsTab:CreateParagraph({
 --=============================================
 Rayfield:Notify({
     Title = "EXTREME Coexist 로드 완료",
-    Content = "CreateLine 미사용 / 스마트 소유권 / 다른 스크립트와 병행 가능",
+    Content = "Y좌표 0 / 앞 3스터드 / 스마트 소유권 / 다른 스크립트 병행 가능",
     Duration = 4
 })
