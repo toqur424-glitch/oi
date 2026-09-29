@@ -4,7 +4,7 @@
 -- - CreateLine 미사용 (핑 부담 최소)
 -- - 스마트 소유권 (이미 소유 중이면 스킵)
 -- - 전역 오염 최소화 (고유 네임스페이스)
--- - Y좌표 0 고정 / 앞 3스터드 위치
+-- - Y좌표 -8 고정 / 앞 3스터드 위치
 --=============================================
 
 --=============================================
@@ -134,9 +134,9 @@ local function initialBurst(char, shouldContinue)
 end
 
 --=============================================
--- [위치 계산 - Y좌표 0, 앞 3스터드]
+-- [위치 계산 - Y좌표 -8, 앞 3스터드]
 --=============================================
--- ✅ Y좌표 0 고정 + 내 캐릭터 앞 3스터드
+-- ✅ Y좌표 -8 고정 + 내 캐릭터 앞 3스터드
 local function getHoldPosition()
     local myChar = plr.Character
     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -144,7 +144,7 @@ local function getHoldPosition()
 
     local myPos = myHRP.Position
     local camCF = camera.CFrame
-    -- 카메라 정면 방향으로 3스터드 앞
+    -- 카메라 정면 방향 (Y축 무시한 수평 방향)
     local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
     if forward.Magnitude > 0 then
         forward = forward.Unit
@@ -152,10 +152,10 @@ local function getHoldPosition()
         forward = Vector3.new(0, 0, -1)
     end
 
-    -- ✅ Y좌표 0 고정
+    -- ✅ Y좌표 -8 고정, 앞 3스터드
     return Vector3.new(
         myPos.X + forward.X * 3,
-        0,
+        -8,
         myPos.Z + forward.Z * 3
     )
 end
@@ -164,7 +164,7 @@ end
 -- [GRAB 탭]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (Y=0 / 앞 3스터드 / Coexist) ===")
+GrabTab:CreateSection("=== 킥 그랩 (Y=-8 / 앞 3스터드 / Coexist) ===")
 
 local function setupFKeyAlign(targetPlayer)
     pcall(function()
@@ -233,7 +233,7 @@ local function startFKeyAttack(targetPlayer)
                     tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
 
-                -- ✅ Y좌표 0 + 앞 3스터드 위치
+                -- ✅ Y=-8 + 앞 3스터드 위치
                 local holdPos = getHoldPosition()
                 if not holdPos then return end
 
@@ -293,7 +293,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [Y=0 / 앞 3스터드]",
+    Name = "카메라 조준 킥 그랩 [Y=-8 / 앞 3스터드]",
     Callback = function(v)
         if v and not STATE.SelectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -409,7 +409,7 @@ local function startKickLoop()
                         setupBodiesForTarget()
                         initialBurst(newChar, function() return STATE.KickLoopRunning end)
 
-                        -- ✅ 리스폰 시 Y=0 앞 3스터드 위치로
+                        -- ✅ 리스폰 시 Y=-8 앞 3스터드 위치로
                         local holdPos = getHoldPosition()
                         if holdPos then
                             hrp.CFrame = CFrame.new(holdPos)
@@ -439,7 +439,7 @@ local function startKickLoop()
                 setupBodiesForTarget()
             end
 
-            -- ✅ Y좌표 0 + 앞 3스터드
+            -- ✅ Y좌표 -8 + 앞 3스터드
             local holdPos = getHoldPosition()
             if not holdPos then return end
 
@@ -481,7 +481,7 @@ local function startKickLoop()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if not (tHRP and myHRP) then return end
 
-                -- 원거리 텔레포트 (Y=0 앞 3스터드가 30스터드 이상이면 내가 이동)
+                -- 원거리 텔레포트
                 local holdPos = getHoldPosition()
                 if holdPos and (tHRP.Position - myHRP.Position).Magnitude > 30 then
                     plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
@@ -517,7 +517,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [Y=0 / 앞 3스터드]",
+    Name = "블롭맨 오너 킥 [Y=-8 / 앞 3스터드]",
     Callback = function(v)
         if v and not STATE.SelectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -738,7 +738,7 @@ SettingsTab:CreateSection("정보")
 SettingsTab:CreateParagraph({
     Title = "위치 설정",
     Content = "타겟을 잡는 위치:\n" ..
-              "- Y좌표 = 0 (땅바닥 고정)\n" ..
+              "- Y좌표 = -8 (지면 아래 고정)\n" ..
               "- 내 캐릭터 정면 3스터드 앞\n" ..
               "- 카메라 방향 기준 (Y축 무시)"
 })
@@ -748,6 +748,6 @@ SettingsTab:CreateParagraph({
 --=============================================
 Rayfield:Notify({
     Title = "EXTREME Coexist 로드 완료",
-    Content = "Y좌표 0 / 앞 3스터드 / 스마트 소유권 / 다른 스크립트 병행 가능",
+    Content = "Y좌표 -8 / 앞 3스터드 / 스마트 소유권 / 다른 스크립트 병행 가능",
     Duration = 4
 })
