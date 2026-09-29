@@ -1,10 +1,10 @@
 --=============================================
--- [FSOF EXTREME Kick Hub - Final Coexist Version]
+-- [FSOF EXTREME Kick Hub - Fling Variant]
 -- - 다른 스크립트와 병행 사용 가능
 -- - CreateLine 미사용 (핑 부담 최소)
 -- - 스마트 소유권 (이미 소유 중이면 스킵)
--- - 전역 오염 최소화 (고유 네임스페이스)
--- - Y좌표 -8 고정 / 앞 3스터드 위치
+-- - 기본 위치: Y=-8, 앞 3스터드
+-- - 셋오너 킥 ON 시: 그 위치에서 40스터드 앞으로 강제 이동
 --=============================================
 
 --=============================================
@@ -26,7 +26,7 @@ local camera = workspace.CurrentCamera
 local rs = ReplicatedStorage
 
 --=============================================
--- [고유 네임스페이스 - 다른 스크립트와 완전 격리]
+-- [고유 네임스페이스]
 --=============================================
 local HUB_ID = "_FSOFExtreme_" .. tostring(math.random(100000, 999999))
 getgenv()[HUB_ID] = getgenv()[HUB_ID] or {}
@@ -43,11 +43,15 @@ STATE.RagdollSteppedConn = nil
 STATE.PalletCacheConn = nil
 STATE.SpawnNewPallet = nil
 
+-- ✅ 셋오너 킥 fling 설정
+STATE.FlingDistance = 40          -- 그 위치에서 몇 스터드 멀어질지
+STATE.FlingDirection = "forward"  -- "forward" / "backward" / "left" / "right" / "up" / "random"
+
 --=============================================
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF EXTREME Kick Hub (Coexist)",
+    Name = "🔥 FSOF EXTREME Kick Hub (Fling)",
     LoadingTitle = "최적화 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -56,7 +60,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 --=============================================
--- [안티그랩: 탈출 리모트 차단]
+-- [안티그랩]
 --=============================================
 do
     local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
@@ -83,18 +87,14 @@ local function getCoreParts(char)
     return parts
 end
 
--- ✅ 안전한 소유권 확인
 local function isOwnedByMe(part)
     if not part or not part.Parent then return false end
-    local ok, owner = pcall(function()
-        return part:FindFirstChild("PartOwner")
-    end)
+    local ok, owner = pcall(function() return part:FindFirstChild("PartOwner") end)
     if not ok or not owner then return false end
     local ok2, val = pcall(function() return owner.Value end)
     return ok2 and val == plr.Name
 end
 
--- ✅ 스마트 소유권 (이미 소유 중이면 스킵 → 핑 절감)
 local function claimPart(part)
     if not part or not part.Parent then return end
     if isOwnedByMe(part) then return end
@@ -107,7 +107,6 @@ local function claimPart(part)
     end)
 end
 
--- ✅ 초기 버스트
 local function initialBurst(char, shouldContinue)
     if not char then return end
     local parts = getCoreParts(char)
@@ -134,37 +133,80 @@ local function initialBurst(char, shouldContinue)
 end
 
 --=============================================
--- [위치 계산 - Y좌표 -8, 앞 3스터드]
+-- [위치 계산 - Y=-8 / 앞 3스터드 / 킥 시 40스터드 fling]
 --=============================================
--- ✅ Y좌표 -8 고정 + 내 캐릭터 앞 3스터드
-local function getHoldPosition()
-    local myChar = plr.Character
-    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return nil end
-
-    local myPos = myHRP.Position
+-- ✅ forward/right 벡터 계산 (Y축 무시)
+local function getHorizontalBasis()
     local camCF = camera.CFrame
-    -- 카메라 정면 방향 (Y축 무시한 수평 방향)
     local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
     if forward.Magnitude > 0 then
         forward = forward.Unit
     else
         forward = Vector3.new(0, 0, -1)
     end
+    -- right = forward × up(0,1,0) 정규화
+    local right = forward:Cross(Vector3.new(0, 1, 0))
+    if right.Magnitude > 0 then right = right.Unit end
+    return forward, right
+end
 
-    -- ✅ Y좌표 -8 고정, 앞 3스터드
-    return Vector3.new(
+-- ✅ fling 방향 벡터 반환
+local function getFlingOffsetVector()
+    local forward, right = getHorizontalBasis()
+    local dir = STATE.FlingDirection
+    if dir == "backward" then
+        return -forward
+    elseif dir == "left" then
+        return -right
+    elseif dir == "right" then
+        return right
+    elseif dir == "up" then
+        return Vector3.new(0, 1, 0)
+    elseif dir == "random" then
+        local ang = math.random() * math.pi * 2
+        return Vector3.new(math.cos(ang), 0, math.sin(ang))
+    else -- forward (default)
+        return forward
+    end
+end
+
+-- ✅ 메인 hold position
+--   - kick OFF: Y=-8, 앞 3스터드 (그 위치)
+--   - kick ON : 그 위치에서 FlingDistance(기본 40) 스터드 fling 방향으로 이동
+local function getHoldPosition(kickActive)
+    local myChar = plr.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+
+    local myPos = myHRP.Position
+    local forward = getHorizontalBasis()
+
+    -- 그 위치: Y=-8, 앞 3스터드
+    local base = Vector3.new(
         myPos.X + forward.X * 3,
         -8,
         myPos.Z + forward.Z * 3
     )
+
+    -- ✅ 셋오너 킥 활성 시 → 그 위치에서 40스터드 멀어짐
+    if kickActive then
+        local offVec = getFlingOffsetVector()
+        local d = STATE.FlingDistance
+        base = Vector3.new(
+            base.X + offVec.X * d,
+            base.Y + offVec.Y * d,
+            base.Z + offVec.Z * d
+        )
+    end
+
+    return base
 end
 
 --=============================================
 -- [GRAB 탭]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (Y=-8 / 앞 3스터드 / Coexist) ===")
+GrabTab:CreateSection("=== 킥 그랩 (셋오너 ON 시 40스터드 fling) ===")
 
 local function setupFKeyAlign(targetPlayer)
     pcall(function()
@@ -206,7 +248,6 @@ local function startFKeyAttack(targetPlayer)
     setupFKeyAlign(targetPlayer)
 
     task.spawn(function()
-        -- 초기 버스트
         pcall(function()
             local tChar = targetPlayer and targetPlayer.Character
             if tChar then
@@ -214,7 +255,6 @@ local function startFKeyAttack(targetPlayer)
             end
         end)
 
-        -- 매 프레임 스마트 소유권
         while STATE.FKeyAttackActive do
             task.wait()
             pcall(function()
@@ -225,7 +265,6 @@ local function startFKeyAttack(targetPlayer)
 
                 if not myRoot or not tgtRoot then return end
 
-                -- 물리 초기화
                 tgtRoot.AssemblyLinearVelocity = Vector3.zero
                 tgtRoot.AssemblyAngularVelocity = Vector3.zero
                 if tgtHum then
@@ -233,8 +272,8 @@ local function startFKeyAttack(targetPlayer)
                     tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
 
-                -- ✅ Y=-8 + 앞 3스터드 위치
-                local holdPos = getHoldPosition()
+                -- ✅ kickActive = true → 40스터드 fling 위치
+                local holdPos = getHoldPosition(true)
                 if not holdPos then return end
 
                 local align = tgtRoot:FindFirstChild("FKeyAlign")
@@ -244,7 +283,6 @@ local function startFKeyAttack(targetPlayer)
                 local rot = tgtRoot:FindFirstChild("FKeyRot")
                 if rot then rot.CFrame = CFrame.Angles(0, 0, 0) end
 
-                -- 스마트 소유권
                 local parts = getCoreParts(tChar)
                 for _, part in ipairs(parts) do
                     claimPart(part)
@@ -293,7 +331,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [Y=-8 / 앞 3스터드]",
+    Name = "카메라 조준 킥 그랩 [셋오너 ON → 40스터드 fling]",
     Callback = function(v)
         if v and not STATE.SelectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -334,7 +372,28 @@ KickTab:CreateInput({
     end
 })
 
--- ✅ Body 이름에 고유 prefix
+-- ✅ fling 설정 UI
+KickTab:CreateSection("Fling 설정")
+KickTab:CreateSlider({
+    Name = "Fling 거리 (studs)",
+    Range = { 10, 100 },
+    Increment = 1,
+    Suffix = " studs",
+    Default = 40,
+    Callback = function(v)
+        STATE.FlingDistance = v
+    end
+})
+
+KickTab:CreateDropdown({
+    Name = "Fling 방향",
+    Options = { "forward", "backward", "left", "right", "up", "random" },
+    CurrentOption = "forward",
+    Callback = function(opt)
+        STATE.FlingDirection = opt
+    end
+})
+
 local BP_PREFIX = "_FSOFKickBP_"
 local BG_PREFIX = "_FSOFKickBG_"
 
@@ -395,7 +454,6 @@ local function startKickLoop()
 
     STATE.KickLoopRunning = true
 
-    -- 리스폰 대응
     pcall(function()
         if STATE.SelectedKickPlayer then
             respawnConn = STATE.SelectedKickPlayer.CharacterAdded:Connect(function(newChar)
@@ -409,8 +467,8 @@ local function startKickLoop()
                         setupBodiesForTarget()
                         initialBurst(newChar, function() return STATE.KickLoopRunning end)
 
-                        -- ✅ 리스폰 시 Y=-8 앞 3스터드 위치로
-                        local holdPos = getHoldPosition()
+                        -- ✅ 리스폰 시 fling 위치로
+                        local holdPos = getHoldPosition(true)
                         if holdPos then
                             hrp.CFrame = CFrame.new(holdPos)
                             hrp.AssemblyLinearVelocity = Vector3.zero
@@ -422,7 +480,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 전신 박제 (Stepped)
+    -- 전신 박제 (Stepped) → ✅ 40스터드 fling 위치로
     steppedConn = RunService.Stepped:Connect(function()
         pcall(function()
             if not STATE.KickLoopRunning then return end
@@ -439,8 +497,8 @@ local function startKickLoop()
                 setupBodiesForTarget()
             end
 
-            -- ✅ Y좌표 -8 + 앞 3스터드
-            local holdPos = getHoldPosition()
+            -- ✅ kick ON → 40스터드 fling 위치
+            local holdPos = getHoldPosition(true)
             if not holdPos then return end
 
             local zeroCF = CFrame.Angles(0, 0, 0)
@@ -462,7 +520,6 @@ local function startKickLoop()
         end)
     end)
 
-    -- 스마트 소유권 루프
     kickThread = task.spawn(function()
         pcall(function()
             local sp = STATE.SelectedKickPlayer
@@ -482,8 +539,7 @@ local function startKickLoop()
                 if not (tHRP and myHRP) then return end
 
                 -- 원거리 텔레포트
-                local holdPos = getHoldPosition()
-                if holdPos and (tHRP.Position - myHRP.Position).Magnitude > 30 then
+                if (tHRP.Position - myHRP.Position).Magnitude > 60 then
                     plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
                 end
 
@@ -517,7 +573,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [Y=-8 / 앞 3스터드]",
+    Name = "블롭맨 오너 킥 [셋오너 ON → 40스터드 fling]",
     Callback = function(v)
         if v and not STATE.SelectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -527,10 +583,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 사인파 출입]
+-- [팔레트 레그돌]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 사인파 출입",
+    Name = "Pallet Ragdoll (Invis)",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -738,16 +794,12 @@ SettingsTab:CreateSection("정보")
 SettingsTab:CreateParagraph({
     Title = "위치 설정",
     Content = "타겟을 잡는 위치:\n" ..
-              "- Y좌표 = -8 (지면 아래 고정)\n" ..
-              "- 내 캐릭터 정면 3스터드 앞\n" ..
-              "- 카메라 방향 기준 (Y축 무시)"
+              "- 셋오너 킥 OFF: Y=-8, 앞 3스터드 (그 위치)\n" ..
+              "- 셋오너 킥 ON : 그 위치에서 40스터드 fling (방향 설정 가능)"
 })
 
---=============================================
--- [완료 알림]
---=============================================
 Rayfield:Notify({
-    Title = "EXTREME Coexist 로드 완료",
-    Content = "Y좌표 -8 / 앞 3스터드 / 스마트 소유권 / 다른 스크립트 병행 가능",
+    Title = "Fling Variant 로드 완료",
+    Content = "셋오너 킥 ON → 그 위치(Y=-8, 3스터드)에서 40스터드 fling",
     Duration = 4
 })
