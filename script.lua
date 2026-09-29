@@ -20,8 +20,8 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF EXTREME Kick Hub (Overload)",
-    LoadingTitle = "최적화 및 로딩 중...",
+    Name = "🔥 FSOF EXTREME Kick Hub (No-Ping)",
+    LoadingTitle = "최적화 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
     Theme = "Dark",
@@ -33,101 +33,86 @@ local Window = Rayfield:CreateWindow({
 --=============================================
 local CharacterEvents = ReplicatedStorage:WaitForChild("CharacterEvents", 5)
 local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
-local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 5)
-local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
+local GrabEventsRS = ReplicatedStorage:WaitForChild("GrabEvents", 5)
+local ReleaseGrab = GrabEventsRS and GrabEventsRS:FindFirstChild("ReleaseGrab")
 
 if StruggleEvent then StruggleEvent.OnClientEvent:Connect(function(...) return end) end
 if ReleaseGrab then ReleaseGrab.OnClientEvent:Connect(function(...) return end) end
 
 --=============================================
--- [공통: 모든 주요 파트 정밀 취득]
+-- [공통: 핵심 파트 3개만 (Torso/HRP/Head)]
 --=============================================
-local function getTorsoPart(char)
-    if not char then return nil end
-    local torso = char:FindFirstChild("Torso")
-    if torso and torso:IsA("BasePart") then return torso end
-    local upper = char:FindFirstChild("UpperTorso")
-    if upper and upper:IsA("BasePart") then return upper end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp and hrp:IsA("BasePart") then return hrp end
-    return nil
-end
-
--- ✅ EXTREME: 타겟의 모든 핵심 파트 수집
-local function getAllTargetParts(char)
+local function getCoreParts(char)
     if not char then return {} end
     local parts = {}
-    local priority = {
-        "Torso", "UpperTorso", "LowerTorso",
-        "HumanoidRootPart", "Head",
-        "Left Arm", "Right Arm", "LeftUpperArm", "RightUpperArm",
-        "LeftLowerArm", "RightLowerArm",
-        "Left Leg", "Right Leg", "LeftUpperLeg", "RightUpperLeg",
-        "LeftLowerLeg", "RightLowerLeg",
-    }
-    for _, name in ipairs(priority) do
-        local p = char:FindFirstChild(name)
-        if p and p:IsA("BasePart") then
-            table.insert(parts, p)
-        end
-    end
+    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    if torso and torso:IsA("BasePart") then table.insert(parts, torso) end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp and hrp:IsA("BasePart") then table.insert(parts, hrp) end
+    local head = char:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then table.insert(parts, head) end
     return parts
 end
 
--- ✅ 원본 sno(): SetNetOwner:FireServer(part, part.CFrame)
-local function sno(part)
-    if not part or not part.Parent then return end
-    pcall(function()
-        rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
-    end)
+local function getTorsoPart(char)
+    if not char then return nil end
+    return char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")
 end
 
--- ✅ EXTREME sno: Destroy → SetOwner → CreateLine 3콤보
-local function extremeSno(part)
+--=============================================
+-- [핵심: 스마트 소유권 취득 (핑 방지)]
+-- - 이미 소유 중이면 스킵 (파트당 최대 1회/프레임)
+-- - Destroy → 즉시 SetOwner (2 remote, 안전)
+--=============================================
+local function claimPart(part)
     if not part or not part.Parent then return end
+    -- 소유권 확인 → 이미 내 것이면 스킵 (핑 절감 핵심)
+    local owner = part:FindFirstChild("PartOwner")
+    if owner and owner.Value == plr.Name then return end
+
     pcall(function()
         rs.GrabEvents.DestroyGrabLine:FireServer(part)
     end)
     pcall(function()
         rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
     end)
-    if rs.GrabEvents:FindFirstChild("CreateGrabLine") then
-        pcall(function()
-            rs.GrabEvents.CreateGrabLine:FireServer(part, Vector3.zero, part.Position, false)
-        end)
-    end
 end
 
--- ✅ EXTREME 초기 버스트 (10회, Destroy → SetOwner → CreateLine)
-local function extremeBurst(char, shouldContinue)
-    local parts = getAllTargetParts(char)
+--=============================================
+-- [초기 버스트: Destroy → SetOwner 2콤보 × 8회]
+--=============================================
+local function initialBurst(char, shouldContinue)
+    if not char then return end
+    local parts = getCoreParts(char)
     if #parts == 0 then return end
-    for round = 1, 10 do
+
+    for round = 1, 8 do
         if shouldContinue and not shouldContinue() then break end
-        -- 매 라운드마다 전체 파트 스윕
+        -- Destroy 스윕
         for _, part in ipairs(parts) do
-            if not part.Parent then continue end
-            pcall(function()
-                rs.GrabEvents.DestroyGrabLine:FireServer(part)
-            end)
+            if part.Parent then
+                pcall(function()
+                    rs.GrabEvents.DestroyGrabLine:FireServer(part)
+                end)
+            end
         end
         RunService.RenderStepped:Wait()
+        -- SetOwner 스윕
         for _, part in ipairs(parts) do
-            if not part.Parent then continue end
-            pcall(function()
-                rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
-            end)
+            if part.Parent then
+                pcall(function()
+                    rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
+                end)
+            end
         end
-        -- 중간에 AlignPosition 우회용 한 번 더
-        task.wait(0.01)
     end
 end
 
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩 (EXTREME)
+-- [GRAB 탭]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 EXTREME: 전신 다중 파트 + 10회 버스트 + 매프레임 3콤보 ===")
+GrabTab:CreateSection("=== 킥 그랩 (핑 방지 / 스마트 소유권) ===")
 
 getgenv().FKeyAttackActive = false
 local fAttackThread = nil
@@ -172,17 +157,15 @@ local function startFKeyAttack(targetPlayer)
     setupFKeyAlign(targetPlayer)
 
     fAttackThread = task.spawn(function()
-        -- ✅ EXTREME 초기 버스트 (10회 전신)
+        -- 초기 버스트
         do
             local tChar = fAttackTarget and fAttackTarget.Character
             if tChar then
-                extremeBurst(tChar, function()
-                    return getgenv().FKeyAttackActive
-                end)
+                initialBurst(tChar, function() return getgenv().FKeyAttackActive end)
             end
         end
 
-        -- ✅ EXTREME 연속: 매 프레임 전신 파트 3콤보
+        -- 매 프레임 스마트 소유권
         while getgenv().FKeyAttackActive do
             task.wait()
 
@@ -212,23 +195,10 @@ local function startFKeyAttack(targetPlayer)
             local rot = tgtRoot:FindFirstChild("FKeyRot")
             if rot then rot.CFrame = CFrame.Angles(0, 0, 0) end
 
-            -- ✅ 전신 파트에 매 프레임 3콤보
-            local parts = getAllTargetParts(tChar)
+            -- ✅ 스마트 소유권: 이미 소유 중인 파트는 스킵
+            local parts = getCoreParts(tChar)
             for _, part in ipairs(parts) do
-                if part.Parent then
-                    pcall(function()
-                        rs.GrabEvents.DestroyGrabLine:FireServer(part)
-                    end)
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
-                    end)
-                end
-            end
-            -- 가시성 낮은 라인 유지 (안티치트 우회용)
-            if rs.GrabEvents:FindFirstChild("CreateGrabLine") then
-                pcall(function()
-                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, Vector3.zero, tgtRoot.Position, false)
-                end)
+                claimPart(part)
             end
         end
     end)
@@ -273,7 +243,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [EXTREME]",
+    Name = "카메라 조준 킥 그랩 [스마트 소유권]",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -283,7 +253,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 EXTREME
+-- [KICK 탭] - 블롭맨 오너 킥
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -374,8 +344,7 @@ local function startKickLoop()
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
                 setupBodiesForTarget()
-                -- 리스폰 시 전신 버스트
-                extremeBurst(newChar, function() return kickLoopRunning end)
+                initialBurst(newChar, function() return kickLoopRunning end)
 
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
@@ -419,17 +388,15 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ EXTREME 패턴
+    -- 스마트 소유권 루프
     kickThread = task.spawn(function()
-        -- 초기 버스트 10회 전신
         do
             local tChar = selectedKickPlayer and selectedKickPlayer.Character
             if tChar then
-                extremeBurst(tChar, function() return kickLoopRunning end)
+                initialBurst(tChar, function() return kickLoopRunning end)
             end
         end
 
-        -- 매 프레임 전신 3콤보
         while kickLoopRunning do
             task.wait()
 
@@ -445,23 +412,10 @@ local function startKickLoop()
                 end)
             end
 
-            -- ✅ 전신 파트 3콤보
-            local parts = getAllTargetParts(tChar)
+            -- ✅ 스마트 소유권 (이미 소유 중이면 스킵 → 핑 절감)
+            local parts = getCoreParts(tChar)
             for _, part in ipairs(parts) do
-                if part.Parent then
-                    pcall(function()
-                        rs.GrabEvents.DestroyGrabLine:FireServer(part)
-                    end)
-                    pcall(function()
-                        rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
-                    end)
-                end
-            end
-            -- 라인 유지
-            if rs.GrabEvents:FindFirstChild("CreateGrabLine") then
-                pcall(function()
-                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, Vector3.zero, tHRP.Position, false)
-                end)
+                claimPart(part)
             end
         end
     end)
@@ -485,7 +439,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [EXTREME]",
+    Name = "블롭맨 오너 킥 [스마트 소유권]",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -495,7 +449,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 사인파 출입]
+-- [팔레트 레그돌 (Invis)]
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis) - 사인파 출입",
@@ -503,7 +457,7 @@ KickTab:CreateToggle({
     Default = false,
     Callback = function(Value)
         local RS = ReplicatedStorage
-        local RunService = game:GetService("RunService")
+        local RunService2 = game:GetService("RunService")
         local DestroyToy = RS:WaitForChild("MenuToys"):WaitForChild("DestroyToy")
         local SetNetOwner = RS:WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner")
         local DestroyLine = RS:WaitForChild("GrabEvents"):WaitForChild("DestroyGrabLine")
@@ -559,7 +513,7 @@ KickTab:CreateToggle({
                     child.Name = "PalletForRagdoll"
                     getgenv().PalletForRagdoll = child
 
-                    getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
+                    getgenv().ragdollSteppedConn = RunService2.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
                             clearAttackLoop(); return 
                         end
@@ -653,4 +607,4 @@ KickTab:CreateToggle({
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "EXTREME 로드 완료", Content = "전신 다중 파트 + 10회 버스트 + 매프레임 3콤보 (Destroy→SetOwner→CreateLine)", Duration = 4})
+Rayfield:Notify({Title = "로드 완료", Content = "CreateLine 제거 / 스마트 소유권 (이미 소유 중이면 스킵) / 핑 부담 최소화", Duration = 4})
