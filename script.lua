@@ -20,7 +20,7 @@ local rs = ReplicatedStorage
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF Extreme Kick Hub (Unstable Pattern)",
+    Name = "🔥 FSOF EXTREME Kick Hub (Overload)",
     LoadingTitle = "최적화 및 로딩 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -36,15 +36,11 @@ local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Strugg
 local GrabEvents = ReplicatedStorage:WaitForChild("GrabEvents", 5)
 local ReleaseGrab = GrabEvents and GrabEvents:FindFirstChild("ReleaseGrab")
 
-if StruggleEvent then
-    StruggleEvent.OnClientEvent:Connect(function(...) return end)
-end
-if ReleaseGrab then
-    ReleaseGrab.OnClientEvent:Connect(function(...) return end)
-end
+if StruggleEvent then StruggleEvent.OnClientEvent:Connect(function(...) return end) end
+if ReleaseGrab then ReleaseGrab.OnClientEvent:Connect(function(...) return end) end
 
 --=============================================
--- [공통: Torso 정밀 취득 (매 프레임 재조회)]
+-- [공통: 모든 주요 파트 정밀 취득]
 --=============================================
 local function getTorsoPart(char)
     if not char then return nil end
@@ -57,11 +53,81 @@ local function getTorsoPart(char)
     return nil
 end
 
+-- ✅ EXTREME: 타겟의 모든 핵심 파트 수집
+local function getAllTargetParts(char)
+    if not char then return {} end
+    local parts = {}
+    local priority = {
+        "Torso", "UpperTorso", "LowerTorso",
+        "HumanoidRootPart", "Head",
+        "Left Arm", "Right Arm", "LeftUpperArm", "RightUpperArm",
+        "LeftLowerArm", "RightLowerArm",
+        "Left Leg", "Right Leg", "LeftUpperLeg", "RightUpperLeg",
+        "LeftLowerLeg", "RightLowerLeg",
+    }
+    for _, name in ipairs(priority) do
+        local p = char:FindFirstChild(name)
+        if p and p:IsA("BasePart") then
+            table.insert(parts, p)
+        end
+    end
+    return parts
+end
+
+-- ✅ 원본 sno(): SetNetOwner:FireServer(part, part.CFrame)
+local function sno(part)
+    if not part or not part.Parent then return end
+    pcall(function()
+        rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
+    end)
+end
+
+-- ✅ EXTREME sno: Destroy → SetOwner → CreateLine 3콤보
+local function extremeSno(part)
+    if not part or not part.Parent then return end
+    pcall(function()
+        rs.GrabEvents.DestroyGrabLine:FireServer(part)
+    end)
+    pcall(function()
+        rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
+    end)
+    if rs.GrabEvents:FindFirstChild("CreateGrabLine") then
+        pcall(function()
+            rs.GrabEvents.CreateGrabLine:FireServer(part, Vector3.zero, part.Position, false)
+        end)
+    end
+end
+
+-- ✅ EXTREME 초기 버스트 (10회, Destroy → SetOwner → CreateLine)
+local function extremeBurst(char, shouldContinue)
+    local parts = getAllTargetParts(char)
+    if #parts == 0 then return end
+    for round = 1, 10 do
+        if shouldContinue and not shouldContinue() then break end
+        -- 매 라운드마다 전체 파트 스윕
+        for _, part in ipairs(parts) do
+            if not part.Parent then continue end
+            pcall(function()
+                rs.GrabEvents.DestroyGrabLine:FireServer(part)
+            end)
+        end
+        RunService.RenderStepped:Wait()
+        for _, part in ipairs(parts) do
+            if not part.Parent then continue end
+            pcall(function()
+                rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
+            end)
+        end
+        -- 중간에 AlignPosition 우회용 한 번 더
+        task.wait(0.01)
+    end
+end
+
 --=============================================
--- [GRAB 탭] - 카메라 조준 킥 그랩 (UNSTABLE 원본 패턴)
+-- [GRAB 탭] - 카메라 조준 킥 그랩 (EXTREME)
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (UNSTABLE 원본 패턴: 초기 버스트 5회 + 60Hz sno) ===")
+GrabTab:CreateSection("=== 킥 그랩 EXTREME: 전신 다중 파트 + 10회 버스트 + 매프레임 3콤보 ===")
 
 getgenv().FKeyAttackActive = false
 local fAttackThread = nil
@@ -100,47 +166,23 @@ local function setupFKeyAlign(targetPlayer)
     alignRot.Parent = tHRP
 end
 
--- ✅ 원본 UNSTABLE sno(): SetNetOwner:FireServer(part, part.CFrame)
-local function sno(part)
-    if not part or not part.Parent then return end
-    pcall(function()
-        rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
-    end)
-end
-
--- ✅ 원본 UNSTABLE 초기 버스트: DestroyGrabLine → RenderStepped → SetOwner × 5
-local function unstableBurst(part, shouldContinue)
-    if not part or not part.Parent then return end
-    for _ = 1, 5 do
-        if shouldContinue and not shouldContinue() then break end
-        pcall(function()
-            rs.GrabEvents.DestroyGrabLine:FireServer(part)
-        end)
-        RunService.RenderStepped:Wait()
-        pcall(function()
-            rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
-        end)
-    end
-end
-
 local function startFKeyAttack(targetPlayer)
     getgenv().FKeyAttackActive = true
     fAttackTarget = targetPlayer
     setupFKeyAlign(targetPlayer)
 
     fAttackThread = task.spawn(function()
-        -- ✅ 초기 버스트 (5회)
+        -- ✅ EXTREME 초기 버스트 (10회 전신)
         do
             local tChar = fAttackTarget and fAttackTarget.Character
-            local targetPart = tChar and getTorsoPart(tChar)
-            if targetPart then
-                unstableBurst(targetPart, function()
+            if tChar then
+                extremeBurst(tChar, function()
                     return getgenv().FKeyAttackActive
                 end)
             end
         end
 
-        -- ✅ 원본 UNSTABLE 연속 패턴: 매 프레임 1회 SetOwner (~60Hz)
+        -- ✅ EXTREME 연속: 매 프레임 전신 파트 3콤보
         while getgenv().FKeyAttackActive do
             task.wait()
 
@@ -151,9 +193,15 @@ local function startFKeyAttack(targetPlayer)
 
             if not myRoot or not tgtRoot then continue end
 
+            -- 물리 초기화
             tgtRoot.AssemblyLinearVelocity = Vector3.zero
-            if tgtHum then tgtHum.PlatformStand = true end
+            tgtRoot.AssemblyAngularVelocity = Vector3.zero
+            if tgtHum then
+                tgtHum.PlatformStand = true
+                tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
+            end
 
+            -- 카메라 앞 20스터드 고정
             local camCF = camera.CFrame
             local holdPos = camCF.Position + camCF.LookVector * 20
 
@@ -164,11 +212,24 @@ local function startFKeyAttack(targetPlayer)
             local rot = tgtRoot:FindFirstChild("FKeyRot")
             if rot then rot.CFrame = CFrame.Angles(0, 0, 0) end
 
-            local targetPart = getTorsoPart(tChar)
-            if not targetPart then continue end
-
-            -- ✅ 원본 sno() 방식
-            sno(targetPart)
+            -- ✅ 전신 파트에 매 프레임 3콤보
+            local parts = getAllTargetParts(tChar)
+            for _, part in ipairs(parts) do
+                if part.Parent then
+                    pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(part)
+                    end)
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
+                    end)
+                end
+            end
+            -- 가시성 낮은 라인 유지 (안티치트 우회용)
+            if rs.GrabEvents:FindFirstChild("CreateGrabLine") then
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tgtRoot, Vector3.zero, tgtRoot.Position, false)
+                end)
+            end
         end
     end)
 end
@@ -212,7 +273,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 (UNSTABLE 원본 패턴)",
+    Name = "카메라 조준 킥 그랩 [EXTREME]",
     Callback = function(v)
         if v and not selectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -222,7 +283,7 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭] - 블롭맨 오너 킥 (UNSTABLE 원본 패턴)
+-- [KICK 탭] - 블롭맨 오너 킥 EXTREME
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 local selectedKickPlayer = nil
@@ -313,6 +374,9 @@ local function startKickLoop()
                 while hum.Health <= 0 do task.wait(0.1) end
                 task.wait(0.2)
                 setupBodiesForTarget()
+                -- 리스폰 시 전신 버스트
+                extremeBurst(newChar, function() return kickLoopRunning end)
+
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if myHRP then
                     pcall(function()
@@ -355,20 +419,17 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 원본 UNSTABLE 패턴 (초기 버스트 → 매 프레임 sno)
+    -- ✅ EXTREME 패턴
     kickThread = task.spawn(function()
-        -- 초기 버스트
+        -- 초기 버스트 10회 전신
         do
             local tChar = selectedKickPlayer and selectedKickPlayer.Character
-            local targetPart = tChar and getTorsoPart(tChar)
-            if targetPart then
-                unstableBurst(targetPart, function()
-                    return kickLoopRunning
-                end)
+            if tChar then
+                extremeBurst(tChar, function() return kickLoopRunning end)
             end
         end
 
-        -- 연속: 매 프레임 1회 (~60Hz), 원본과 동일
+        -- 매 프레임 전신 3콤보
         while kickLoopRunning do
             task.wait()
 
@@ -384,11 +445,24 @@ local function startKickLoop()
                 end)
             end
 
-            local targetPart = getTorsoPart(tChar)
-            if not targetPart then continue end
-
-            -- ✅ 원본 sno() = SetNetOwner(part, part.CFrame)
-            sno(targetPart)
+            -- ✅ 전신 파트 3콤보
+            local parts = getAllTargetParts(tChar)
+            for _, part in ipairs(parts) do
+                if part.Parent then
+                    pcall(function()
+                        rs.GrabEvents.DestroyGrabLine:FireServer(part)
+                    end)
+                    pcall(function()
+                        rs.GrabEvents.SetNetworkOwner:FireServer(part, part.CFrame)
+                    end)
+                end
+            end
+            -- 라인 유지
+            if rs.GrabEvents:FindFirstChild("CreateGrabLine") then
+                pcall(function()
+                    rs.GrabEvents.CreateGrabLine:FireServer(tHRP, Vector3.zero, tHRP.Position, false)
+                end)
+            end
         end
     end)
 end
@@ -411,7 +485,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 실행 (UNSTABLE 원본 패턴)",
+    Name = "블롭맨 오너 킥 [EXTREME]",
     Callback = function(v)
         if v and not selectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -421,10 +495,10 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌 (Invis) - 사인파로 부드럽게 출입]
+-- [팔레트 레그돌 (Invis) - 사인파 출입]
 --=============================================
 KickTab:CreateToggle({
-    Name = "Pallet Ragdoll (Invis) - 사인파 출입 (옆으로 95도 꺾임)",
+    Name = "Pallet Ragdoll (Invis) - 사인파 출입",
     Flag = "Ragdoll Target",
     Default = false,
     Callback = function(Value)
@@ -452,14 +526,11 @@ KickTab:CreateToggle({
             getgenv().palletRagdollActive = true
             getgenv().PalletForRagdoll = nil
             
-            if getgenv().palletCacheConn then
-                getgenv().palletCacheConn:Disconnect()
-            end
+            if getgenv().palletCacheConn then getgenv().palletCacheConn:Disconnect() end
             clearAttackLoop()
 
             if not toysFolder then
-                Rayfield:Notify({Title = "오류", Content = "토이 폴더 없음 (캐릭터 재생성 후 시도)", Duration = 3})
-                return
+                Rayfield:Notify({Title = "오류", Content = "토이 폴더 없음", Duration = 3}); return
             end
 
             getgenv().palletCacheConn = toysFolder.ChildAdded:Connect(function(child)
@@ -490,8 +561,7 @@ KickTab:CreateToggle({
 
                     getgenv().ragdollSteppedConn = RunService.Stepped:Connect(function()
                         if not getgenv().palletRagdollActive or not child.Parent then 
-                            clearAttackLoop()
-                            return 
+                            clearAttackLoop(); return 
                         end
 
                         local tChar = selectedKickPlayer and selectedKickPlayer.Character
@@ -578,9 +648,9 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [나머지 필수 탭]
+-- [Settings]
 --=============================================
 local SettingsTab = Window:CreateTab("Settings", nil)
 SettingsTab:CreateButton({Name = "재설정", Callback = function() Rayfield:Notify({Title="알림", Content="초기화 완료"}) end})
 
-Rayfield:Notify({Title = "로딩 완료", Content = "UNSTABLE 원본 패턴: 초기 버스트 5회 + 매 프레임 sno (60Hz)", Duration = 3})
+Rayfield:Notify({Title = "EXTREME 로드 완료", Content = "전신 다중 파트 + 10회 버스트 + 매프레임 3콤보 (Destroy→SetOwner→CreateLine)", Duration = 4})
