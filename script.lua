@@ -1,10 +1,10 @@
 --=============================================
--- [FSOF EXTREME Kick Hub - Fling 90 Variant]
+-- [FSOF EXTREME Kick Hub - Fling 9999999 Variant]
 -- - CreateLine 로직 완전 제거
 -- - 다른 스크립트와 병행 사용 가능
 -- - 스마트 소유권 (이미 소유 중이면 스킵)
 -- - 기본 위치: Y=-8, 앞 3스터드
--- - 셋오너 킥 ON 시: 그 위치에서 90스터드 강제 이동
+-- - 셋오너 킥 ON 시: 그 위치에서 9,999,999스터드 강제 이동
 --=============================================
 
 --=============================================
@@ -43,15 +43,15 @@ STATE.RagdollSteppedConn = nil
 STATE.PalletCacheConn = nil
 STATE.SpawnNewPallet = nil
 
--- ✅ 셋오너 킥 fling 설정
-STATE.FlingDistance = 90
+-- ✅ 셋오너 킥 fling 설정 (초 극한 거리)
+STATE.FlingDistance = 9999999
 STATE.FlingDirection = "forward"
 
 --=============================================
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF EXTREME Kick Hub (Fling 90)",
+    Name = "🔥 FSOF EXTREME Kick Hub (Fling 9999999)",
     LoadingTitle = "최적화 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -134,7 +134,7 @@ local function initialBurst(char, shouldContinue)
 end
 
 --=============================================
--- [위치 계산 - Y=-8 / 앞 3스터드 / 킥 시 90스터드 fling]
+-- [위치 계산 - Y=-8 / 앞 3스터드 / 킥 시 9999999스터드 fling]
 --=============================================
 local function getHorizontalBasis()
     local camCF = camera.CFrame
@@ -170,7 +170,7 @@ end
 
 -- ✅ 메인 hold position
 --   - kick OFF: Y=-8, 앞 3스터드
---   - kick ON : 그 위치에서 90스터드 fling
+--   - kick ON : 그 위치에서 9,999,999스터드 fling
 local function getHoldPosition(kickActive)
     local myChar = plr.Character
     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -202,7 +202,7 @@ end
 -- [GRAB 탭]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (셋오너 ON → 90스터드 fling / CreateLine 없음) ===")
+GrabTab:CreateSection("=== 킥 그랩 (셋오너 ON → 9,999,999스터드 fling / CreateLine 없음) ===")
 
 local function setupFKeyAlign(targetPlayer)
     pcall(function()
@@ -268,7 +268,7 @@ local function startFKeyAttack(targetPlayer)
                     tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
 
-                -- ✅ kickActive = true → 90스터드 fling
+                -- ✅ kickActive = true → 9,999,999스터드 fling
                 local holdPos = getHoldPosition(true)
                 if not holdPos then return end
 
@@ -327,7 +327,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [셋오너 ON → 90스터드 fling]",
+    Name = "카메라 조준 킥 그랩 [셋오너 ON → 9,999,999스터드]",
     Callback = function(v)
         if v and not STATE.SelectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -372,10 +372,10 @@ KickTab:CreateInput({
 KickTab:CreateSection("Fling 설정")
 KickTab:CreateSlider({
     Name = "Fling 거리 (studs)",
-    Range = { 10, 200 },
+    Range = { 10, 9999999 },
     Increment = 1,
     Suffix = " studs",
-    Default = 90,
+    Default = 9999999,
     Callback = function(v)
         STATE.FlingDistance = v
     end
@@ -475,7 +475,7 @@ local function startKickLoop()
         end
     end)
 
-    -- 전신 박제 → 90스터드 fling 위치
+    -- 전신 박제 → 9,999,999스터드 fling 위치
     steppedConn = RunService.Stepped:Connect(function()
         pcall(function()
             if not STATE.KickLoopRunning then return end
@@ -532,10 +532,8 @@ local function startKickLoop()
                 local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
                 if not (tHRP and myHRP) then return end
 
-                -- 원거리 텔레포트 (90스터드 fling 반영해서 120 이상이면 리셋)
-                if (tHRP.Position - myHRP.Position).Magnitude > 120 then
-                    plr.Character:PivotTo(tHRP.CFrame * CFrame.new(0, 2, 4))
-                end
+                -- ✅ 타겟이 극단적으로 멀리 있으면 재조준 스킵 (플링 후 추격 안 함)
+                -- (내 캐릭터는 그대로, 타겟만 멀리 날아감)
 
                 local parts = getCoreParts(tChar)
                 for _, part in ipairs(parts) do
@@ -567,7 +565,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [셋오너 ON → 90스터드 fling]",
+    Name = "블롭맨 오너 킥 [셋오너 ON → 9,999,999스터드]",
     Callback = function(v)
         if v and not STATE.SelectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -789,12 +787,12 @@ SettingsTab:CreateParagraph({
     Title = "위치 설정",
     Content = "타겟을 잡는 위치:\n" ..
               "- 셋오너 킥 OFF: Y=-8, 앞 3스터드\n" ..
-              "- 셋오너 킥 ON : 그 위치에서 90스터드 fling\n" ..
-              "- CreateLine 로직 완전 제거됨 (Destroy → SetOwner 2콤보만 사용)"
+              "- 셋오너 킥 ON : 그 위치에서 9,999,999스터드 fling\n" ..
+              "- CreateLine 로직 완전 제거됨"
 })
 
 Rayfield:Notify({
-    Title = "Fling 90 Variant 로드 완료",
-    Content = "CreateLine 제거 / 셋오너 ON → 90스터드 fling",
+    Title = "Fling 9999999 Variant 로드 완료",
+    Content = "셋오너 ON → 9,999,999스터드 극한 fling",
     Duration = 4
 })
