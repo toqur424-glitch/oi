@@ -1,10 +1,11 @@
 --=============================================
--- [FSOF EXTREME Kick Hub - Instant Snap Fling]
+-- [FSOF EXTREME Kick Hub - No Align / 45° Up Fling]
+-- - AlignPosition 완전 제거
 -- - CreateLine 로직 완전 제거
 -- - 다른 스크립트와 병행 사용 가능
--- - 스마트 소유권 (이미 소유 중이면 스킵)
+-- - 스마트 소유권
 -- - 기본 위치: Y=-8, 앞 3스터드
--- - 셋오너 킥 ON 시: 즉시 9,999,999스터드 순간이동 (Instant Snap)
+-- - 셋오너 킥 ON 시: 그 위치에서 9,999,999스터드, 45도 위로 순간이동
 --=============================================
 
 --=============================================
@@ -44,13 +45,14 @@ STATE.PalletCacheConn = nil
 STATE.SpawnNewPallet = nil
 
 STATE.FlingDistance = 9999999
-STATE.FlingDirection = "forward"
+-- ✅ 45도 위로 고정
+STATE.FlingElevationDeg = 45
 
 --=============================================
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF EXTREME Kick Hub (Instant Snap)",
+    Name = "🔥 FSOF EXTREME Kick Hub (45° Up Fling)",
     LoadingTitle = "최적화 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -94,7 +96,6 @@ local function isOwnedByMe(part)
     return ok2 and val == plr.Name
 end
 
--- ✅ 스마트 소유권: DestroyGrabLine → SetOwner
 local function claimPart(part)
     if not part or not part.Parent then return end
     if isOwnedByMe(part) then return end
@@ -133,9 +134,9 @@ local function initialBurst(char, shouldContinue)
 end
 
 --=============================================
--- [위치 계산 - Y=-8 / 앞 3스터드 / 킥 시 9999999스터드]
+-- [위치 계산 - Y=-8, 앞 3스터드 / 셋오너 시 45도 위로 fling]
 --=============================================
-local function getHorizontalBasis()
+local function getHorizontalForward()
     local camCF = camera.CFrame
     local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
     if forward.Magnitude > 0 then
@@ -143,22 +144,19 @@ local function getHorizontalBasis()
     else
         forward = Vector3.new(0, 0, -1)
     end
-    local right = forward:Cross(Vector3.new(0, 1, 0))
-    if right.Magnitude > 0 then right = right.Unit end
-    return forward, right
+    return forward
 end
 
+-- ✅ 45도 위로 fling 방향 벡터 반환
+-- 45도 위 = (수평 앞 * cos45, 위 * sin45)
+-- cos45 ≈ sin45 ≈ 0.70710678
 local function getFlingOffsetVector()
-    local forward, right = getHorizontalBasis()
-    local dir = STATE.FlingDirection
-    if dir == "backward" then return -forward
-    elseif dir == "left" then return -right
-    elseif dir == "right" then return right
-    elseif dir == "up" then return Vector3.new(0, 1, 0)
-    elseif dir == "random" then
-        local ang = math.random() * math.pi * 2
-        return Vector3.new(math.cos(ang), 0, math.sin(ang))
-    else return forward end
+    local forward = getHorizontalForward()
+    local rad = math.rad(STATE.FlingElevationDeg)
+    local h = math.cos(rad)   -- 수평 성분
+    local v = math.sin(rad)   -- 수직 성분
+
+    return Vector3.new(forward.X * h, v, forward.Z * h)
 end
 
 local function getHoldPosition(kickActive)
@@ -167,7 +165,7 @@ local function getHoldPosition(kickActive)
     if not myHRP then return nil end
 
     local myPos = myHRP.Position
-    local forward = getHorizontalBasis()
+    local forward = getHorizontalForward()
 
     local base = Vector3.new(
         myPos.X + forward.X * 3,
@@ -189,50 +187,45 @@ local function getHoldPosition(kickActive)
 end
 
 --=============================================
--- [GRAB 탭]
+-- [GRAB 탭] - AlignPosition 없이 BodyPosition만 사용
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (Instant Snap / 순간이동) ===")
+GrabTab:CreateSection("=== 킥 그랩 (No Align / 45° Up Fling) ===")
 
-local function setupFKeyAlign(targetPlayer)
+-- ✅ BodyPosition/BodyGyro를 타겟 HRP에 설치 (Align 대체)
+local function setupGrabBodies(targetPlayer)
     pcall(function()
         local tChar = targetPlayer and targetPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
 
+        -- 기존 설치된 것 제거
         for _, v in pairs(tHRP:GetChildren()) do
-            if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
-            if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
+            if v:IsA("BodyPosition") and v.Name == "FKeyBP" then v:Destroy() end
+            if v:IsA("BodyGyro") and v.Name == "FKeyBG" then v:Destroy() end
         end
 
-        local att0 = Instance.new("Attachment", tHRP); att0.Name = "FKeyAtt0"
-        local att1 = Instance.new("Attachment", workspace.Terrain); att1.Name = "FKeyAtt1"
+        local bp = Instance.new("BodyPosition")
+        bp.Name = "FKeyBP"
+        bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bp.P = 1e18
+        bp.D = 0
+        bp.Parent = tHRP
 
-        -- ✅ RigidityEnabled = true → 즉시 스냅 (물리 저항 무시)
-        local alignPos = Instance.new("AlignPosition")
-        alignPos.Name = "FKeyAlign"
-        alignPos.Attachment0 = att0
-        alignPos.Attachment1 = att1
-        alignPos.MaxForce = math.huge
-        alignPos.MaxVelocity = math.huge
-        alignPos.Responsiveness = 200
-        alignPos.RigidityEnabled = true
-        alignPos.Parent = tHRP
-
-        local alignRot = Instance.new("AlignOrientation")
-        alignRot.Name = "FKeyRot"
-        alignRot.Attachment0 = att0
-        alignRot.MaxTorque = math.huge
-        alignRot.Responsiveness = 200
-        alignRot.RigidityEnabled = true
-        alignRot.Parent = tHRP
+        local bg = Instance.new("BodyGyro")
+        bg.Name = "FKeyBG"
+        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bg.P = 1e18
+        bg.D = 0
+        bg.CFrame = CFrame.Angles(0, 0, 0)
+        bg.Parent = tHRP
     end)
 end
 
 local function startFKeyAttack(targetPlayer)
     STATE.FKeyAttackActive = true
     STATE.FAttackTarget = targetPlayer
-    setupFKeyAlign(targetPlayer)
+    setupGrabBodies(targetPlayer)
 
     task.spawn(function()
         pcall(function()
@@ -259,16 +252,24 @@ local function startFKeyAttack(targetPlayer)
                     tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
 
+                -- ✅ 45도 위로 fling 위치
                 local holdPos = getHoldPosition(true)
                 if not holdPos then return end
 
-                -- ✅ 즉시 순간이동 (AlignPosition + Rigidity → 속도 무시하고 스냅)
-                local align = tgtRoot:FindFirstChild("FKeyAlign")
-                if align and align.Attachment1 then
-                    align.Attachment1.WorldPosition = holdPos
+                local bp = tgtRoot:FindFirstChild("FKeyBP")
+                if not bp then
+                    setupGrabBodies(STATE.FAttackTarget)
+                else
+                    bp.Position = holdPos
                 end
-                local rot = tgtRoot:FindFirstChild("FKeyRot")
-                if rot then rot.CFrame = CFrame.Angles(0, 0, 0) end
+
+                local bg = tgtRoot:FindFirstChild("FKeyBG")
+                if bg then bg.CFrame = CFrame.Angles(0, 0, 0) end
+
+                -- ✅ 직접 CFrame 강제 → 즉시 순간이동
+                pcall(function()
+                    tgtRoot.CFrame = CFrame.new(holdPos)
+                end)
 
                 local parts = getCoreParts(tChar)
                 for _, part in ipairs(parts) do
@@ -286,8 +287,8 @@ local function stopFKeyAttack()
             local tHRP = STATE.FAttackTarget.Character:FindFirstChild("HumanoidRootPart")
             if tHRP then
                 for _, v in pairs(tHRP:GetChildren()) do
-                    if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
-                    if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
+                    if v:IsA("BodyPosition") and v.Name == "FKeyBP" then v:Destroy() end
+                    if v:IsA("BodyGyro") and v.Name == "FKeyBG" then v:Destroy() end
                 end
             end
         end
@@ -318,7 +319,7 @@ GrabTab:CreateInput({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [Instant Snap]",
+    Name = "카메라 조준 킥 그랩 [No Align / 45° Up]",
     Callback = function(v)
         if v and not STATE.SelectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -359,7 +360,7 @@ KickTab:CreateInput({
     end
 })
 
-KickTab:CreateSection("Fling 설정")
+KickTab:CreateSection("Fling 설정 (45도 위로 고정)")
 KickTab:CreateSlider({
     Name = "Fling 거리 (studs)",
     Range = { 10, 9999999 },
@@ -371,12 +372,14 @@ KickTab:CreateSlider({
     end
 })
 
-KickTab:CreateDropdown({
-    Name = "Fling 방향",
-    Options = { "forward", "backward", "left", "right", "up", "random" },
-    CurrentOption = "forward",
-    Callback = function(opt)
-        STATE.FlingDirection = opt
+KickTab:CreateSlider({
+    Name = "Fling 각도 (도)",
+    Range = { 0, 90 },
+    Increment = 1,
+    Suffix = " °",
+    Default = 45,
+    Callback = function(v)
+        STATE.FlingElevationDeg = v
     end
 })
 
@@ -395,7 +398,6 @@ local function clearAllBodies()
     targetBP_HRP, targetBG_HRP = nil, nil
 end
 
--- ✅ BodyPosition을 극한 P값 + D=0으로 설정 → 즉시 스냅
 local function setupBodiesForTarget()
     pcall(function()
         local sp = STATE.SelectedKickPlayer
@@ -418,7 +420,6 @@ local function setupBodiesForTarget()
                 local bp = Instance.new("BodyPosition")
                 bp.Name = BP_PREFIX .. part.Name
                 bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                -- ✅ P 극대화 + D=0 → 최대 가속도로 즉시 이동 (감쇠 없음)
                 bp.P = 1e18
                 bp.D = 0
                 bp.Parent = part
@@ -457,7 +458,7 @@ local function startKickLoop()
                         setupBodiesForTarget()
                         initialBurst(newChar, function() return STATE.KickLoopRunning end)
 
-                        -- ✅ 즉시 순간이동 (CFrame 직접 지정)
+                        -- ✅ 리스폰 즉시 45도 위 fling 위치로 순간이동
                         local holdPos = getHoldPosition(true)
                         if holdPos then
                             for _, part in ipairs(newChar:GetDescendants()) do
@@ -476,7 +477,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 전신 박제 + 즉시 순간이동
+    -- ✅ 전신 박제 + 즉시 순간이동 (45도 위)
     steppedConn = RunService.Stepped:Connect(function()
         pcall(function()
             if not STATE.KickLoopRunning then return end
@@ -502,7 +503,7 @@ local function startKickLoop()
                     local bp, bg = bodies[1], bodies[2]
                     if bp and bp.Parent then bp.Position = holdPos end
                     if bg and bg.Parent then bg.CFrame = zeroCF end
-                    -- ✅ 직접 CFrame 지정 → BodyPosition이 못 따라가도 즉시 이동
+                    -- ✅ 직접 CFrame 강제 → 즉시 순간이동 보장
                     pcall(function()
                         part.CFrame = CFrame.new(holdPos)
                     end)
@@ -567,7 +568,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [Instant Snap]",
+    Name = "블롭맨 오너 킥 [No Align / 45° Up]",
     Callback = function(v)
         if v and not STATE.SelectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -786,16 +787,16 @@ SettingsTab:CreateButton({
 
 SettingsTab:CreateSection("정보")
 SettingsTab:CreateParagraph({
-    Title = "Instant Snap 원리",
-    Content = "속도를 높이는 방법 3중 적용:\n" ..
-              "1. BodyPosition P = 1e18, D = 0 (감쇠 없음, 최대 가속)\n" ..
-              "2. AlignPosition RigidityEnabled = true (물리 무시 즉시 스냅)\n" ..
-              "3. 매 프레임 직접 part.CFrame = CFrame.new(holdPos) 강제 지정\n" ..
-              "→ 빈도 증가가 아니라 이동 자체를 순간이동으로 처리"
+    Title = "45° Up Fling 원리",
+    Content = "AlignPosition 완전 제거.\n" ..
+              "- BodyPosition P=1e18, D=0 (최대 가속)\n" ..
+              "- 매 프레임 part.CFrame 직접 지정 (즉시 순간이동)\n" ..
+              "- Fling 방향: 수평 앞 * cos(45°), 수직 위 * sin(45°)\n" ..
+              "- 45도 각도 슬라이더로 조정 가능 (0~90)"
 })
 
 Rayfield:Notify({
-    Title = "Instant Snap Variant 로드 완료",
-    Content = "속도 극대화: P=1e18/D=0 + Rigidity + 직접 CFrame",
+    Title = "45° Up Fling 로드 완료",
+    Content = "Align 제거 / 45도 위로 9,999,999스터드 순간이동",
     Duration = 4
 })
