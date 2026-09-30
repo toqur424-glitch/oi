@@ -1,16 +1,11 @@
 --=============================================
--- [FSOF EXTREME Kick Hub - No Align / 45° Up Fling]
--- - AlignPosition 완전 제거
--- - CreateLine 로직 완전 제거
--- - 다른 스크립트와 병행 사용 가능
--- - 스마트 소유권
--- - 기본 위치: Y=-8, 앞 3스터드
--- - 셋오너 킥 ON 시: 그 위치에서 9,999,999스터드, 45도 위로 순간이동
+-- [FSOF EXTREME Kick Hub - Range 28 / No CreateLine / 45° Up]
+-- - 28 스터드 이내일 때만 플링 발동 (소유권 강탈 성공률 극대화)
+-- - CreateLine 완전 제거
+-- - AlignPosition 제거
+-- - 45도 위로 fling
 --=============================================
 
---=============================================
--- [초기 로드 및 게임 체크]
---=============================================
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 if game.PlaceId ~= 6961824067 then 
@@ -45,14 +40,16 @@ STATE.PalletCacheConn = nil
 STATE.SpawnNewPallet = nil
 
 STATE.FlingDistance = 9999999
--- ✅ 45도 위로 고정
 STATE.FlingElevationDeg = 45
 
+-- ✅ 28 스터드 이내일 때만 플링
+STATE.ActivationRange = 28
+
 --=============================================
--- [UI 생성]
+-- [UI]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF EXTREME Kick Hub (45° Up Fling)",
+    Name = "🔥 FSOF EXTREME Kick Hub (Range 28 / 45° Up)",
     LoadingTitle = "최적화 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -96,6 +93,7 @@ local function isOwnedByMe(part)
     return ok2 and val == plr.Name
 end
 
+-- ✅ CreateLine 없이 Destroy → SetOwner 2콤보만
 local function claimPart(part)
     if not part or not part.Parent then return end
     if isOwnedByMe(part) then return end
@@ -134,6 +132,20 @@ local function initialBurst(char, shouldContinue)
 end
 
 --=============================================
+-- [거리 체크 - 28 스터드 이내]
+--=============================================
+local function isInRange(targetChar)
+    if not targetChar then return false end
+    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return false end
+    local tHRP = targetChar:FindFirstChild("HumanoidRootPart")
+    if not tHRP then return false end
+
+    local dist = (tHRP.Position - myHRP.Position).Magnitude
+    return dist <= STATE.ActivationRange
+end
+
+--=============================================
 -- [위치 계산 - Y=-8, 앞 3스터드 / 셋오너 시 45도 위로 fling]
 --=============================================
 local function getHorizontalForward()
@@ -147,7 +159,6 @@ local function getHorizontalForward()
     return forward
 end
 
--- ✅ 45도 위로 fling 방향 벡터 반환
 local function getFlingOffsetVector()
     local forward = getHorizontalForward()
     local rad = math.rad(STATE.FlingElevationDeg)
@@ -185,12 +196,11 @@ local function getHoldPosition(kickActive)
 end
 
 --=============================================
--- [GRAB 탭] - AlignPosition 없이 BodyPosition만 사용
+-- [GRAB 탭]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (No Align / 45° Up Fling) ===")
+GrabTab:CreateSection("=== 킥 그랩 (28스터드 이내 발동 / No CreateLine / 45° Up) ===")
 
--- ✅ BodyPosition/BodyGyro를 타겟 HRP에 설치 (Align 대체)
 local function setupGrabBodies(targetPlayer)
     pcall(function()
         local tChar = targetPlayer and targetPlayer.Character
@@ -227,7 +237,7 @@ local function startFKeyAttack(targetPlayer)
     task.spawn(function()
         pcall(function()
             local tChar = targetPlayer and targetPlayer.Character
-            if tChar then
+            if tChar and isInRange(tChar) then
                 initialBurst(tChar, function() return STATE.FKeyAttackActive end)
             end
         end)
@@ -242,6 +252,9 @@ local function startFKeyAttack(targetPlayer)
 
                 if not myRoot or not tgtRoot then return end
 
+                -- ✅ 28 스터드 이내일 때만 동작
+                if not isInRange(tChar) then return end
+
                 tgtRoot.AssemblyLinearVelocity = Vector3.zero
                 tgtRoot.AssemblyAngularVelocity = Vector3.zero
                 if tgtHum then
@@ -249,7 +262,6 @@ local function startFKeyAttack(targetPlayer)
                     tgtHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
 
-                -- ✅ 45도 위로 fling 위치
                 local holdPos = getHoldPosition(true)
                 if not holdPos then return end
 
@@ -263,7 +275,6 @@ local function startFKeyAttack(targetPlayer)
                 local bg = tgtRoot:FindFirstChild("FKeyBG")
                 if bg then bg.CFrame = CFrame.Angles(0, 0, 0) end
 
-                -- ✅ 직접 CFrame 강제 → 즉시 순간이동
                 pcall(function()
                     tgtRoot.CFrame = CFrame.new(holdPos)
                 end)
@@ -315,8 +326,19 @@ GrabTab:CreateInput({
     end
 })
 
+GrabTab:CreateSlider({
+    Name = "발동 거리 (studs)",
+    Range = { 5, 30 },
+    Increment = 1,
+    Suffix = " studs",
+    Default = 28,
+    Callback = function(v)
+        STATE.ActivationRange = v
+    end
+})
+
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [No Align / 45° Up]",
+    Name = "카메라 조준 킥 그랩 [28스터드 이내 / No CreateLine]",
     Callback = function(v)
         if v and not STATE.SelectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -357,7 +379,7 @@ KickTab:CreateInput({
     end
 })
 
-KickTab:CreateSection("Fling 설정 (45도 위로 고정)")
+KickTab:CreateSection("Fling 설정")
 KickTab:CreateSlider({
     Name = "Fling 거리 (studs)",
     Range = { 10, 9999999 },
@@ -452,18 +474,22 @@ local function startKickLoop()
                         local waitStart = tick()
                         while hum.Health <= 0 and tick() - waitStart < 10 do task.wait(0.1) end
                         task.wait(0.2)
-                        setupBodiesForTarget()
-                        initialBurst(newChar, function() return STATE.KickLoopRunning end)
 
-                        local holdPos = getHoldPosition(true)
-                        if holdPos then
-                            for _, part in ipairs(newChar:GetDescendants()) do
-                                if part:IsA("BasePart") then
-                                    pcall(function()
-                                        part.CFrame = CFrame.new(holdPos)
-                                        part.AssemblyLinearVelocity = Vector3.zero
-                                        part.AssemblyAngularVelocity = Vector3.zero
-                                    end)
+                        -- ✅ 리스폰 직후에도 28 스터드 이내일 때만 발동
+                        if isInRange(newChar) then
+                            setupBodiesForTarget()
+                            initialBurst(newChar, function() return STATE.KickLoopRunning end)
+
+                            local holdPos = getHoldPosition(true)
+                            if holdPos then
+                                for _, part in ipairs(newChar:GetDescendants()) do
+                                    if part:IsA("BasePart") then
+                                        pcall(function()
+                                            part.CFrame = CFrame.new(holdPos)
+                                            part.AssemblyLinearVelocity = Vector3.zero
+                                            part.AssemblyAngularVelocity = Vector3.zero
+                                        end)
+                                    end
                                 end
                             end
                         end
@@ -473,7 +499,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 전신 박제 + 즉시 순간이동 (45도 위)
+    -- ✅ 전신 박제 + 28 스터드 이내에서만 즉시 순간이동
     steppedConn = RunService.Stepped:Connect(function()
         pcall(function()
             if not STATE.KickLoopRunning then return end
@@ -485,6 +511,12 @@ local function startKickLoop()
             local tChar = sp.Character
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             if not (myChar and myHRP) or not (tChar and tHRP) then return end
+
+            -- ✅ 28 스터드 이내가 아니면 Body 제거하고 대기
+            if not isInRange(tChar) then
+                clearAllBodies()
+                return
+            end
 
             if not targetBP_HRP or not targetBP_HRP.Parent or targetBP_HRP.Parent ~= tHRP then
                 setupBodiesForTarget()
@@ -518,7 +550,7 @@ local function startKickLoop()
     kickThread = task.spawn(function()
         pcall(function()
             local sp = STATE.SelectedKickPlayer
-            if sp and sp.Character then
+            if sp and sp.Character and isInRange(sp.Character) then
                 initialBurst(sp.Character, function() return STATE.KickLoopRunning end)
             end
         end)
@@ -529,9 +561,10 @@ local function startKickLoop()
                 local sp = STATE.SelectedKickPlayer
                 if not sp then return end
                 local tChar = sp.Character
-                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                if not (tHRP and myHRP) then return end
+                if not tChar then return end
+
+                -- ✅ 28 스터드 이내일 때만 소유권 강탈
+                if not isInRange(tChar) then return end
 
                 local parts = getCoreParts(tChar)
                 for _, part in ipairs(parts) do
@@ -563,7 +596,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [No Align / 45° Up]",
+    Name = "블롭맨 오너 킥 [28스터드 이내 / No CreateLine]",
     Callback = function(v)
         if v and not STATE.SelectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -573,7 +606,7 @@ KickTab:CreateToggle({
 })
 
 --=============================================
--- [팔레트 레그돌]
+-- [팔레트 레그돌] - CreateLine 없음
 --=============================================
 KickTab:CreateToggle({
     Name = "Pallet Ragdoll (Invis)",
@@ -782,16 +815,17 @@ SettingsTab:CreateButton({
 
 SettingsTab:CreateSection("정보")
 SettingsTab:CreateParagraph({
-    Title = "45° Up Fling 원리",
-    Content = "AlignPosition 완전 제거.\n" ..
-              "- BodyPosition P=1e18, D=0 (최대 가속)\n" ..
-              "- 매 프레임 part.CFrame 직접 지정 (즉시 순간이동)\n" ..
-              "- Fling 방향: 수평 앞 * cos(45°), 수직 위 * sin(45°)\n" ..
-              "- 45도 각도 슬라이더로 조정 가능 (0~90)"
+    Title = "Range 28 / No CreateLine",
+    Content = "핵심 변경:\n" ..
+              "- 발동 조건: 타겟이 28 스터드 이내일 때만\n" ..
+              "- CreateLine 완전 제거 (Destroy → SetOwner 2콤보만)\n" ..
+              "- AlignPosition 제거 (BodyPosition + 직접 CFrame)\n" ..
+              "- 28 스터드 밖이면 자동 대기 (소유권 강탈 성공률 ↑)\n" ..
+              "- 45도 위 / 9,999,999 스터드 fling"
 })
 
 Rayfield:Notify({
-    Title = "45° Up Fling 로드 완료",
-    Content = "Align 제거 / 45도 위로 9,999,999스터드 순간이동",
+    Title = "Range 28 / No CreateLine 로드 완료",
+    Content = "28 스터드 이내일 때만 발동 / CreateLine 제거",
     Duration = 4
 })
