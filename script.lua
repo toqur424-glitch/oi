@@ -1,13 +1,11 @@
 --=============================================
--- [FSOF EXTREME Kick Hub - No Align / 45° Up Fling]
--- - AlignPosition 완전 제거
+-- [FSOF EXTREME Kick Hub - Instant Snap Fling]
 -- - CreateLine 로직 완전 제거
 -- - 다른 스크립트와 병행 사용 가능
--- - 스마트 소유권
+-- - 스마트 소유권 (이미 소유 중이면 스킵)
 -- - 기본 위치: Y=-8, 앞 3스터드
--- - 셋오너 킥 ON 시: 그 위치에서 9,999,999스터드, 45도 위로 순간이동
--- - ✅ 켤 때 28 스터드 이내여야만 ON 됨 (멀면 거부)
--- - ✅ 켜진 후에도 28 밖으로 나가면 자동 OFF
+-- - 셋오너 킥 ON 시: 즉시 9,999,999스터드 순간이동 (Instant Snap)
+-- - ✅ 45도 대각선 플링 방향 추가
 --=============================================
 
 --=============================================
@@ -47,16 +45,13 @@ STATE.PalletCacheConn = nil
 STATE.SpawnNewPallet = nil
 
 STATE.FlingDistance = 9999999
-STATE.FlingElevationDeg = 45
-
--- ✅ 발동 거리 (28 스터드)
-STATE.ActivationRange = 28
+STATE.FlingDirection = "forward45up"
 
 --=============================================
 -- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF EXTREME Kick Hub (45° Up Fling)",
+    Name = "🔥 FSOF EXTREME Kick Hub (Instant Snap)",
     LoadingTitle = "최적화 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -100,6 +95,7 @@ local function isOwnedByMe(part)
     return ok2 and val == plr.Name
 end
 
+-- ✅ 스마트 소유권: DestroyGrabLine → SetOwner
 local function claimPart(part)
     if not part or not part.Parent then return end
     if isOwnedByMe(part) then return end
@@ -137,32 +133,10 @@ local function initialBurst(char, shouldContinue)
     end
 end
 
--- ✅ 발동 거리 체크 (28 스터드 이내)
-local function isInRange(targetChar)
-    if not targetChar then return false end
-    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return false end
-    local tHRP = targetChar:FindFirstChild("HumanoidRootPart")
-    if not tHRP then return false end
-
-    local dist = (tHRP.Position - myHRP.Position).Magnitude
-    return dist <= STATE.ActivationRange
-end
-
--- ✅ 거리 반환 (거부 메시지용)
-local function getDistanceTo(targetChar)
-    if not targetChar then return math.huge end
-    local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return math.huge end
-    local tHRP = targetChar:FindFirstChild("HumanoidRootPart")
-    if not tHRP then return math.huge end
-    return (tHRP.Position - myHRP.Position).Magnitude
-end
-
 --=============================================
--- [위치 계산 - Y=-8, 앞 3스터드 / 셋오너 시 45도 위로 fling]
+-- [위치 계산 - Y=-8 / 앞 3스터드 / 킥 시 9999999스터드]
 --=============================================
-local function getHorizontalForward()
+local function getHorizontalBasis()
     local camCF = camera.CFrame
     local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
     if forward.Magnitude > 0 then
@@ -170,16 +144,79 @@ local function getHorizontalForward()
     else
         forward = Vector3.new(0, 0, -1)
     end
-    return forward
+    local right = forward:Cross(Vector3.new(0, 1, 0))
+    if right.Magnitude > 0 then right = right.Unit end
+    return forward, right
 end
 
+-- ✅ 45도 대각선 포함 방향 벡터
 local function getFlingOffsetVector()
-    local forward = getHorizontalForward()
-    local rad = math.rad(STATE.FlingElevationDeg)
-    local h = math.cos(rad)
-    local v = math.sin(rad)
+    local forward, right = getHorizontalBasis()
+    local dir = STATE.FlingDirection
 
-    return Vector3.new(forward.X * h, v, forward.Z * h)
+    -- 45도 성분 (cos45 = sin45 = 0.7071...)
+    local D45 = 0.7071067811865476
+
+    if dir == "forward" then
+        return forward
+
+    elseif dir == "backward" then
+        return -forward
+
+    elseif dir == "left" then
+        return -right
+
+    elseif dir == "right" then
+        return right
+
+    elseif dir == "up" then
+        return Vector3.new(0, 1, 0)
+
+    -- ✅ 정면 + 위 45도
+    elseif dir == "forward45up" then
+        return (forward * D45 + Vector3.new(0, D45, 0)).Unit
+
+    -- ✅ 정면 + 아래 45도
+    elseif dir == "forward45down" then
+        return (forward * D45 + Vector3.new(0, -D45, 0)).Unit
+
+    -- ✅ 좌측 대각선 위 45도
+    elseif dir == "left45up" then
+        return ((-right) * D45 + Vector3.new(0, D45, 0)).Unit
+
+    -- ✅ 우측 대각선 위 45도
+    elseif dir == "right45up" then
+        return (right * D45 + Vector3.new(0, D45, 0)).Unit
+
+    -- ✅ 좌측 대각선 아래 45도
+    elseif dir == "left45down" then
+        return ((-right) * D45 + Vector3.new(0, -D45, 0)).Unit
+
+    -- ✅ 우측 대각선 아래 45도
+    elseif dir == "right45down" then
+        return (right * D45 + Vector3.new(0, -D45, 0)).Unit
+
+    -- ✅ 타겟(상대) 정면 기준 45도 대각선
+    elseif dir == "target45" then
+        local sp = STATE.SelectedKickPlayer
+        local tChar = sp and sp.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        if tHRP then
+            local tf = Vector3.new(tHRP.CFrame.LookVector.X, 0, tHRP.CFrame.LookVector.Z)
+            if tf.Magnitude > 0 then
+                tf = tf.Unit
+                return (tf * D45 + Vector3.new(0, D45, 0)).Unit
+            end
+        end
+        return (forward * D45 + Vector3.new(0, D45, 0)).Unit
+
+    elseif dir == "random" then
+        local ang = math.random() * math.pi * 2
+        return Vector3.new(math.cos(ang), 0, math.sin(ang))
+
+    else
+        return forward
+    end
 end
 
 local function getHoldPosition(kickActive)
@@ -188,7 +225,7 @@ local function getHoldPosition(kickActive)
     if not myHRP then return nil end
 
     local myPos = myHRP.Position
-    local forward = getHorizontalForward()
+    local forward = getHorizontalBasis()
 
     local base = Vector3.new(
         myPos.X + forward.X * 3,
@@ -210,68 +247,56 @@ local function getHoldPosition(kickActive)
 end
 
 --=============================================
--- [GRAB 탭] - AlignPosition 없이 BodyPosition만 사용
+-- [GRAB 탭]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (No Align / 45° Up Fling) ===")
+GrabTab:CreateSection("=== 킥 그랩 (Instant Snap / 순간이동) ===")
 
-local function setupGrabBodies(targetPlayer)
+local function setupFKeyAlign(targetPlayer)
     pcall(function()
         local tChar = targetPlayer and targetPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
 
         for _, v in pairs(tHRP:GetChildren()) do
-            if v:IsA("BodyPosition") and v.Name == "FKeyBP" then v:Destroy() end
-            if v:IsA("BodyGyro") and v.Name == "FKeyBG" then v:Destroy() end
+            if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
+            if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
         end
 
-        local bp = Instance.new("BodyPosition")
-        bp.Name = "FKeyBP"
-        bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bp.P = 1e18
-        bp.D = 0
-        bp.Parent = tHRP
+        local att0 = Instance.new("Attachment", tHRP); att0.Name = "FKeyAtt0"
+        local att1 = Instance.new("Attachment", workspace.Terrain); att1.Name = "FKeyAtt1"
 
-        local bg = Instance.new("BodyGyro")
-        bg.Name = "FKeyBG"
-        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bg.P = 1e18
-        bg.D = 0
-        bg.CFrame = CFrame.Angles(0, 0, 0)
-        bg.Parent = tHRP
+        -- ✅ RigidityEnabled = true → 즉시 스냅 (물리 저항 무시)
+        local alignPos = Instance.new("AlignPosition")
+        alignPos.Name = "FKeyAlign"
+        alignPos.Attachment0 = att0
+        alignPos.Attachment1 = att1
+        alignPos.MaxForce = math.huge
+        alignPos.MaxVelocity = math.huge
+        alignPos.Responsiveness = 200
+        alignPos.RigidityEnabled = true
+        alignPos.Parent = tHRP
+
+        local alignRot = Instance.new("AlignOrientation")
+        alignRot.Name = "FKeyRot"
+        alignRot.Attachment0 = att0
+        alignRot.MaxTorque = math.huge
+        alignRot.Responsiveness = 200
+        alignRot.RigidityEnabled = true
+        alignRot.Parent = tHRP
     end)
 end
 
--- ✅ GrabToggle 참조 저장 (자동 OFF 용)
-local GrabToggleRef = nil
-
 local function startFKeyAttack(targetPlayer)
-    -- ✅ 시작 시점에 28 스터드 이내인지 체크
-    local tChar = targetPlayer and targetPlayer.Character
-    if not tChar or not isInRange(tChar) then
-        local d = math.floor(getDistanceTo(tChar))
-        Rayfield:Notify({
-            Title = "❌ 발동 거부",
-            Content = "타겟이 " .. d .. " 스터드에 있음. " .. STATE.ActivationRange .. " 스터드 이내일 때만 가능!",
-            Duration = 4
-        })
-        -- 토글 강제 OFF
-        if GrabToggleRef and GrabToggleRef.Set then
-            pcall(function() GrabToggleRef:Set(false) end)
-        end
-        return false
-    end
-
     STATE.FKeyAttackActive = true
     STATE.FAttackTarget = targetPlayer
-    setupGrabBodies(targetPlayer)
+    setupFKeyAlign(targetPlayer)
 
     task.spawn(function()
         pcall(function()
-            local tChar2 = targetPlayer and targetPlayer.Character
-            if tChar2 and isInRange(tChar2) then
-                initialBurst(tChar2, function() return STATE.FKeyAttackActive end)
+            local tChar = targetPlayer and targetPlayer.Character
+            if tChar then
+                initialBurst(tChar, function() return STATE.FKeyAttackActive end)
             end
         end)
 
@@ -279,26 +304,11 @@ local function startFKeyAttack(targetPlayer)
             task.wait()
             pcall(function()
                 local myRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                local tChar2 = STATE.FAttackTarget and STATE.FAttackTarget.Character
-                local tgtRoot = tChar2 and tChar2:FindFirstChild("HumanoidRootPart")
-                local tgtHum = tChar2 and tChar2:FindFirstChild("Humanoid")
+                local tChar = STATE.FAttackTarget and STATE.FAttackTarget.Character
+                local tgtRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                local tgtHum = tChar and tChar:FindFirstChild("Humanoid")
 
                 if not myRoot or not tgtRoot then return end
-
-                -- ✅ 28 스터드 밖이면 자동 OFF
-                if not isInRange(tChar2) then
-                    STATE.FKeyAttackActive = false
-                    -- 토글 강제 OFF
-                    if GrabToggleRef and GrabToggleRef.Set then
-                        pcall(function() GrabToggleRef:Set(false) end)
-                    end
-                    Rayfield:Notify({
-                        Title = "⛔ 자동 종료",
-                        Content = "타겟이 " .. STATE.ActivationRange .. " 스터드 밖으로 이동",
-                        Duration = 3
-                    })
-                    return
-                end
 
                 tgtRoot.AssemblyLinearVelocity = Vector3.zero
                 tgtRoot.AssemblyAngularVelocity = Vector3.zero
@@ -310,28 +320,21 @@ local function startFKeyAttack(targetPlayer)
                 local holdPos = getHoldPosition(true)
                 if not holdPos then return end
 
-                local bp = tgtRoot:FindFirstChild("FKeyBP")
-                if not bp then
-                    setupGrabBodies(STATE.FAttackTarget)
-                else
-                    bp.Position = holdPos
+                -- ✅ 즉시 순간이동 (AlignPosition + Rigidity → 속도 무시하고 스냅)
+                local align = tgtRoot:FindFirstChild("FKeyAlign")
+                if align and align.Attachment1 then
+                    align.Attachment1.WorldPosition = holdPos
                 end
+                local rot = tgtRoot:FindFirstChild("FKeyRot")
+                if rot then rot.CFrame = CFrame.Angles(0, 0, 0) end
 
-                local bg = tgtRoot:FindFirstChild("FKeyBG")
-                if bg then bg.CFrame = CFrame.Angles(0, 0, 0) end
-
-                pcall(function()
-                    tgtRoot.CFrame = CFrame.new(holdPos)
-                end)
-
-                local parts = getCoreParts(tChar2)
+                local parts = getCoreParts(tChar)
                 for _, part in ipairs(parts) do
                     claimPart(part)
                 end
             end)
         end
     end)
-    return true
 end
 
 local function stopFKeyAttack()
@@ -341,8 +344,8 @@ local function stopFKeyAttack()
             local tHRP = STATE.FAttackTarget.Character:FindFirstChild("HumanoidRootPart")
             if tHRP then
                 for _, v in pairs(tHRP:GetChildren()) do
-                    if v:IsA("BodyPosition") and v.Name == "FKeyBP" then v:Destroy() end
-                    if v:IsA("BodyGyro") and v.Name == "FKeyBG" then v:Destroy() end
+                    if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
+                    if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
                 end
             end
         end
@@ -372,24 +375,13 @@ GrabTab:CreateInput({
     end
 })
 
-GrabToggleRef = GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [No Align / 45° Up]",
+GrabTab:CreateToggle({
+    Name = "카메라 조준 킥 그랩 [Instant Snap]",
     Callback = function(v)
         if v and not STATE.SelectedGrabPlayer then
-            Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3})
-            if GrabToggleRef and GrabToggleRef.Set then
-                pcall(function() GrabToggleRef:Set(false) end)
-            end
-            return
+            Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
         end
-        if v then
-            local ok = startFKeyAttack(STATE.SelectedGrabPlayer)
-            if not ok and GrabToggleRef and GrabToggleRef.Set then
-                pcall(function() GrabToggleRef:Set(false) end)
-            end
-        else
-            stopFKeyAttack()
-        end
+        if v then startFKeyAttack(STATE.SelectedGrabPlayer) else stopFKeyAttack() end
     end
 })
 
@@ -425,7 +417,7 @@ KickTab:CreateInput({
     end
 })
 
-KickTab:CreateSection("Fling 설정 (45도 위로 고정)")
+KickTab:CreateSection("Fling 설정")
 KickTab:CreateSlider({
     Name = "Fling 거리 (studs)",
     Range = { 10, 9999999 },
@@ -437,14 +429,26 @@ KickTab:CreateSlider({
     end
 })
 
-KickTab:CreateSlider({
-    Name = "Fling 각도 (도)",
-    Range = { 0, 90 },
-    Increment = 1,
-    Suffix = " °",
-    Default = 45,
-    Callback = function(v)
-        STATE.FlingElevationDeg = v
+KickTab:CreateDropdown({
+    Name = "Fling 방향",
+    Options = {
+        "forward",
+        "backward",
+        "left",
+        "right",
+        "up",
+        "forward45up",     -- ⭐ 정면 위 45도 (추천)
+        "forward45down",
+        "left45up",
+        "right45up",
+        "left45down",
+        "right45down",
+        "target45",        -- ⭐ 타겟 정면 기준 45도
+        "random"
+    },
+    CurrentOption = "forward45up",
+    Callback = function(opt)
+        STATE.FlingDirection = opt
     end
 })
 
@@ -463,6 +467,7 @@ local function clearAllBodies()
     targetBP_HRP, targetBG_HRP = nil, nil
 end
 
+-- ✅ BodyPosition을 극한 P값 + D=0으로 설정 → 즉시 스냅
 local function setupBodiesForTarget()
     pcall(function()
         local sp = STATE.SelectedKickPlayer
@@ -485,6 +490,7 @@ local function setupBodiesForTarget()
                 local bp = Instance.new("BodyPosition")
                 bp.Name = BP_PREFIX .. part.Name
                 bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                -- ✅ P 극대화 + D=0 → 최대 가속도로 즉시 이동 (감쇠 없음)
                 bp.P = 1e18
                 bp.D = 0
                 bp.Parent = part
@@ -504,26 +510,7 @@ local function setupBodiesForTarget()
     end)
 end
 
--- ✅ KickToggle 참조 저장 (자동 OFF 용)
-local KickToggleRef = nil
-
 local function startKickLoop()
-    -- ✅ 시작 시점에 28 스터드 이내인지 체크
-    local sp = STATE.SelectedKickPlayer
-    local tChar = sp and sp.Character
-    if not tChar or not isInRange(tChar) then
-        local d = math.floor(getDistanceTo(tChar))
-        Rayfield:Notify({
-            Title = "❌ 발동 거부",
-            Content = "타겟이 " .. d .. " 스터드에 있음. " .. STATE.ActivationRange .. " 스터드 이내일 때만 가능!",
-            Duration = 4
-        })
-        if KickToggleRef and KickToggleRef.Set then
-            pcall(function() KickToggleRef:Set(false) end)
-        end
-        return false
-    end
-
     if steppedConn then pcall(function() steppedConn:Disconnect() end); steppedConn = nil end
     if respawnConn then pcall(function() respawnConn:Disconnect() end); respawnConn = nil end
 
@@ -539,21 +526,19 @@ local function startKickLoop()
                         local waitStart = tick()
                         while hum.Health <= 0 and tick() - waitStart < 10 do task.wait(0.1) end
                         task.wait(0.2)
+                        setupBodiesForTarget()
+                        initialBurst(newChar, function() return STATE.KickLoopRunning end)
 
-                        if isInRange(newChar) then
-                            setupBodiesForTarget()
-                            initialBurst(newChar, function() return STATE.KickLoopRunning end)
-
-                            local holdPos = getHoldPosition(true)
-                            if holdPos then
-                                for _, part in ipairs(newChar:GetDescendants()) do
-                                    if part:IsA("BasePart") then
-                                        pcall(function()
-                                            part.CFrame = CFrame.new(holdPos)
-                                            part.AssemblyLinearVelocity = Vector3.zero
-                                            part.AssemblyAngularVelocity = Vector3.zero
-                                        end)
-                                    end
+                        -- ✅ 즉시 순간이동 (CFrame 직접 지정)
+                        local holdPos = getHoldPosition(true)
+                        if holdPos then
+                            for _, part in ipairs(newChar:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    pcall(function()
+                                        part.CFrame = CFrame.new(holdPos)
+                                        part.AssemblyLinearVelocity = Vector3.zero
+                                        part.AssemblyAngularVelocity = Vector3.zero
+                                    end)
                                 end
                             end
                         end
@@ -563,7 +548,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ Stepped: 28 이내면 박제 / 밖이면 자동 OFF
+    -- ✅ 전신 박제 + 즉시 순간이동
     steppedConn = RunService.Stepped:Connect(function()
         pcall(function()
             if not STATE.KickLoopRunning then return end
@@ -575,21 +560,6 @@ local function startKickLoop()
             local tChar = sp.Character
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             if not (myChar and myHRP) or not (tChar and tHRP) then return end
-
-            -- ✅ 28 스터드 밖이면 자동 OFF
-            if not isInRange(tChar) then
-                STATE.KickLoopRunning = false
-                clearAllBodies()
-                if KickToggleRef and KickToggleRef.Set then
-                    pcall(function() KickToggleRef:Set(false) end)
-                end
-                Rayfield:Notify({
-                    Title = "⛔ 자동 종료",
-                    Content = "타겟이 " .. STATE.ActivationRange .. " 스터드 밖으로 이동",
-                    Duration = 3
-                })
-                return
-            end
 
             if not targetBP_HRP or not targetBP_HRP.Parent or targetBP_HRP.Parent ~= tHRP then
                 setupBodiesForTarget()
@@ -604,6 +574,7 @@ local function startKickLoop()
                     local bp, bg = bodies[1], bodies[2]
                     if bp and bp.Parent then bp.Position = holdPos end
                     if bg and bg.Parent then bg.CFrame = zeroCF end
+                    -- ✅ 직접 CFrame 지정 → BodyPosition이 못 따라가도 즉시 이동
                     pcall(function()
                         part.CFrame = CFrame.new(holdPos)
                     end)
@@ -622,28 +593,21 @@ local function startKickLoop()
 
     kickThread = task.spawn(function()
         pcall(function()
-            local sp2 = STATE.SelectedKickPlayer
-            if sp2 and sp2.Character and isInRange(sp2.Character) then
-                initialBurst(sp2.Character, function() return STATE.KickLoopRunning end)
+            local sp = STATE.SelectedKickPlayer
+            if sp and sp.Character then
+                initialBurst(sp.Character, function() return STATE.KickLoopRunning end)
             end
         end)
 
         while STATE.KickLoopRunning do
             task.wait()
             pcall(function()
-                local sp2 = STATE.SelectedKickPlayer
-                if not sp2 then return end
-                local tChar = sp2.Character
-                if not tChar then return end
-
-                -- ✅ 28 스터드 밖이면 자동 OFF
-                if not isInRange(tChar) then
-                    STATE.KickLoopRunning = false
-                    if KickToggleRef and KickToggleRef.Set then
-                        pcall(function() KickToggleRef:Set(false) end)
-                    end
-                    return
-                end
+                local sp = STATE.SelectedKickPlayer
+                if not sp then return end
+                local tChar = sp.Character
+                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                if not (tHRP and myHRP) then return end
 
                 local parts = getCoreParts(tChar)
                 for _, part in ipairs(parts) do
@@ -652,7 +616,6 @@ local function startKickLoop()
             end)
         end
     end)
-    return true
 end
 
 local function stopKickLoop()
@@ -675,24 +638,13 @@ local function stopKickLoop()
     end)
 end
 
-KickToggleRef = KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [No Align / 45° Up]",
+KickTab:CreateToggle({
+    Name = "블롭맨 오너 킥 [Instant Snap]",
     Callback = function(v)
         if v and not STATE.SelectedKickPlayer then
-            Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3})
-            if KickToggleRef and KickToggleRef.Set then
-                pcall(function() KickToggleRef:Set(false) end)
-            end
-            return
+            Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
         end
-        if v then
-            local ok = startKickLoop()
-            if not ok and KickToggleRef and KickToggleRef.Set then
-                pcall(function() KickToggleRef:Set(false) end)
-            end
-        else
-            stopKickLoop()
-        end
+        if v then startKickLoop() else stopKickLoop() end
     end
 })
 
@@ -906,17 +858,21 @@ SettingsTab:CreateButton({
 
 SettingsTab:CreateSection("정보")
 SettingsTab:CreateParagraph({
-    Title = "45° Up Fling 원리",
-    Content = "AlignPosition 완전 제거.\n" ..
-              "- BodyPosition P=1e18, D=0 (최대 가속)\n" ..
-              "- 매 프레임 part.CFrame 직접 지정 (즉시 순간이동)\n" ..
-              "- Fling 방향: 수평 앞 * cos(45°), 수직 위 * sin(45°)\n" ..
-              "- 45도 각도 슬라이더로 조정 가능 (0~90)\n" ..
-              "- 발동 조건: 타겟이 28 스터드 이내일 때만 (멀면 자동 거부)"
+    Title = "Instant Snap + 45도 플링 원리",
+    Content = "속도 극대화 3중 적용:\n" ..
+              "1. BodyPosition P = 1e18, D = 0 (감쇠 없음, 최대 가속)\n" ..
+              "2. AlignPosition RigidityEnabled = true (물리 무시 즉시 스냅)\n" ..
+              "3. 매 프레임 직접 part.CFrame = CFrame.new(holdPos) 강제 지정\n\n" ..
+              "45도 대각선 방향:\n" ..
+              "· forward45up = 정면 + 위 45도\n" ..
+              "· forward45down = 정면 + 아래 45도\n" ..
+              "· left45up / right45up / left45down / right45down\n" ..
+              "· target45 = 타겟 정면 기준 45도 대각선\n" ..
+              "→ cos(45°) = sin(45°) = 0.7071로 정규화"
 })
 
 Rayfield:Notify({
-    Title = "45° Up Fling 로드 완료",
-    Content = "Align 제거 / 45도 위로 9,999,999스터드 / 28 이내만 발동",
+    Title = "Instant Snap + 45° Variant 로드 완료",
+    Content = "속도 극대화 + 45도 대각선 플링 지원",
     Duration = 4
 })
