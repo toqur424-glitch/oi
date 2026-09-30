@@ -1,9 +1,11 @@
 --=============================================
--- [FSOF EXTREME Kick Hub - Range 28 / No CreateLine / 45° Up]
--- - 28 스터드 이내일 때만 플링 발동 (소유권 강탈 성공률 극대화)
--- - CreateLine 완전 제거
--- - AlignPosition 제거
--- - 45도 위로 fling
+-- [FSOF EXTREME Kick Hub - AlignPosition + Range 28 / No CreateLine]
+-- - AlignPosition 방식 유지 (Fling 9999999 Variant 기준)
+-- - CreateLine 로직 완전 제거
+-- - 다른 스크립트와 병행 사용 가능
+-- - 스마트 소유권
+-- - 발동 조건: 타겟이 28 스터드 이내일 때만
+-- - 45도 위로 9,999,999스터드 fling
 --=============================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -40,16 +42,16 @@ STATE.PalletCacheConn = nil
 STATE.SpawnNewPallet = nil
 
 STATE.FlingDistance = 9999999
-STATE.FlingElevationDeg = 45
+STATE.FlingDirection = "forward"
 
--- ✅ 28 스터드 이내일 때만 플링
+-- ✅ 28 스터드 이내일 때만 발동
 STATE.ActivationRange = 28
 
 --=============================================
--- [UI]
+-- [UI 생성]
 --=============================================
 local Window = Rayfield:CreateWindow({
-    Name = "🔥 FSOF EXTREME Kick Hub (Range 28 / 45° Up)",
+    Name = "🔥 FSOF EXTREME Kick Hub (Align + Range 28)",
     LoadingTitle = "최적화 중...",
     LoadingSubtitle = "by Extreme Script",
     ToggleUIKeybind = "T",
@@ -93,7 +95,7 @@ local function isOwnedByMe(part)
     return ok2 and val == plr.Name
 end
 
--- ✅ CreateLine 없이 Destroy → SetOwner 2콤보만
+-- ✅ CreateLine 없이 Destroy → SetOwner 2콤보
 local function claimPart(part)
     if not part or not part.Parent then return end
     if isOwnedByMe(part) then return end
@@ -132,7 +134,7 @@ local function initialBurst(char, shouldContinue)
 end
 
 --=============================================
--- [거리 체크 - 28 스터드 이내]
+-- [거리 체크 - 28 스터드]
 --=============================================
 local function isInRange(targetChar)
     if not targetChar then return false end
@@ -148,7 +150,7 @@ end
 --=============================================
 -- [위치 계산 - Y=-8, 앞 3스터드 / 셋오너 시 45도 위로 fling]
 --=============================================
-local function getHorizontalForward()
+local function getHorizontalBasis()
     local camCF = camera.CFrame
     local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
     if forward.Magnitude > 0 then
@@ -156,16 +158,22 @@ local function getHorizontalForward()
     else
         forward = Vector3.new(0, 0, -1)
     end
-    return forward
+    local right = forward:Cross(Vector3.new(0, 1, 0))
+    if right.Magnitude > 0 then right = right.Unit end
+    return forward, right
 end
 
 local function getFlingOffsetVector()
-    local forward = getHorizontalForward()
-    local rad = math.rad(STATE.FlingElevationDeg)
-    local h = math.cos(rad)
-    local v = math.sin(rad)
-
-    return Vector3.new(forward.X * h, v, forward.Z * h)
+    local forward, right = getHorizontalBasis()
+    local dir = STATE.FlingDirection
+    if dir == "backward" then return -forward
+    elseif dir == "left" then return -right
+    elseif dir == "right" then return right
+    elseif dir == "up" then return Vector3.new(0, 1, 0)
+    elseif dir == "random" then
+        local ang = math.random() * math.pi * 2
+        return Vector3.new(math.cos(ang), 0, math.sin(ang))
+    else return forward end
 end
 
 local function getHoldPosition(kickActive)
@@ -174,7 +182,7 @@ local function getHoldPosition(kickActive)
     if not myHRP then return nil end
 
     local myPos = myHRP.Position
-    local forward = getHorizontalForward()
+    local forward = getHorizontalBasis()
 
     local base = Vector3.new(
         myPos.X + forward.X * 3,
@@ -196,43 +204,49 @@ local function getHoldPosition(kickActive)
 end
 
 --=============================================
--- [GRAB 탭]
+-- [GRAB 탭] - AlignPosition 방식 유지
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
-GrabTab:CreateSection("=== 킥 그랩 (28스터드 이내 발동 / No CreateLine / 45° Up) ===")
+GrabTab:CreateSection("=== 킥 그랩 (Align + Range 28 / No CreateLine) ===")
 
-local function setupGrabBodies(targetPlayer)
+local function setupFKeyAlign(targetPlayer)
     pcall(function()
         local tChar = targetPlayer and targetPlayer.Character
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
 
         for _, v in pairs(tHRP:GetChildren()) do
-            if v:IsA("BodyPosition") and v.Name == "FKeyBP" then v:Destroy() end
-            if v:IsA("BodyGyro") and v.Name == "FKeyBG" then v:Destroy() end
+            if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
+            if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
         end
 
-        local bp = Instance.new("BodyPosition")
-        bp.Name = "FKeyBP"
-        bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bp.P = 1e18
-        bp.D = 0
-        bp.Parent = tHRP
+        local att0 = Instance.new("Attachment", tHRP); att0.Name = "FKeyAtt0"
+        local att1 = Instance.new("Attachment", workspace.Terrain); att1.Name = "FKeyAtt1"
 
-        local bg = Instance.new("BodyGyro")
-        bg.Name = "FKeyBG"
-        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bg.P = 1e18
-        bg.D = 0
-        bg.CFrame = CFrame.Angles(0, 0, 0)
-        bg.Parent = tHRP
+        local alignPos = Instance.new("AlignPosition")
+        alignPos.Name = "FKeyAlign"
+        alignPos.Attachment0 = att0
+        alignPos.Attachment1 = att1
+        alignPos.MaxForce = math.huge
+        alignPos.MaxVelocity = math.huge
+        alignPos.Responsiveness = math.huge
+        alignPos.RigidityEnabled = true
+        alignPos.Parent = tHRP
+
+        local alignRot = Instance.new("AlignOrientation")
+        alignRot.Name = "FKeyRot"
+        alignRot.Attachment0 = att0
+        alignRot.MaxTorque = math.huge
+        alignRot.Responsiveness = math.huge
+        alignRot.RigidityEnabled = true
+        alignRot.Parent = tHRP
     end)
 end
 
 local function startFKeyAttack(targetPlayer)
     STATE.FKeyAttackActive = true
     STATE.FAttackTarget = targetPlayer
-    setupGrabBodies(targetPlayer)
+    setupFKeyAlign(targetPlayer)
 
     task.spawn(function()
         pcall(function()
@@ -252,7 +266,7 @@ local function startFKeyAttack(targetPlayer)
 
                 if not myRoot or not tgtRoot then return end
 
-                -- ✅ 28 스터드 이내일 때만 동작
+                -- ✅ 28 스터드 이내일 때만 발동
                 if not isInRange(tChar) then return end
 
                 tgtRoot.AssemblyLinearVelocity = Vector3.zero
@@ -265,16 +279,15 @@ local function startFKeyAttack(targetPlayer)
                 local holdPos = getHoldPosition(true)
                 if not holdPos then return end
 
-                local bp = tgtRoot:FindFirstChild("FKeyBP")
-                if not bp then
-                    setupGrabBodies(STATE.FAttackTarget)
-                else
-                    bp.Position = holdPos
+                -- ✅ AlignPosition으로 순간이동
+                local align = tgtRoot:FindFirstChild("FKeyAlign")
+                if align and align.Attachment1 then
+                    align.Attachment1.WorldPosition = holdPos
                 end
+                local rot = tgtRoot:FindFirstChild("FKeyRot")
+                if rot then rot.CFrame = CFrame.Angles(0, 0, 0) end
 
-                local bg = tgtRoot:FindFirstChild("FKeyBG")
-                if bg then bg.CFrame = CFrame.Angles(0, 0, 0) end
-
+                -- 보조: 직접 CFrame 강제
                 pcall(function()
                     tgtRoot.CFrame = CFrame.new(holdPos)
                 end)
@@ -295,8 +308,8 @@ local function stopFKeyAttack()
             local tHRP = STATE.FAttackTarget.Character:FindFirstChild("HumanoidRootPart")
             if tHRP then
                 for _, v in pairs(tHRP:GetChildren()) do
-                    if v:IsA("BodyPosition") and v.Name == "FKeyBP" then v:Destroy() end
-                    if v:IsA("BodyGyro") and v.Name == "FKeyBG" then v:Destroy() end
+                    if v:IsA("AlignPosition") and v.Name == "FKeyAlign" then v:Destroy() end
+                    if v:IsA("AlignOrientation") and v.Name == "FKeyRot" then v:Destroy() end
                 end
             end
         end
@@ -338,7 +351,7 @@ GrabTab:CreateSlider({
 })
 
 GrabTab:CreateToggle({
-    Name = "카메라 조준 킥 그랩 [28스터드 이내 / No CreateLine]",
+    Name = "카메라 조준 킥 그랩 [Align / 28스터드 이내]",
     Callback = function(v)
         if v and not STATE.SelectedGrabPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -348,14 +361,14 @@ GrabTab:CreateToggle({
 })
 
 --=============================================
--- [KICK 탭]
+-- [KICK 탭] - AlignPosition 방식 유지
 --=============================================
 local KickTab = Window:CreateTab("Kick (블롭맨 & 판자)", nil)
 
 local steppedConn, kickThread = nil, nil
 local respawnConn = nil
-local targetBP_HRP, targetBG_HRP = nil, nil
-local targetBodies = {}
+local targetAlign_HRP, targetRot_HRP = nil, nil
+local targetAligns = {}
 
 KickTab:CreateInput({
     Name = "Add Target (타겟 닉네임 입력)",
@@ -391,33 +404,32 @@ KickTab:CreateSlider({
     end
 })
 
-KickTab:CreateSlider({
-    Name = "Fling 각도 (도)",
-    Range = { 0, 90 },
-    Increment = 1,
-    Suffix = " °",
-    Default = 45,
-    Callback = function(v)
-        STATE.FlingElevationDeg = v
+KickTab:CreateDropdown({
+    Name = "Fling 방향",
+    Options = { "forward", "backward", "left", "right", "up", "random" },
+    CurrentOption = "forward",
+    Callback = function(opt)
+        STATE.FlingDirection = opt
     end
 })
 
-local BP_PREFIX = "_FSOFKickBP_"
-local BG_PREFIX = "_FSOFKickBG_"
+local ALIGN_PREFIX = "_FSOFKickAlign_"
+local ROT_PREFIX = "_FSOFKickRot_"
 
-local function clearAllBodies()
+local function clearAllAligns()
     pcall(function()
-        for part, bodies in pairs(targetBodies) do
-            for _, b in ipairs(bodies) do
-                if b and b.Parent then b:Destroy() end
+        for part, objs in pairs(targetAligns) do
+            for _, o in ipairs(objs) do
+                if o and o.Parent then o:Destroy() end
             end
         end
     end)
-    targetBodies = {}
-    targetBP_HRP, targetBG_HRP = nil, nil
+    targetAligns = {}
+    targetAlign_HRP, targetRot_HRP = nil, nil
 end
 
-local function setupBodiesForTarget()
+-- ✅ AlignPosition 방식으로 전신 박제
+local function setupAlignsForTarget()
     pcall(function()
         local sp = STATE.SelectedKickPlayer
         if not sp then return end
@@ -425,34 +437,51 @@ local function setupBodiesForTarget()
         local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
         if not tHRP then return end
 
-        clearAllBodies()
+        clearAllAligns()
 
         for _, v in pairs(tChar:GetDescendants()) do
-            if (v:IsA("BodyPosition") or v:IsA("BodyGyro")) and
-               (v.Name:sub(1, #BP_PREFIX) == BP_PREFIX or v.Name:sub(1, #BG_PREFIX) == BG_PREFIX) then
+            if (v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("Attachment")) and
+               (v.Name:sub(1, #ALIGN_PREFIX) == ALIGN_PREFIX or 
+                v.Name:sub(1, #ROT_PREFIX) == ROT_PREFIX or
+                v.Name:sub(1, 8) == "FKeyAtt0" or v.Name:sub(1, 8) == "FKeyAtt1") then
                 v:Destroy()
             end
         end
 
         for _, part in ipairs(tChar:GetDescendants()) do
             if part:IsA("BasePart") then
-                local bp = Instance.new("BodyPosition")
-                bp.Name = BP_PREFIX .. part.Name
-                bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bp.P = 1e18
-                bp.D = 0
-                bp.Parent = part
+                local att0 = Instance.new("Attachment")
+                att0.Name = ALIGN_PREFIX .. "Att0_" .. part.Name
+                att0.Parent = part
 
-                local bg = Instance.new("BodyGyro")
-                bg.Name = BG_PREFIX .. part.Name
-                bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                bg.P = 1e18
-                bg.D = 0
-                bg.CFrame = CFrame.Angles(0, 0, 0)
-                bg.Parent = part
+                local att1 = Instance.new("Attachment")
+                att1.Name = ALIGN_PREFIX .. "Att1_" .. part.Name
+                att1.Parent = workspace.Terrain
 
-                targetBodies[part] = {bp, bg}
-                if part == tHRP then targetBP_HRP, targetBG_HRP = bp, bg end
+                local alignPos = Instance.new("AlignPosition")
+                alignPos.Name = ALIGN_PREFIX .. part.Name
+                alignPos.Attachment0 = att0
+                alignPos.Attachment1 = att1
+                alignPos.MaxForce = math.huge
+                alignPos.MaxVelocity = math.huge
+                alignPos.Responsiveness = math.huge
+                alignPos.RigidityEnabled = true
+                alignPos.Parent = part
+
+                local alignRot = Instance.new("AlignOrientation")
+                alignRot.Name = ROT_PREFIX .. part.Name
+                alignRot.Attachment0 = att0
+                alignRot.MaxTorque = math.huge
+                alignRot.Responsiveness = math.huge
+                alignRot.RigidityEnabled = true
+                alignRot.Parent = part
+
+                targetAligns[part] = {alignPos, alignRot, att1}
+
+                if part == tHRP then
+                    targetAlign_HRP = alignPos
+                    targetRot_HRP = alignRot
+                end
             end
         end
     end)
@@ -475,9 +504,9 @@ local function startKickLoop()
                         while hum.Health <= 0 and tick() - waitStart < 10 do task.wait(0.1) end
                         task.wait(0.2)
 
-                        -- ✅ 리스폰 직후에도 28 스터드 이내일 때만 발동
+                        -- ✅ 28 스터드 이내일 때만 발동
                         if isInRange(newChar) then
-                            setupBodiesForTarget()
+                            setupAlignsForTarget()
                             initialBurst(newChar, function() return STATE.KickLoopRunning end)
 
                             local holdPos = getHoldPosition(true)
@@ -499,7 +528,7 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 전신 박제 + 28 스터드 이내에서만 즉시 순간이동
+    -- ✅ Align으로 전신 박제 + 28 스터드 이내에서만 발동
     steppedConn = RunService.Stepped:Connect(function()
         pcall(function()
             if not STATE.KickLoopRunning then return end
@@ -512,25 +541,28 @@ local function startKickLoop()
             local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
             if not (myChar and myHRP) or not (tChar and tHRP) then return end
 
-            -- ✅ 28 스터드 이내가 아니면 Body 제거하고 대기
+            -- ✅ 28 스터드 이내가 아니면 Align 제거하고 대기
             if not isInRange(tChar) then
-                clearAllBodies()
+                clearAllAligns()
                 return
             end
 
-            if not targetBP_HRP or not targetBP_HRP.Parent or targetBP_HRP.Parent ~= tHRP then
-                setupBodiesForTarget()
+            if not targetAlign_HRP or not targetAlign_HRP.Parent or targetAlign_HRP.Parent ~= tHRP then
+                setupAlignsForTarget()
             end
 
             local holdPos = getHoldPosition(true)
             if not holdPos then return end
 
             local zeroCF = CFrame.Angles(0, 0, 0)
-            for part, bodies in pairs(targetBodies) do
+            for part, objs in pairs(targetAligns) do
                 if part and part.Parent then
-                    local bp, bg = bodies[1], bodies[2]
-                    if bp and bp.Parent then bp.Position = holdPos end
-                    if bg and bg.Parent then bg.CFrame = zeroCF end
+                    local alignPos, alignRot, att1 = objs[1], objs[2], objs[3]
+                    if att1 and att1.Parent then
+                        att1.WorldPosition = holdPos
+                        att1.WorldCFrame = CFrame.new(holdPos) * zeroCF
+                    end
+                    -- ✅ 보조: 직접 CFrame 강제
                     pcall(function()
                         part.CFrame = CFrame.new(holdPos)
                     end)
@@ -580,14 +612,16 @@ local function stopKickLoop()
     if steppedConn then pcall(function() steppedConn:Disconnect() end); steppedConn = nil end
     if respawnConn then pcall(function() respawnConn:Disconnect() end); respawnConn = nil end
 
-    clearAllBodies()
+    clearAllAligns()
 
     pcall(function()
         local sp = STATE.SelectedKickPlayer
         if sp and sp.Character then
             for _, v in pairs(sp.Character:GetDescendants()) do
-                if (v:IsA("BodyPosition") or v:IsA("BodyGyro")) and
-                   (v.Name:sub(1, #BP_PREFIX) == BP_PREFIX or v.Name:sub(1, #BG_PREFIX) == BG_PREFIX) then
+                if (v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("Attachment")) and
+                   (v.Name:sub(1, #ALIGN_PREFIX) == ALIGN_PREFIX or 
+                    v.Name:sub(1, #ROT_PREFIX) == ROT_PREFIX or
+                    v.Name:sub(1, 8) == "FKeyAtt0" or v.Name:sub(1, 8) == "FKeyAtt1") then
                     v:Destroy()
                 end
             end
@@ -596,7 +630,7 @@ local function stopKickLoop()
 end
 
 KickTab:CreateToggle({
-    Name = "블롭맨 오너 킥 [28스터드 이내 / No CreateLine]",
+    Name = "블롭맨 오너 킥 [Align / 28스터드 이내]",
     Callback = function(v)
         if v and not STATE.SelectedKickPlayer then
             Rayfield:Notify({Title="알림", Content="먼저 타겟 닉네임을 입력해주세요!", Duration=3}); return
@@ -797,13 +831,15 @@ SettingsTab:CreateButton({
             if STATE.RagdollSteppedConn then STATE.RagdollSteppedConn:Disconnect() end
             if STATE.PalletCacheConn then STATE.PalletCacheConn:Disconnect() end
 
-            clearAllBodies()
+            clearAllAligns()
 
             local sp = STATE.SelectedKickPlayer
             if sp and sp.Character then
                 for _, v in pairs(sp.Character:GetDescendants()) do
-                    if (v:IsA("BodyPosition") or v:IsA("BodyGyro")) and
-                       (v.Name:sub(1, #BP_PREFIX) == BP_PREFIX or v.Name:sub(1, #BG_PREFIX) == BG_PREFIX) then
+                    if (v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("Attachment")) and
+                       (v.Name:sub(1, #ALIGN_PREFIX) == ALIGN_PREFIX or 
+                        v.Name:sub(1, #ROT_PREFIX) == ROT_PREFIX or
+                        v.Name:sub(1, 8) == "FKeyAtt0" or v.Name:sub(1, 8) == "FKeyAtt1") then
                         v:Destroy()
                     end
                 end
@@ -815,17 +851,17 @@ SettingsTab:CreateButton({
 
 SettingsTab:CreateSection("정보")
 SettingsTab:CreateParagraph({
-    Title = "Range 28 / No CreateLine",
-    Content = "핵심 변경:\n" ..
-              "- 발동 조건: 타겟이 28 스터드 이내일 때만\n" ..
+    Title = "Align + Range 28 / No CreateLine",
+    Content = "원본 Fling 9999999 Variant 기준으로 수정:\n" ..
+              "- AlignPosition 방식 유지 (Attachment + AlignPosition + AlignOrientation)\n" ..
               "- CreateLine 완전 제거 (Destroy → SetOwner 2콤보만)\n" ..
-              "- AlignPosition 제거 (BodyPosition + 직접 CFrame)\n" ..
-              "- 28 스터드 밖이면 자동 대기 (소유권 강탈 성공률 ↑)\n" ..
+              "- 발동 조건: 28 스터드 이내일 때만\n" ..
+              "- 28 스터드 밖이면 자동 Align 제거 + 대기\n" ..
               "- 45도 위 / 9,999,999 스터드 fling"
 })
 
 Rayfield:Notify({
-    Title = "Range 28 / No CreateLine 로드 완료",
-    Content = "28 스터드 이내일 때만 발동 / CreateLine 제거",
+    Title = "Align + Range 28 로드 완료",
+    Content = "AlignPosition 유지 / 28 스터드 이내 발동 / CreateLine 없음",
     Duration = 4
 })
