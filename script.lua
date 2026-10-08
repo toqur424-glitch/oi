@@ -6,6 +6,7 @@
 -- - 기본 위치: Y=-8, 앞 3스터드
 -- - 셋오너 킥 ON 시: 즉시 9,999,999스터드 순간이동 (Instant Snap)
 -- - ✅ 45도 대각선 플링 방향 추가
+-- - ✅ 강제 탑승(Forced Sit) 로직 추가
 --=============================================
 
 --=============================================
@@ -46,6 +47,11 @@ STATE.SpawnNewPallet = nil
 
 STATE.FlingDistance = 9999999
 STATE.FlingDirection = "forward45up"
+
+-- ✅ 강제 탑승 상태
+STATE.ForcedSitActive = false
+STATE.ForcedSitConn = nil
+STATE.ForcedSitSeat = nil
 
 --=============================================
 -- [UI 생성]
@@ -154,7 +160,6 @@ local function getFlingOffsetVector()
     local forward, right = getHorizontalBasis()
     local dir = STATE.FlingDirection
 
-    -- 45도 성분 (cos45 = sin45 = 0.7071...)
     local D45 = 0.7071067811865476
 
     if dir == "forward" then
@@ -172,31 +177,24 @@ local function getFlingOffsetVector()
     elseif dir == "up" then
         return Vector3.new(0, 1, 0)
 
-    -- ✅ 정면 + 위 45도
     elseif dir == "forward45up" then
         return (forward * D45 + Vector3.new(0, D45, 0)).Unit
 
-    -- ✅ 정면 + 아래 45도
     elseif dir == "forward45down" then
         return (forward * D45 + Vector3.new(0, -D45, 0)).Unit
 
-    -- ✅ 좌측 대각선 위 45도
     elseif dir == "left45up" then
         return ((-right) * D45 + Vector3.new(0, D45, 0)).Unit
 
-    -- ✅ 우측 대각선 위 45도
     elseif dir == "right45up" then
         return (right * D45 + Vector3.new(0, D45, 0)).Unit
 
-    -- ✅ 좌측 대각선 아래 45도
     elseif dir == "left45down" then
         return ((-right) * D45 + Vector3.new(0, -D45, 0)).Unit
 
-    -- ✅ 우측 대각선 아래 45도
     elseif dir == "right45down" then
         return (right * D45 + Vector3.new(0, -D45, 0)).Unit
 
-    -- ✅ 타겟(상대) 정면 기준 45도 대각선
     elseif dir == "target45" then
         local sp = STATE.SelectedKickPlayer
         local tChar = sp and sp.Character
@@ -247,6 +245,132 @@ local function getHoldPosition(kickActive)
 end
 
 --=============================================
+-- [강제 탑승 (Forced Sit) 로직]
+-- 상대를 Seat/VehicleSeat에 앉은 상태로 서버에 계속 인식시킴
+--=============================================
+local function findNearestSeat(pos, radius)
+    radius = radius or 25
+    local best, bestDist = nil, math.huge
+    pcall(function()
+        local region = Region3.new(
+            pos - Vector3.new(radius, radius, radius),
+            pos + Vector3.new(radius, radius, radius)
+        )
+        local parts = workspace:FindPartsInRegion3(region, nil, 100)
+        for _, p in ipairs(parts) do
+            if p:IsA("Seat") or p:IsA("VehicleSeat") then
+                if p.Name ~= "_FSOFForcedSeat_" then
+                    local d = (p.Position - pos).Magnitude
+                    if d < bestDist then
+                        best, bestDist = p, d
+                    end
+                end
+            end
+        end
+    end)
+    return best
+end
+
+local function startForcedSit()
+    STATE.ForcedSitActive = true
+
+    -- 최초 1회: 가까운 시트 찾기 (없으면 임시 시트 생성)
+    task.spawn(function()
+        pcall(function()
+            local tChar = STATE.SelectedKickPlayer and STATE.SelectedKickPlayer.Character
+            local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+            if tHRP then
+                STATE.ForcedSitSeat = findNearestSeat(tHRP.Position, 30)
+            end
+
+            if not STATE.ForcedSitSeat then
+                local seat = Instance.new("VehicleSeat")
+                seat.Name = "_FSOFForcedSeat_"
+                seat.Size = Vector3.new(2, 1, 2)
+                seat.Transparency = 1
+                seat.CanCollide = false
+                seat.Anchored = true
+                seat.Massless = true
+                if tHRP then
+                    seat.CFrame = tHRP.CFrame * CFrame.new(0, -3, 0)
+                else
+                    seat.CFrame = CFrame.new(0, -500, 0)
+                end
+                seat.Parent = workspace
+                STATE.ForcedSitSeat = seat
+            end
+        end)
+    end)
+
+    -- ✅ Heartbeat마다 지속 호출 → 서버가 "탑승 중"으로 계속 인식
+    STATE.ForcedSitConn = RunService.Heartbeat:Connect(function()
+        pcall(function()
+            if not STATE.ForcedSitActive then return end
+            local sp = STATE.SelectedKickPlayer
+            if not sp then return end
+            local tChar = sp.Character
+            if not tChar then return end
+
+            local hum = tChar:FindFirstChildOfClass("Humanoid")
+            local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+            if not hum or not tHRP then return end
+
+            -- 1) Humanoid.Sit 강제 true
+            if not hum.Sit then
+                pcall(function() hum.Sit = true end)
+            end
+
+            -- 2) 상태 머신을 Sitting으로 고정
+            pcall(function()
+                hum:ChangeState(Enum.HumanoidStateType.Sitting)
+            end)
+
+            -- 3) Seat.Occupant를 상대 Humanoid로 계속 설정
+            local seat = STATE.ForcedSitSeat
+            if not seat or not seat.Parent then
+                seat = findNearestSeat(tHRP.Position, 30)
+                STATE.ForcedSitSeat = seat
+            end
+
+            if seat then
+                pcall(function()
+                    if seat.Occupant ~= hum then
+                        seat.Occupant = hum
+                    end
+                    if seat.Name == "_FSOFForcedSeat_" then
+                        seat.CFrame = tHRP.CFrame * CFrame.new(0, -3, 0)
+                    end
+                end)
+            end
+        end)
+    end)
+end
+
+local function stopForcedSit()
+    STATE.ForcedSitActive = false
+    if STATE.ForcedSitConn then
+        pcall(function() STATE.ForcedSitConn:Disconnect() end)
+        STATE.ForcedSitConn = nil
+    end
+
+    pcall(function()
+        local sp = STATE.SelectedKickPlayer
+        if sp and sp.Character then
+            local hum = sp.Character:FindFirstChildOfClass("Humanoid")
+            if hum then hum.Sit = false end
+        end
+    end)
+
+    pcall(function()
+        local seat = STATE.ForcedSitSeat
+        if seat and seat.Name == "_FSOFForcedSeat_" and seat.Parent then
+            seat:Destroy()
+        end
+        STATE.ForcedSitSeat = nil
+    end)
+end
+
+--=============================================
 -- [GRAB 탭]
 --=============================================
 local GrabTab = Window:CreateTab("Grab (공격)", nil)
@@ -266,7 +390,6 @@ local function setupFKeyAlign(targetPlayer)
         local att0 = Instance.new("Attachment", tHRP); att0.Name = "FKeyAtt0"
         local att1 = Instance.new("Attachment", workspace.Terrain); att1.Name = "FKeyAtt1"
 
-        -- ✅ RigidityEnabled = true → 즉시 스냅 (물리 저항 무시)
         local alignPos = Instance.new("AlignPosition")
         alignPos.Name = "FKeyAlign"
         alignPos.Attachment0 = att0
@@ -320,7 +443,6 @@ local function startFKeyAttack(targetPlayer)
                 local holdPos = getHoldPosition(true)
                 if not holdPos then return end
 
-                -- ✅ 즉시 순간이동 (AlignPosition + Rigidity → 속도 무시하고 스냅)
                 local align = tgtRoot:FindFirstChild("FKeyAlign")
                 if align and align.Attachment1 then
                     align.Attachment1.WorldPosition = holdPos
@@ -437,13 +559,13 @@ KickTab:CreateDropdown({
         "left",
         "right",
         "up",
-        "forward45up",     -- ⭐ 정면 위 45도 (추천)
+        "forward45up",
         "forward45down",
         "left45up",
         "right45up",
         "left45down",
         "right45down",
-        "target45",        -- ⭐ 타겟 정면 기준 45도
+        "target45",
         "random"
     },
     CurrentOption = "forward45up",
@@ -467,7 +589,6 @@ local function clearAllBodies()
     targetBP_HRP, targetBG_HRP = nil, nil
 end
 
--- ✅ BodyPosition을 극한 P값 + D=0으로 설정 → 즉시 스냅
 local function setupBodiesForTarget()
     pcall(function()
         local sp = STATE.SelectedKickPlayer
@@ -490,7 +611,6 @@ local function setupBodiesForTarget()
                 local bp = Instance.new("BodyPosition")
                 bp.Name = BP_PREFIX .. part.Name
                 bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                -- ✅ P 극대화 + D=0 → 최대 가속도로 즉시 이동 (감쇠 없음)
                 bp.P = 1e18
                 bp.D = 0
                 bp.Parent = part
@@ -529,7 +649,6 @@ local function startKickLoop()
                         setupBodiesForTarget()
                         initialBurst(newChar, function() return STATE.KickLoopRunning end)
 
-                        -- ✅ 즉시 순간이동 (CFrame 직접 지정)
                         local holdPos = getHoldPosition(true)
                         if holdPos then
                             for _, part in ipairs(newChar:GetDescendants()) do
@@ -548,7 +667,6 @@ local function startKickLoop()
         end
     end)
 
-    -- ✅ 전신 박제 + 즉시 순간이동
     steppedConn = RunService.Stepped:Connect(function()
         pcall(function()
             if not STATE.KickLoopRunning then return end
@@ -574,7 +692,6 @@ local function startKickLoop()
                     local bp, bg = bodies[1], bodies[2]
                     if bp and bp.Parent then bp.Position = holdPos end
                     if bg and bg.Parent then bg.CFrame = zeroCF end
-                    -- ✅ 직접 CFrame 지정 → BodyPosition이 못 따라가도 즉시 이동
                     pcall(function()
                         part.CFrame = CFrame.new(holdPos)
                     end)
@@ -646,6 +763,47 @@ KickTab:CreateToggle({
         end
         if v then startKickLoop() else stopKickLoop() end
     end
+})
+
+--=============================================
+-- [강제 탑승 UI]
+--=============================================
+KickTab:CreateSection("=== 강제 탑승 (Forced Sit) ===")
+
+KickTab:CreateToggle({
+    Name = "🪑 강제 탑승 인식 (지속 호출)",
+    CurrentValue = false,
+    Flag = "ForcedSit",
+    Callback = function(v)
+        if v and not STATE.SelectedKickPlayer then
+            Rayfield:Notify({
+                Title = "알림",
+                Content = "먼저 타겟 닉네임을 입력해주세요!",
+                Duration = 3
+            })
+            return
+        end
+        if v then
+            startForcedSit()
+            Rayfield:Notify({
+                Title = "강제 탑승 시작",
+                Content = "상대를 Seat에 앉은 상태로 지속 인식시킵니다.",
+                Duration = 2
+            })
+        else
+            stopForcedSit()
+        end
+    end
+})
+
+KickTab:CreateParagraph({
+    Title = "강제 탑승 원리",
+    Content = "매 Heartbeat마다 3가지를 지속 호출:\n" ..
+              "1. Humanoid.Sit = true (서버가 앉음 상태로 인식)\n" ..
+              "2. ChangeState(Sitting) 강제 고정\n" ..
+              "3. Seat.Occupant = 상대 Humanoid (좌석 점유 강제)\n" ..
+              "주변에 Seat가 없으면 상대 발밑에 임시 VehicleSeat 자동 생성\n" ..
+              "→ 서버 검증이 있어도 매 프레임 재적용되어 유지됨"
 })
 
 --=============================================
@@ -821,6 +979,10 @@ SettingsTab:CreateButton({
             STATE.KickLoopRunning = false
             STATE.PalletRagdollActive = false
             STATE.FAttackTarget = nil
+
+            -- ✅ 강제 탑승 정리
+            STATE.ForcedSitActive = false
+            if STATE.ForcedSitConn then STATE.ForcedSitConn:Disconnect(); STATE.ForcedSitConn = nil end
         end)
         Rayfield:Notify({Title="알림", Content="초기화 완료"})
     end
@@ -839,6 +1001,12 @@ SettingsTab:CreateButton({
             if kickThread then pcall(function() task.cancel(kickThread) end) end
             if STATE.RagdollSteppedConn then STATE.RagdollSteppedConn:Disconnect() end
             if STATE.PalletCacheConn then STATE.PalletCacheConn:Disconnect() end
+
+            -- ✅ 강제 탑승 정리
+            STATE.ForcedSitActive = false
+            if STATE.ForcedSitConn then STATE.ForcedSitConn:Disconnect(); STATE.ForcedSitConn = nil end
+            if STATE.ForcedSitSeat and STATE.ForcedSitSeat.Parent then STATE.ForcedSitSeat:Destroy() end
+            STATE.ForcedSitSeat = nil
 
             clearAllBodies()
 
@@ -871,8 +1039,18 @@ SettingsTab:CreateParagraph({
               "→ cos(45°) = sin(45°) = 0.7071로 정규화"
 })
 
+SettingsTab:CreateParagraph({
+    Title = "강제 탑승 (Forced Sit) 원리",
+    Content = "매 Heartbeat마다 3가지를 지속 호출:\n" ..
+              "1. Humanoid.Sit = true → 서버가 앉음 상태로 인식\n" ..
+              "2. ChangeState(Sitting) → 상태 머신 강제 고정\n" ..
+              "3. Seat.Occupant = 상대 Humanoid → 좌석 점유 강제\n\n" ..
+              "주변에 Seat가 없으면 상대 발밑에 임시 VehicleSeat 자동 생성.\n" ..
+              "서버 검증이 있어도 매 프레임 재적용되어 유지됨."
+})
+
 Rayfield:Notify({
-    Title = "Instant Snap + 45° Variant 로드 완료",
-    Content = "속도 극대화 + 45도 대각선 플링 지원",
+    Title = "Instant Snap + 45° + Forced Sit 로드 완료",
+    Content = "속도 극대화 + 45도 대각선 플링 + 강제 탑승 인식",
     Duration = 4
 })
